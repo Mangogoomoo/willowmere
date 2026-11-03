@@ -1,0 +1,304 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#171b2a">
+  <title>Willowmere Database</title>
+  <style>
+    :root{color-scheme:dark;--bg:#111522;--panel:#1b2233;--panel2:#222c40;--line:#35415a;--text:#edf1fa;--muted:#a4b0c5;--gold:#f2c879;--blue:#8fc7f4;--green:#8cdaa0;--purple:#c5a0f2;--red:#ef9696}
+    *{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 50% -15%,#303b57 0,#171d2d 42%,var(--bg) 78%);color:var(--text);font:15px/1.5 'Trebuchet MS',Arial,sans-serif;min-height:100vh}
+    a{color:var(--gold);text-decoration:none}a:hover{text-decoration:underline}.wrap{max-width:1200px;margin:auto;padding:28px 22px 60px}
+    .top{display:flex;align-items:center;justify-content:space-between;gap:18px;margin-bottom:25px}.brand{display:flex;align-items:center;gap:14px}.mark{width:48px;height:48px;border-radius:14px;background:linear-gradient(145deg,#f5d18d,#a96d3f);display:grid;place-items:center;color:#302034;font-size:25px;box-shadow:0 5px 18px #0005}.brand h1{font-size:25px;line-height:1.1;margin:0;letter-spacing:.3px}.brand p{margin:5px 0 0;color:var(--muted);font-size:13px}.back{border:1px solid var(--line);background:#20283a;color:var(--text);padding:10px 15px;border-radius:10px;font-weight:700}
+    .hero{padding:24px 26px;border:1px solid #46516a;border-radius:16px;background:linear-gradient(120deg,#29344b,#1c2538 65%,#252b3e);box-shadow:0 14px 35px #0003;margin-bottom:22px}.eyebrow{font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);font-weight:800}.hero h2{margin:5px 0 4px;font-size:27px}.hero p{margin:0;color:#bdc8d9}.stats{display:flex;gap:10px;flex-wrap:wrap;margin-top:17px}.stat{background:#11182780;border:1px solid #ffffff17;border-radius:10px;padding:9px 13px;min-width:112px}.stat b{display:block;font-size:20px;color:var(--gold)}.stat span{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px}
+    .tabs{display:flex;gap:8px;border-bottom:1px solid var(--line);margin-bottom:18px}.tab{border:0;background:transparent;color:var(--muted);padding:12px 18px;font:700 14px 'Trebuchet MS',Arial,sans-serif;cursor:pointer;border-bottom:3px solid transparent}.tab.active{color:var(--gold);border-color:var(--gold)}
+    .toolbar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px}.search{flex:1;min-width:220px}.search input,.toolbar select{width:100%;height:43px;border:1px solid var(--line);border-radius:10px;background:#1a2232;color:var(--text);padding:0 13px;font:inherit;outline:none}.search input:focus,.toolbar select:focus{border-color:var(--gold)}.toolbar select{width:auto;min-width:170px}
+    .section-title{display:flex;justify-content:space-between;align-items:center;gap:12px;margin:18px 0 12px}.section-title h3{margin:0;font-size:18px}.count{font-size:12px;color:var(--muted)}.monster-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:14px}.card{background:linear-gradient(145deg,#222c40,#1a2232);border:1px solid var(--line);border-radius:14px;overflow:hidden;box-shadow:0 7px 20px #0002}.card-head{padding:16px 17px;display:flex;justify-content:space-between;gap:12px;align-items:center;border-bottom:1px solid #ffffff12}.mob-name{display:flex;align-items:center;gap:12px}.mob-icon{height:43px;width:43px;border-radius:12px;background:radial-gradient(circle at 50% 70%,#55688a,#39465e);display:grid;place-items:center;font-size:22px;overflow:hidden}.mob-icon img,.modal-icon img{display:block}.drop-name img{flex:none;margin-right:2px}.item-top h4 img{vertical-align:-7px;margin-right:2px}.mob-name h3{margin:0;font-size:18px}.mob-name small{color:var(--muted)}.level{background:#39435a;color:#f4d49a;border:1px solid #59657c;border-radius:8px;padding:5px 9px;font-size:12px;font-weight:800;white-space:nowrap}.facts{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;padding:12px 16px}.fact{background:#121a29;border-radius:8px;padding:8px}.fact b{display:block;font-size:15px}.fact span{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}.drop-wrap{padding:0 16px 15px}.drop-head{display:flex;justify-content:space-between;align-items:center;margin:4px 0 8px}.drop-head strong{font-size:13px}.drop-head span{font-size:11px;color:var(--muted)}.drop-list{display:grid;gap:6px}.drop{display:grid;grid-template-columns:minmax(0,1fr) 85px;align-items:center;gap:10px;background:#121a29;border-radius:8px;padding:7px 10px}.drop-name{display:flex;align-items:center;gap:8px;min-width:0}.dot{width:7px;height:7px;border-radius:50%;background:#9eabbf;flex:none}.drop-name span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.chance{text-align:right;font-weight:800;color:var(--green);font-variant-numeric:tabular-nums}.bar{height:3px;background:#30394a;border-radius:9px;grid-column:1/-1;margin-top:-3px;overflow:hidden}.bar i{display:block;height:100%;background:linear-gradient(90deg,#75bd91,#d3d995);border-radius:9px}.zeny{margin-top:8px;padding:8px 10px;background:#29253a;border:1px solid #51456b;border-radius:8px;color:#d5b8fa;font-size:12px;display:flex;justify-content:space-between;gap:8px}.empty{padding:35px;text-align:center;border:1px dashed var(--line);border-radius:12px;color:var(--muted)}
+    .item-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(235px,1fr));gap:10px}.item{background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:13px;cursor:pointer;transition:border-color .15s,transform .15s,background .15s}.item:hover,.item:focus-visible{border-color:var(--gold);background:#252f43;transform:translateY(-2px);outline:none}.item-open-hint{font-size:10px;color:var(--gold);margin-top:9px}.item-top{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}.item h4{margin:0;font-size:15px}.item p{font-size:12px;color:var(--muted);margin:8px 0 10px;min-height:34px}.item-meta{display:flex;justify-content:space-between;gap:8px;font-size:11px;color:var(--muted)}.rarity{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px}.common{color:#d4dbea}.uncommon{color:var(--green)}.rare{color:var(--blue)}.epic{color:var(--purple)}.price{color:var(--gold);font-weight:800}.hidden{display:none!important}.drop{cursor:pointer;transition:background .15s,outline-color .15s}.drop:hover,.drop:focus-visible{background:#26334a;outline:1px solid #8b9bb8;outline-offset:-1px}.item-modal{position:fixed;inset:0;z-index:50;display:none;align-items:center;justify-content:center;padding:18px;background:#070b13d9;backdrop-filter:blur(5px)}.item-modal.open{display:flex}.item-dialog{width:min(560px,100%);max-height:min(86vh,760px);overflow:auto;background:linear-gradient(145deg,#27334a,#171f30);border:1px solid #56627a;border-radius:17px;box-shadow:0 24px 80px #0009}.modal-head{display:flex;align-items:flex-start;gap:15px;padding:20px;border-bottom:1px solid #ffffff18}.modal-icon{width:76px;height:76px;flex:none;border-radius:15px;background:#111a2b;border:1px solid #52617a;display:grid;place-items:center;font-size:34px;color:var(--gold)}.modal-title{flex:1;min-width:0}.modal-title h2{margin:1px 0 5px;font-size:23px}.modal-title p{margin:0;color:var(--muted);font-size:12px;overflow-wrap:anywhere}.modal-close{border:1px solid var(--line);background:#111a2b;color:var(--text);border-radius:9px;width:36px;height:36px;font-size:20px;cursor:pointer}.modal-body{padding:18px 20px 22px}.modal-desc{color:#d6deeb;margin:0 0 16px}.modal-section{margin-top:17px}.modal-section h3{font-size:12px;text-transform:uppercase;letter-spacing:1.1px;color:var(--gold);margin:0 0 8px}.detail-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.detail{background:#111a2a;border:1px solid #ffffff0d;border-radius:9px;padding:9px 11px;min-width:0}.detail span{display:block;color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.6px}.detail b{display:block;margin-top:2px;font-size:13px;overflow-wrap:anywhere}.effect-list,.source-list{display:grid;gap:6px}.effect-row,.source-row{background:#111a2a;border-radius:8px;padding:9px 11px;display:flex;justify-content:space-between;gap:12px;font-size:13px}.effect-row b,.source-row b{color:var(--green);text-align:right}.source-row{cursor:pointer}.source-row:hover{background:#27354b}.modal-note{font-size:11px;color:var(--muted);margin:10px 0 0}
+    .give-panel{margin-top:20px;padding:14px;background:#111a2a;border:1px solid #ffffff18;border-radius:11px}
+    .give-panel h3{font-size:12px;text-transform:uppercase;letter-spacing:1.1px;color:var(--gold);margin:0 0 10px}
+    .give-fields{display:grid;grid-template-columns:minmax(0,1fr) 92px;gap:8px}
+    .give-fields input{min-width:0;width:100%;padding:10px 11px;border-radius:8px;border:1px solid var(--line);background:#0b1220;color:var(--text);font:inherit}
+    .give-submit{margin-top:9px;width:100%;padding:10px;border:1px solid #6d8e77;border-radius:8px;background:#234332;color:#e5ffec;font-weight:800;cursor:pointer}
+    .give-submit:hover{background:#2d5940}
+    .give-submit:disabled{opacity:.55;cursor:wait}
+    .give-status{min-height:17px;margin:8px 0 0;font-size:11px;color:var(--muted)}
+    .give-status.ok{color:var(--green)}.give-status.error{color:#ff9b9b}@media(max-width:460px){.modal-head{padding:15px}.modal-body{padding:15px}.modal-icon{width:62px;height:62px}.modal-title h2{font-size:19px}.detail-grid{grid-template-columns:1fr 1fr}}.footer{text-align:center;color:#78859c;font-size:11px;margin-top:28px}
+    @media(max-width:600px){.wrap{padding:18px 12px 40px}.top{align-items:flex-start}.brand h1{font-size:21px}.back{padding:9px 10px;font-size:12px}.hero{padding:19px}.hero h2{font-size:23px}.monster-grid{grid-template-columns:1fr}.facts{grid-template-columns:repeat(2,1fr)}.tab{padding:11px 12px}.toolbar select{flex:1}.card-head{padding:13px}.drop-wrap{padding:0 12px 12px}}
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <header class="top">
+      <div class="brand"><div class="mark">✦</div><div><h1>Willowmere Database</h1><p>Monster & item encyclopedia</p></div></div>
+      <a class="back" href="index.html">← Back to game</a>
+    </header>
+    <section class="hero">
+      <div class="eyebrow">Adventurer's archive</div><h2>Field Guide</h2><p>Look up the creatures of Willowmere Meadows, Whisperwood Glade and Mossy Hollow, and discover what they leave behind.</p>
+      <div class="stats"><div class="stat"><b id="monster-total">—</b><span>Monster types</span></div><div class="stat"><b id="item-total">—</b><span>Known items</span></div><div class="stat"><b id="drop-total">—</b><span>Drop entries</span></div></div>
+    </section>
+    <nav class="tabs" aria-label="Database sections"><button class="tab active" data-tab="monsters">Monsters & Drops</button><button class="tab" data-tab="items">Item Database</button></nav>
+    <section id="monster-section">
+      <div class="toolbar"><label class="search"><input id="monster-search" type="search" placeholder="Search monsters or drop items…" autocomplete="off"></label><select id="monster-sort" aria-label="Sort monsters"><option value="level">Sort: Level</option><option value="name">Sort: Name</option><option value="drops">Sort: Most drops</option></select></div>
+      <div class="section-title"><h3>Monster encyclopedia</h3><span class="count" id="monster-count"></span></div><div class="monster-grid" id="monster-grid"></div>
+    </section>
+    <section id="item-section" class="hidden">
+      <div class="toolbar"><label class="search"><input id="item-search" type="search" placeholder="Search items, descriptions or IDs…" autocomplete="off"></label><select id="item-type" aria-label="Filter item type"><option value="all">All item types</option><option value="use">Consumables</option><option value="etc">Loot & materials</option><option value="equip">Equipment</option><option value="card">Cards</option></select><select id="item-rarity" aria-label="Filter rarity"><option value="all">All rarities</option><option value="common">Common</option><option value="uncommon">Uncommon</option><option value="rare">Rare</option><option value="epic">Epic</option><option value="card">Card</option></select><select id="item-slot" aria-label="Filter equipment slot"><option value="all">All equipment slots</option><option value="weapon">Weapon</option><option value="shield">Shield</option><option value="armor">Armor</option><option value="garment">Garment</option><option value="shoes">Shoes</option><option value="headgear">Headgear (all)</option><option value="headTop">Headgear: upper</option><option value="headMid">Headgear: middle</option><option value="headLow">Headgear: lower</option><option value="acc">Accessory</option></select></div>
+      <div class="section-title"><h3>Item encyclopedia</h3><span class="count" id="item-count"></span></div><div class="item-grid" id="item-grid"></div>
+    </section>
+    <footer class="footer">Willowmere Field Guide · Drop rates are per-kill independent chances. Item delivery is a debug tool and needs the game open in another tab of this same site.</footer>
+  </main>
+  <div class="item-modal" id="item-modal" role="dialog" aria-modal="true" aria-labelledby="modal-item-name">
+    <article class="item-dialog">
+      <header class="modal-head">
+        <div class="modal-icon" id="modal-item-icon">✦</div>
+        <div class="modal-title"><h2 id="modal-item-name">Item</h2><p id="modal-item-subtitle"></p></div>
+        <button class="modal-close" id="modal-close" aria-label="Close item details">×</button>
+      </header>
+      <div class="modal-body" id="modal-item-body"></div>
+    </article>
+  </div>
+  <!-- The same data files and procedural art the game uses, so monster
+       portraits and item icons match what you see in Willowmere. -->
+  <script src="lib/three.min.js"></script>
+  <script src="js/core/config.js"></script>
+  <script src="js/core/utils.js"></script>
+  <script src="js/data/items.js"></script>
+  <script src="js/data/maps.js"></script>
+  <script src="js/graphics/spriteRig.js"></script>
+  <script src="js/graphics/spriteFactory.js"></script>
+  <script src="js/graphics/icons.js"></script>
+  <script>
+    (() => {
+      'use strict';
+      const C = window.G.Config, DB = window.G.Items.DB;
+      const $ = id => document.getElementById(id);
+      const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+      const pct = n => Number((n * 100).toFixed(n < 0.01 ? 2 : 1)).toString() + '%';
+      const monsterIds = Object.keys(C.MONSTERS);
+      const TYPE_NAMES = { use: 'Consumable', etc: 'Loot / Material', equip: 'Equipment', card: 'Card' };
+      const STAT_NAMES = { atk:'ATK', matk:'MATK', def:'DEF', mdef:'MDEF', str:'STR', agi:'AGI', vit:'VIT', int:'INT', dex:'DEX', luk:'LUK', maxHp:'Max HP', maxSp:'Max SP', maxHpPct:'Max HP', maxSpPct:'Max SP', hit:'HIT', flee:'FLEE', crit:'CRIT', aspd:'ASPD' };
+      const TYPE_SYMBOLS = { use:'⚗', etc:'✦', equip:'⚔', card:'▣' };
+      const spawnCounts = {}, spawnMaps = {};
+      for (const map of Object.values(window.G.Maps)) for (const spawn of map.spawns) {
+        spawnCounts[spawn.type] = (spawnCounts[spawn.type] || 0) + spawn.count;
+        (spawnMaps[spawn.type] = spawnMaps[spawn.type] || {})[map.name] = (spawnMaps[spawn.type][map.name] || 0) + spawn.count;
+      }
+      const whereText = id => Object.entries(spawnMaps[id] || {}).map(([name, n]) => `${name} ×${n}`).join(', ') || 'Not spawning';
+
+      // Portrait: the front-facing idle frame of the monster's real sprite sheet.
+      const portraits = {};
+      function portrait(id) {
+        if (portraits[id]) return portraits[id];
+        try {
+          const sh = window.G.SpriteFactory.get(id), cell = sh.anims.idle.start;
+          const col = cell % sh.cols, row = (cell / sh.cols) | 0;
+          // Copy the frame, find the creature's bounding box, then fit it to the portrait.
+          const f = document.createElement('canvas'); f.width = sh.frameW; f.height = sh.frameH;
+          const fx = f.getContext('2d'); fx.drawImage(sh.canvas, col * sh.frameW, row * sh.frameH, sh.frameW, sh.frameH, 0, 0, sh.frameW, sh.frameH);
+          const px = fx.getImageData(0, 0, sh.frameW, sh.frameH).data;
+          let x0 = sh.frameW, y0 = sh.frameH, x1 = 0, y1 = 0;
+          for (let y = 0; y < sh.frameH; y++) for (let x = 0; x < sh.frameW; x++) if (px[(y * sh.frameW + x) * 4 + 3] > 24) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+          const w = x1 - x0 + 1, h = y1 - y0 + 1, k = 84 / Math.max(w, h);
+          const c = document.createElement('canvas'); c.width = c.height = 96;
+          c.getContext('2d').drawImage(f, x0, y0, w, h, 48 - w * k / 2, 90 - h * k, w * k, h * k);
+          portraits[id] = c.toDataURL();
+        } catch (e) { portraits[id] = ''; }
+        return portraits[id];
+      }
+      const iconImg = (id, size) => { try { return `<img src="${window.G.Icons.url(id)}" alt="" width="${size}" height="${size}">`; } catch (e) { return '✦'; } };
+      const ELEMENTS = { neutral: 'Neutral', water: 'Water', fire: 'Fire', earth: 'Earth', wind: 'Wind', ghost: 'Ghost', holy: 'Holy', poison: 'Poison', shadow: 'Shadow' };
+      const allDrops = monsterIds.reduce((n,id) => n + (C.MONSTERS[id].drops || []).length + (C.MONSTERS[id].zeny ? 1 : 0), 0);
+      $('monster-total').textContent = monsterIds.length;
+      $('item-total').textContent = Object.keys(DB).length;
+      $('drop-total').textContent = allDrops;
+
+      function monsterCard(id) {
+        const m = C.MONSTERS[id], drops = [...(m.drops || [])].sort((a,b) => b.chance-a.chance);
+        const dropHtml = drops.map(d => {
+          const item = DB[d.id], name = item ? item.name : d.id;
+          return `<div class="drop" role="button" tabindex="0" data-item-id="${esc(d.id)}" aria-label="View ${esc(name)} details"><div class="drop-name">${item ? iconImg(d.id, 22) : '<i class="dot"></i>'}<span>${esc(name)}</span></div><div class="chance">${pct(d.chance)}</div><div class="bar"><i style="width:${Math.max(1,d.chance*100)}%"></i></div></div>`;
+        }).join('');
+        const spawn = spawnCounts[id] || 0;
+        const searchable = [m.name,id,...drops.map(d => DB[d.id]?.name || d.id)].join(' ').toLowerCase();
+        return `<article class="card" data-search="${esc(searchable)}" data-level="${m.level}" data-name="${esc(m.name.toLowerCase())}" data-drops="${drops.length}">
+          <div class="card-head"><div class="mob-name"><div class="mob-icon"><img src="${portrait(id)}" alt="" width="43" height="43"></div><div><h3>${esc(m.name)}</h3><small>${esc(ELEMENTS[m.element] || 'Neutral')} · ${esc(whereText(id))}</small></div></div><span class="level">Lv. ${m.level}</span></div>
+          <div class="facts"><div class="fact"><b>${m.hp}</b><span>HP</span></div><div class="fact"><b>${m.exp}</b><span>Base EXP</span></div><div class="fact"><b>${m.jobExp}</b><span>Job EXP</span></div><div class="fact"><b>${m.noAttack ? '—' : `${m.atk[0]}–${m.atk[1]}`}</b><span>Attack</span></div><div class="fact"><b>${m.def}</b><span>DEF</span></div><div class="fact"><b>${m.flee}</b><span>FLEE</span></div></div>
+          <div class="drop-wrap"><div class="drop-head"><strong>Item drops</strong><span>${drops.length} entries · per kill</span></div><div class="drop-list">${dropHtml || '<div class="empty">No item drops listed.</div>'}</div>${m.zeny ? `<div class="zeny"><span>◈ Zeny</span><strong>${pct(m.zeny.chance)} · ${m.zeny.min}–${m.zeny.max} Zeny</strong></div>` : ''}</div>
+        </article>`;
+      }
+      function renderMonsters() {
+        const q = $('monster-search').value.trim().toLowerCase(), sort = $('monster-sort').value;
+        const list = monsterIds.filter(id => {
+          const m = C.MONSTERS[id], drops = m.drops || [];
+          return [m.name,id,...drops.map(d => DB[d.id]?.name || d.id)].join(' ').toLowerCase().includes(q);
+        }).sort((a,b) => sort === 'name' ? C.MONSTERS[a].name.localeCompare(C.MONSTERS[b].name) : sort === 'drops' ? (C.MONSTERS[b].drops?.length||0)-(C.MONSTERS[a].drops?.length||0) : C.MONSTERS[a].level-C.MONSTERS[b].level);
+        $('monster-count').textContent = `${list.length} of ${monsterIds.length} monsters`;
+        $('monster-grid').innerHTML = list.length ? list.map(monsterCard).join('') : '<div class="empty">No monsters or drops match your search.</div>';
+      }
+      // Equipment and cards both belong to a slot; cards to a slot *group*.
+      const HEAD = ['headTop', 'headMid', 'headLow'];
+      const SLOT_NAMES = { weapon: 'Weapon', shield: 'Shield', armor: 'Armor', garment: 'Garment', shoes: 'Shoes', headTop: 'Headgear (upper)', headMid: 'Headgear (middle)', headLow: 'Headgear (lower)', acc: 'Accessory' };
+      function slotMatches(item, slot) {
+        if (slot === 'all') return true;
+        if (item.type === 'equip') return slot === 'headgear' ? HEAD.includes(item.slot) : item.slot === slot;
+        if (item.type === 'card') {
+          const fits = window.G.Items.CARD_SLOTS[item.cardSlot].slots;   // e.g. ['headTop','headMid','headLow']
+          return slot === 'headgear' ? item.cardSlot === 'headgear' : fits.includes(slot);
+        }
+        return false;
+      }
+      function slotLabel(item) {
+        if (item.type === 'equip') return SLOT_NAMES[item.slot] || item.slot;
+        if (item.type === 'card') return window.G.Items.CARD_SLOTS[item.cardSlot].long;
+        return '';
+      }
+      function renderItems() {
+        const q = $('item-search').value.trim().toLowerCase(), type = $('item-type').value, rarity = $('item-rarity').value, slot = $('item-slot').value;
+        const list = Object.values(DB).filter(item => (type === 'all' || item.type === type) && (rarity === 'all' || item.rarity === rarity) && slotMatches(item, slot) && [item.name,item.id,item.desc,item.type].join(' ').toLowerCase().includes(q)).sort((a,b) => a.name.localeCompare(b.name));
+        $('item-count').textContent = `${list.length} of ${Object.keys(DB).length} items`;
+        $('item-grid').innerHTML = list.length ? list.map(item => `<article class="item" role="button" tabindex="0" data-item-id="${esc(item.id)}" aria-label="View ${esc(item.name)} details"><div class="item-top"><h4>${iconImg(item.id, 26)} ${esc(item.name)}</h4><span class="rarity ${esc(item.rarity)}">${esc(item.rarity)}</span></div><p>${esc(item.type === 'card' && item.effectText ? item.effectText + ' ' + item.desc : (item.desc || 'No description available.'))}</p><div class="item-meta"><span>${esc(item.type === 'use' ? 'Consumable' : item.type === 'etc' ? 'Loot / Material' : item.type === 'equip' ? `Equipment · ${slotLabel(item)}` : `Card · goes into ${slotLabel(item)}`)}</span><span class="price">${item.price || 0} z</span></div><div class="item-open-hint">Click for item details ↗</div></article>`).join('') : '<div class="empty">No items match your filters.</div>';
+      }
+      function effectDetails(item) {
+        const rows = [];
+        if (item.type === 'use') {
+          const u = item.use || {};
+          if (u.heal) rows.push(['HP restored', `+${u.heal} HP`]);
+          if (u.sp) rows.push(['SP restored', `+${u.sp} SP`]);
+          if (u.teleport) rows.push(['Effect', 'Teleports you to a random spot on your current map']);
+          if (u.recall) rows.push(['Effect', 'Returns you to your save point in Willowmere']);
+          if (!rows.length) rows.push(['Effect', 'Consumable effect is not specified in the item data']);
+        }
+        if (item.type === 'equip') {
+          for (const [key, value] of Object.entries(item.bonus || {})) rows.push([STAT_NAMES[key] || key, `${value > 0 ? '+' : ''}${value}`]);
+          if (item.weaponType && window.G.Items.WEAPON_TYPES[item.weaponType]) {
+            const w = window.G.Items.WEAPON_TYPES[item.weaponType];
+            rows.push(['Weapon type', w.name]); rows.push(['Attack range', `${w.range}`]); rows.push(['Attack delay', `${w.delay}s`]);
+          }
+          if (!rows.length) rows.push(['Effect', 'No equipment bonuses are listed.']);
+        }
+        if (item.type === 'etc') rows.push(['Use', 'Material / loot item. It has no direct use defined in the current game data.']);
+        if (item.type === 'card') {
+          for (const [key, value] of Object.entries(item.bonus || {})) rows.push([STAT_NAMES[key] || key, `${value > 0 ? '+' : ''}${value}${/Pct$/.test(key) ? '%' : ''}`]);
+          rows.unshift(['Goes into', window.G.Items.CARD_SLOTS[item.cardSlot].long]);
+        }
+        return rows;
+      }
+      function openItem(id) {
+        const item = DB[id]; if (!item) return;
+        const modal = $('item-modal');
+        $('modal-item-name').textContent = item.name;
+        $('modal-item-subtitle').textContent = `${TYPE_NAMES[item.type] || item.type} · ${item.id}`;
+        $('modal-item-icon').innerHTML = iconImg(item.id, 56);
+        $('modal-item-icon').style.color = item.icon?.color || 'var(--gold)';
+        const details = [
+          ['Type', TYPE_NAMES[item.type] || item.type],
+          ['Rarity', item.rarity || 'Common'],
+          ['Buy / value price', `${item.price || 0} Zeny`],
+          ['Weight', item.weight ?? 0],
+        ];
+        if (item.type === 'equip') {
+          details.push(['Equipment slot', slotLabel(item) || '—']);
+          details.push(['Required base level', item.reqLevel || 1]);
+          details.push(['Card slots', item.slots ?? 0]);
+          details.push(['Allowed jobs', item.jobs === 'all' ? 'All jobs' : (item.jobs || []).join(', ') || 'Not specified']);
+        }
+        if (item.stack === false) details.push(['Stackable', 'No']);
+        else details.push(['Stackable', 'Yes']);
+        const effectRows = effectDetails(item).map(([label,value]) => `<div class="effect-row"><span>${esc(label)}</span><b>${esc(value)}</b></div>`).join('');
+        const sources = [];
+        for (const [monsterId, monster] of Object.entries(C.MONSTERS)) {
+          for (const drop of monster.drops || []) if (drop.id === id) sources.push({name:monster.name, chance:pct(drop.chance), level:monster.level});
+        }
+        const sourceHtml = sources.length ? sources.map(source => `<div class="source-row"><span>${esc(source.name)} <small style="color:var(--muted)">Lv. ${source.level}</small></span><b>${esc(source.chance)}</b></div>`).join('') : '<p class="modal-note">No monster drop source is listed for this item.</p>';
+        $('modal-item-body').innerHTML = `<p class="modal-desc">${esc(item.desc || 'No description available.')}</p><div class="detail-grid">${details.map(([label,value]) => `<div class="detail"><span>${esc(label)}</span><b>${esc(value)}</b></div>`).join('')}</div><section class="modal-section"><h3>What it does in-game</h3><div class="effect-list">${effectRows}</div></section><section class="modal-section"><h3>Dropped by</h3><div class="source-list">${sourceHtml}</div></section><section class="give-panel"><h3>Give to player · Debug</h3><div class="give-fields"><input id="give-player-name" type="text" maxlength="32" placeholder="Character name" autocomplete="off"><input id="give-item-qty" type="number" min="1" max="30000" step="1" value="1" aria-label="Quantity"></div><button class="give-submit" id="give-item-submit" type="button">Give ${esc(item.name)}</button><p class="give-status" id="give-item-status" aria-live="polite">Player must be online in another Willowmere tab on this same website.</p></section>`;
+        modal.classList.add('open'); $('modal-close').focus();
+      }
+      function closeItem() { $('item-modal').classList.remove('open'); }
+
+      // Debug item delivery talks to a live game tab on this same website.
+      const debugChannel = ('BroadcastChannel' in window) ? new BroadcastChannel('willowmere-debug') : null;
+      const pendingGifts = new Map();
+      if (debugChannel) {
+        debugChannel.addEventListener('message', event => {
+          const data = event.data || {};
+          if (data.type !== 'give-item-result' || !pendingGifts.has(data.requestId)) return;
+          const pending = pendingGifts.get(data.requestId);
+          clearTimeout(pending.timer);
+          pendingGifts.delete(data.requestId);
+          const status = $('give-item-status');
+          if (!status) return;
+          status.textContent = data.ok ? `Delivered ${pending.qty} × ${pending.itemName} to ${data.characterName}.` : (data.message || 'Delivery failed.');
+          status.className = `give-status ${data.ok ? 'ok' : 'error'}`;
+          const button = $('give-item-submit');
+          if (button) button.disabled = false;
+        });
+      }
+
+      document.addEventListener('click', event => {
+        const giveButton = event.target.closest('#give-item-submit');
+        if (giveButton) {
+          const playerName = $('give-player-name')?.value.trim();
+          const qty = Number($('give-item-qty')?.value);
+          const status = $('give-item-status');
+          const itemId = $('modal-item-subtitle')?.textContent.split('·').pop().trim();
+          const item = DB[itemId];
+          if (!playerName) {
+            status.textContent = 'Enter the character name first.';
+            status.className = 'give-status error';
+            return;
+          }
+          if (!Number.isInteger(qty) || qty < 1 || qty > 30000) {
+            status.textContent = 'Quantity must be a whole number between 1 and 30,000.';
+            status.className = 'give-status error';
+            return;
+          }
+          if (!debugChannel) {
+            status.textContent = 'This browser does not support live debug delivery. Try a current Chrome or Edge version.';
+            status.className = 'give-status error';
+            return;
+          }
+          const requestId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+          giveButton.disabled = true;
+          status.textContent = `Looking for ${playerName} online…`;
+          status.className = 'give-status';
+          const timer = setTimeout(() => {
+            pendingGifts.delete(requestId);
+            const button = $('give-item-submit');
+            const currentStatus = $('give-item-status');
+            if (button) button.disabled = false;
+            if (currentStatus) {
+              currentStatus.textContent = `No response from ${playerName}. Make sure their character is online in another tab on this same website.`;
+              currentStatus.className = 'give-status error';
+            }
+          }, 3500);
+          pendingGifts.set(requestId, { timer, qty, itemName: item ? item.name : itemId });
+          debugChannel.postMessage({ type: 'give-item', requestId, playerName, itemId, qty });
+          return;
+        }
+      });
+
+      document.addEventListener('click', event => {
+        const target = event.target.closest('[data-item-id]');
+        if (target) openItem(target.dataset.itemId);
+      });
+      document.addEventListener('keydown', event => {
+        const target = event.target.closest?.('[data-item-id]');
+        if ((event.key === 'Enter' || event.key === ' ') && target) { event.preventDefault(); openItem(target.dataset.itemId); }
+        if (event.key === 'Escape') closeItem();
+      });
+      $('modal-close').addEventListener('click', closeItem);
+      $('item-modal').addEventListener('click', event => { if (event.target === $('item-modal')) closeItem(); });
+
+      document.querySelectorAll('.tab').forEach(button => button.addEventListener('click', () => {
+        document.querySelectorAll('.tab').forEach(b => b.classList.toggle('active', b === button));
+        $('monster-section').classList.toggle('hidden', button.dataset.tab !== 'monsters');
+        $('item-section').classList.toggle('hidden', button.dataset.tab !== 'items');
+      }));
+      $('monster-search').addEventListener('input', renderMonsters); $('monster-sort').addEventListener('change', renderMonsters);
+      $('item-search').addEventListener('input', renderItems); $('item-type').addEventListener('change', renderItems); $('item-rarity').addEventListener('change', renderItems); $('item-slot').addEventListener('change', renderItems);
+      renderMonsters(); renderItems();
+    })();
+  </script>
+</body>
+</html>
