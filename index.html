@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Willowmere – 2.5D MMORPG prototype</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&display=swap">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div id="game"></div>
+  <canvas id="overlay"></canvas>
+
+  <div id="hud">
+    <section id="status" class="window status" aria-label="Character status">
+      <header class="window-title"><span id="st-name">Adventurer</span><span id="st-level" class="lv">Lv 1</span></header>
+      <div class="window-body">
+        <div id="st-job" class="job">Novice</div>
+        <div class="stat-row"><span class="label">HP</span><div id="st-hp" class="meter hp"><i id="st-hp-fill"></i><b id="st-hp-text"></b></div></div>
+        <div class="stat-row"><span class="label">SP</span><div class="meter sp"><i id="st-sp-fill"></i><b id="st-sp-text"></b></div></div>
+        <div class="stat-row"><span class="label">Base</span><div class="meter exp"><i id="st-exp-fill"></i><b id="st-exp-text"></b></div></div>
+        <div class="stat-row"><span class="label">Job</span><div class="meter jexp"><i id="st-jexp-fill"></i><b id="st-jexp-text"></b></div></div>
+        <div class="status-extra"><span id="st-zeny" class="zeny-text">0 z</span><span id="st-weight" class="heavy-tag" hidden>Heavy: no regen</span></div>
+        <button id="st-points" class="points-tag" type="button" hidden></button>
+      </div>
+    </section>
+
+    <section id="target" class="window target" hidden aria-live="polite" aria-label="Target">
+      <header class="window-title"><span id="tg-name">Poring</span><span id="tg-level" class="lv">Lv 1</span></header>
+      <div class="window-body"><div class="meter enemy"><i id="tg-hp-fill"></i><b id="tg-hp-text"></b></div></div>
+    </section>
+
+    <div id="buffs" class="buffs" aria-label="Active effects"></div>
+    <div id="tracker" class="window tracker" hidden aria-live="polite"></div>
+    <div id="debug" class="debug" aria-label="Debug tools"></div>
+    <section id="dialog" class="dialog" hidden aria-live="polite">
+      <header class="dlg-name"></header>
+      <button class="x dlg-close" type="button" aria-label="End conversation">×</button>
+      <div class="dlg-text"></div>
+      <div class="dlg-buttons"></div>
+    </section>
+    <div id="zone" class="zone" aria-live="polite"></div>
+    <div id="toast" class="toast" role="status"></div>
+
+    <section id="help" class="window help" aria-label="Controls">
+      <header class="window-title"><span>Controls</span><button id="help-close" class="x" type="button" aria-label="Hide controls">×</button></header>
+      <ul class="window-body keys">
+        <li><kbd>Left click</kbd><span>Walk (hold to keep going)</span></li>
+        <li><kbd>Click monster</kbd><span>Attack</span></li>
+        <li><kbd>Click item</kbd><span>Pick up</span></li>
+        <li><kbd>Right drag</kbd><span>Orbit and tilt camera</span></li>
+        <li><kbd>Wheel</kbd><span>Zoom</span></li>
+        <li><kbd>F1–F9</kbd><span>Hotbar (or 1–9)</span></li>
+        <li><kbd>Alt+A / C</kbd><span>Status, stat points</span></li>
+        <li><kbd>Alt+E / I</kbd><span>Inventory</span></li>
+        <li><kbd>Alt+Q / Q</kbd><span>Equipment</span></li>
+        <li><kbd>Alt+S / K</kbd><span>Skills</span></li>
+        <li><kbd>Click NPC</kbd><span>Talk</span></li>
+        <li><kbd>L</kbd><span>Toggle auto-loot</span></li>
+        <li><kbd>Esc</kbd><span>Close window, clear target</span></li>
+        <li><kbd>H</kbd><span>Hide this panel</span></li>
+      </ul>
+    </section>
+    <button id="help-open" class="help-open" type="button" hidden>Controls <kbd>H</kbd></button>
+
+    <div id="log" class="log" aria-label="Messages"><ul id="log-list" aria-live="polite"></ul></div>
+    <div id="hotbar" class="hotbar" aria-label="Hotbar"></div>
+    <nav id="menubar" class="menubar" aria-label="Game menu"></nav>
+
+    <div id="death" class="death" hidden><strong>You fainted</strong><span>Returning to your save point…</span></div>
+  </div>
+  <div id="windows"></div>
+  <div id="tooltip" class="tooltip" hidden></div>
+  <div id="title" class="title-screen" hidden></div>
+  <div id="fade" class="fade" aria-hidden="true"></div>
+
+  <div id="loading">
+    <div class="load-card">
+      <h1>Willowmere</h1>
+      <p class="sub">A 2.5D adventure prototype</p>
+      <p id="load-step">Loading…</p>
+      <div class="bounce" aria-hidden="true"><span></span><span></span><span></span></div>
+    </div>
+  </div>
+
+  <!-- Engine -->
+  <script src="lib/three.min.js"></script>
+  <!-- Core and data -->
+  <script src="js/core/config.js"></script>
+  <script src="js/core/utils.js"></script>
+  <script src="js/data/items.js"></script>
+  <script src="js/data/jobs.js"></script>
+  <script src="js/data/skills.js"></script>
+  <script src="js/data/npcs.js"></script>
+  <script src="js/data/maps.js"></script>
+  <!-- World -->
+  <script src="js/world/terrain.js"></script>
+  <script src="js/world/navgrid.js"></script>
+  <script src="js/world/environment.js"></script>
+  <!-- Graphics -->
+  <script src="js/graphics/spriteRig.js"></script>
+  <script src="js/graphics/spriteFactory.js"></script>
+  <script src="js/graphics/directionalSprite.js"></script>
+  <script src="js/graphics/effects.js"></script>
+  <script src="js/graphics/icons.js"></script>
+  <script src="js/graphics/spells.js"></script>
+  <!-- Character systems -->
+  <script src="js/systems/stats.js"></script>
+  <script src="js/systems/inventory.js"></script>
+  <script src="js/systems/skills.js"></script>
+  <script src="js/systems/quests.js"></script>
+  <!-- Entities and systems -->
+  <script src="js/entities/entity.js"></script>
+  <script src="js/entities/player.js"></script>
+  <script src="js/entities/monster.js"></script>
+  <script src="js/entities/npc.js"></script>
+  <script src="js/systems/monsters.js"></script>
+  <script src="js/systems/loot.js"></script>
+  <script src="js/systems/portals.js"></script>
+  <script src="js/systems/save.js"></script>
+  <script src="js/systems/camera.js"></script>
+  <script src="js/systems/input.js"></script>
+  <!-- UI -->
+  <script src="js/ui/overlay.js"></script>
+  <script src="js/ui/hud.js"></script>
+  <script src="js/ui/windows.js"></script>
+  <script src="js/ui/panels.js"></script>
+  <script src="js/ui/skillsWindow.js"></script>
+  <script src="js/ui/npcui.js"></script>
+  <script src="js/ui/extras.js"></script>
+  <script src="js/ui/hotbar.js"></script>
+  <script src="js/ui/title.js"></script>
+  <!-- Boot -->
+  <script src="js/game.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>

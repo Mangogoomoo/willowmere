@@ -1,0 +1,70 @@
+/* Map definitions. The terrain, scenery, monsters, NPCs and portals of each
+   map are generated from these settings when you travel there.
+
+   paths     dirt roads (polylines); also flattened and kept clear of trees
+   town      true if the Willowmere town sits on this map
+   stream    the stream with its bridge (meadow only)
+   pond      { x, z, r } or null
+   hills     height of the rolling hills;  seed shifts the noise
+   forest    tree placement: { count, grove } (grove = how clumped)
+   palette   ground colours
+   spawns    monster spawn areas
+   portals   walk-in gates to other maps: { x, z, to, tx, tz, label } */
+(function (G) {
+  'use strict';
+
+  G.Maps = {
+    meadow: {
+      id: 'meadow', name: 'Willowmere Meadows', town: true, stream: true, bridge: true,
+      paths: [
+        [[0, -30], [0, -14], [-3, -4], [-6, 10], [-4, 28], [6, 46], [8, 66], [0, 88], [-4, 106]],
+        [[-4, 28], [16, 26], [36, 22], [58, 26], [80, 34], [96, 40]],
+        [[-6, 10], [-26, 16], [-44, 30], [-54, 52], [-58, 74], [-66, 96]],
+      ],
+      pond: { x: 46, z: 56, r: 9 },
+      hills: 10, seed: 0,
+      forest: { count: 230, grove: 0.42, clearing: 0.55 },
+      palette: {},
+      spawns: [
+        { type: 'poring', x: -8, z: 8, r: 13, count: 6 },
+        { type: 'poring', x: -38, z: 40, r: 15, count: 6 },
+        { type: 'poring', x: 14, z: 62, r: 14, count: 4 },
+        { type: 'lunatic', x: 40, z: 16, r: 14, count: 5 },
+        { type: 'lunatic', x: 28, z: 82, r: 15, count: 4 },
+        { type: 'lunatic', x: -56, z: 78, r: 13, count: 3 },
+      ],
+      npcs: ['job_master', 'tool_dealer', 'pond_priestess'],
+      portals: [{ x: -4, z: 99, to: 'forest', tx: 0, tz: -97, label: 'Whisperwood Glade' }],
+    },
+
+    forest: {
+      id: 'forest', name: 'Whisperwood Glade', town: false, stream: false, bridge: false,
+      paths: [
+        [[0, -108], [2, -82], [-8, -58], [-20, -32], [-10, -6], [8, 20], [24, 46], [18, 72], [0, 96]],
+        [[-10, -6], [-38, 0], [-60, 16], [-70, 44]],
+        [[8, 20], [40, 10], [64, -12], [82, -40]],
+        [[24, 46], [50, 58], [76, 70]],
+      ],
+      pond: { x: -46, z: 42, r: 8 },
+      hills: 13, seed: 517,
+      forest: { count: 1100, grove: 0.3, clearing: 0.8, giants: true },
+      palette: {
+        grassA: '#5ea84a', grassB: '#79bd57', grassDark: '#3f7f3a', meadow: '#a4c860',
+        town: '#5ea84a', dirt: '#a07c54', dirtDark: '#80623f', cliff: '#7d8c66', cliffHi: '#4f7a45',
+      },
+      fog: '#d3e9dc',
+      spawns: [
+        { type: 'fabre', x: -10, z: -64, r: 13, count: 6 },
+        { type: 'pupa', x: 18, z: -38, r: 11, count: 5 },
+        { type: 'drops', x: -32, z: -18, r: 12, count: 5 },
+        { type: 'fabre', x: 22, z: 26, r: 13, count: 5 },
+        { type: 'rocker', x: -50, z: 14, r: 13, count: 5 },
+        { type: 'poporing', x: 44, z: 62, r: 14, count: 5 },
+        { type: 'rocker', x: 62, z: -18, r: 13, count: 4 },
+        { type: 'pupa', x: -18, z: 70, r: 11, count: 4 },
+      ],
+      npcs: [],
+      portals: [{ x: 0, z: -104, to: 'meadow', tx: -4, tz: 94, label: 'Willowmere Meadows' }],
+    },
+  };
+})(window.G = window.G || {});
