@@ -26,6 +26,10 @@
       forest: { count: 230, grove: 0.42, clearing: 0.55 },
       palette: {},
       spawns: [
+        // Training dummies inside the town gate, for trying out skills.
+        { type: 'training_dummy', x: -7, z: -47, r: 0.1, count: 1 },
+        { type: 'training_dummy', x: -11, z: -47, r: 0.1, count: 1 },
+        { type: 'training_dummy', x: -15, z: -47, r: 0.1, count: 1 },
         { type: 'poring', x: -8, z: 8, r: 13, count: 6 },
         { type: 'poring', x: -38, z: 40, r: 15, count: 6 },
         { type: 'poring', x: 14, z: 62, r: 14, count: 4 },
@@ -33,7 +37,7 @@
         { type: 'lunatic', x: 28, z: 82, r: 15, count: 4 },
         { type: 'lunatic', x: -56, z: 78, r: 13, count: 3 },
       ],
-      npcs: ['job_master', 'tool_dealer', 'weapon_dealer', 'armor_dealer', 'storage_keeper', 'innkeeper', 'tutor', 'quest_giver', 'pond_priestess'],
+      npcs: ['job_master', 'tool_dealer', 'weapon_dealer', 'armor_dealer', 'storage_keeper', 'innkeeper', 'refiner', 'reset_sage', 'tutor', 'quest_giver', 'pond_priestess'],
       portals: [{ x: -4, z: 99, to: 'forest', tx: 0, tz: -97, label: 'Whisperwood Glade' }],
     },
 

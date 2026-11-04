@@ -50,6 +50,11 @@
     mace: { name: 'Mace', delay: 0.95, range: 1.6 },
     rod: { name: 'Rod', delay: 1.0, range: 1.6 },
     bow: { name: 'Bow', delay: 0.95, range: 9.0, twoHanded: true },
+    spear: { name: 'Spear', delay: 1.0, range: 2.1, twoHanded: true },
+    katar: { name: 'Katar', delay: 0.72, range: 1.55, twoHanded: true },
+    knuckle: { name: 'Knuckle', delay: 0.62, range: 1.45 },
+    axe: { name: 'Axe', delay: 1.05, range: 1.7 },
+    book: { name: 'Book', delay: 0.95, range: 1.6 },
   };
 
   const I = {};
@@ -95,23 +100,37 @@
     desc: 'Extremely rare. Collectors in town pay well for these.' });
 
   /* ---------- weapons ---------- */
-  def('knife', { name: 'Knife', type: 'equip', slot: 'weapon', weaponType: 'dagger', icon: { shape: 'dagger', color: '#d7dee8' },
+  def('knife', { wlv: 1, name: 'Knife', type: 'equip', slot: 'weapon', weaponType: 'dagger', icon: { shape: 'dagger', color: '#d7dee8' },
     weight: 40, price: 50, slots: 3, reqLevel: 1, jobs: 'all', bonus: { atk: 17 }, desc: 'A plain kitchen-style knife. Better than nothing.' });
-  def('cutter', { name: 'Cutter', type: 'equip', slot: 'weapon', weaponType: 'dagger', icon: { shape: 'dagger', color: '#f1e6b8' },
+  def('cutter', { wlv: 1, name: 'Cutter', type: 'equip', slot: 'weapon', weaponType: 'dagger', icon: { shape: 'dagger', color: '#f1e6b8' },
     weight: 60, price: 1250, slots: 3, reqLevel: 1, jobs: 'all', bonus: { atk: 30 }, rarity: 'uncommon', desc: 'A sharp, well-balanced dagger.' });
-  def('sword', { name: 'Sword', type: 'equip', slot: 'weapon', weaponType: 'sword', icon: { shape: 'sword', color: '#cfd8e6' },
+  def('sword', { wlv: 1, name: 'Sword', type: 'equip', slot: 'weapon', weaponType: 'sword', icon: { shape: 'sword', color: '#cfd8e6' },
     weight: 50, price: 100, slots: 3, reqLevel: 2, jobs: ['novice', 'swordsman', 'merchant', 'thief'], bonus: { atk: 25 }, desc: 'A simple straight blade.' });
-  def('club', { name: 'Club', type: 'equip', slot: 'weapon', weaponType: 'mace', icon: { shape: 'club', color: '#9c6a3c' },
+  def('club', { wlv: 1, name: 'Club', type: 'equip', slot: 'weapon', weaponType: 'mace', icon: { shape: 'club', color: '#9c6a3c' },
     weight: 70, price: 60, slots: 3, reqLevel: 2, jobs: ['novice', 'swordsman', 'merchant', 'acolyte'], bonus: { atk: 23 }, desc: 'A heavy wooden club.' });
-  def('rod', { name: 'Rod', type: 'equip', slot: 'weapon', weaponType: 'rod', icon: { shape: 'rod', color: '#8e5bd6' },
+  def('rod', { wlv: 1, name: 'Rod', type: 'equip', slot: 'weapon', weaponType: 'rod', icon: { shape: 'rod', color: '#8e5bd6' },
     weight: 40, price: 50, slots: 3, reqLevel: 1, jobs: ['novice', 'mage', 'acolyte'], bonus: { atk: 15, matk: 15, int: 1 }, desc: 'A wooden staff that hums with faint magic.' });
 
-  def('bow', { name: 'Bow', type: 'equip', slot: 'weapon', weaponType: 'bow', icon: { shape: 'bow' },
+  def('bow', { wlv: 1, name: 'Bow', type: 'equip', slot: 'weapon', weaponType: 'bow', icon: { shape: 'bow' },
     weight: 50, price: 400, slots: 3, reqLevel: 1, jobs: ['archer'], bonus: { atk: 15 }, desc: 'A simple hunting bow. Uses DEX for damage. Needs both hands.' });
-  def('composite_bow', { name: 'Composite Bow', type: 'equip', slot: 'weapon', weaponType: 'bow', icon: { shape: 'bow' },
+  def('composite_bow', { wlv: 2, name: 'Composite Bow', type: 'equip', slot: 'weapon', weaponType: 'bow', icon: { shape: 'bow' },
     weight: 60, price: 2500, slots: 2, reqLevel: 4, jobs: ['archer'], bonus: { atk: 29 }, rarity: 'uncommon', desc: 'Layered wood and horn. Draws hard, flies far.' });
-  def('wand', { name: 'Wand', type: 'equip', slot: 'weapon', weaponType: 'rod', icon: { shape: 'rod', color: '#3fa3e0' },
+  def('wand', { wlv: 2, name: 'Wand', type: 'equip', slot: 'weapon', weaponType: 'rod', icon: { shape: 'rod', color: '#3fa3e0' },
     weight: 40, price: 2200, slots: 2, reqLevel: 5, jobs: ['mage', 'acolyte'], bonus: { atk: 25, matk: 25, int: 2 }, rarity: 'uncommon', desc: 'A slim wand tipped with blue crystal.' });
+
+  // Second-job weapons.
+  const W2 = (id, name, wt, wlv, atk, req, jobs, price, extra, icon, desc) => def(id, Object.assign({ name, type: 'equip', slot: 'weapon', weaponType: wt, wlv, icon,
+    weight: 60, price, slots: wlv >= 3 ? 1 : 2, reqLevel: req, jobs, bonus: Object.assign({ atk }, extra || {}), rarity: wlv >= 3 ? 'uncommon' : 'common', desc }));
+  W2('pike', 'Pike', 'spear', 2, 60, 1, ['knight', 'crusader'], 3000, null, { shape: 'spear', color: '#cfd8e6' }, 'A long spear with a leaf-shaped head.');
+  W2('lance', 'Lance', 'spear', 3, 105, 20, ['knight', 'crusader'], 12000, null, { shape: 'spear', color: '#ffe27a' }, 'A heavy cavalry lance.');
+  W2('katar', 'Katar', 'katar', 2, 70, 1, ['assassin'], 4000, null, { shape: 'katar', color: '#cfd8e6' }, 'A punch-dagger with twin blades. Doubles critical rate.');
+  W2('jur', 'Jur', 'katar', 3, 105, 20, ['assassin'], 13000, { crit: 3 }, { shape: 'katar', color: '#ff8a8a' }, 'A wicked three-pronged katar.');
+  W2('waghnak', 'Waghnak', 'knuckle', 1, 30, 1, ['monk'], 1500, null, { shape: 'knuckle', color: '#c9a24a' }, 'Tiger-claw knuckles.');
+  W2('knuckle_duster', 'Knuckle Duster', 'knuckle', 2, 55, 15, ['monk'], 6000, { str: 1 }, { shape: 'knuckle', color: '#9aa3ad' }, 'Iron knuckles that hit like a hammer.');
+  W2('axe', 'Axe', 'axe', 1, 38, 1, ['merchant', 'blacksmith', 'alchemist'], 500, null, { shape: 'axe', color: '#cfd8e6' }, 'A sturdy woodcutter’s axe.');
+  W2('battle_axe', 'Battle Axe', 'axe', 3, 90, 20, ['blacksmith', 'alchemist'], 12000, null, { shape: 'axe', color: '#ffb35c' }, 'A double-bladed war axe.');
+  W2('bible', 'Bible', 'book', 2, 40, 1, ['sage', 'priest'], 3500, { matk: 20, int: 1 }, { shape: 'book', color: '#7a3a3a' }, 'A heavy holy book, surprisingly good for hitting things.');
+  W2('encyclopedia', 'Encyclopedia', 'book', 3, 60, 20, ['sage'], 12000, { matk: 40, int: 2 }, { shape: 'book', color: '#3a5aa8' }, 'Every fact worth knowing, bound in iron.');
 
   /* ---------- armour ---------- */
   def('cotton_shirt', { name: 'Cotton Shirt', type: 'equip', slot: 'armor', icon: { shape: 'shirt', color: '#f3ead7' },
@@ -159,24 +178,60 @@
   def('miner_lamp', { look: 'lamp',  name: 'Miner’s Lamp', type: 'equip', slot: 'headMid', icon: { shape: 'lamp' },
     weight: 20, price: 1600, slots: 0, reqLevel: 8, jobs: 'all', bonus: { hit: 5, dex: 1 }, rarity: 'uncommon', desc: 'A brass lamp strapped to the brow.' });
 
+  /* ---------- refining materials ---------- */
+  def('phracon', { name: 'Phracon', type: 'etc', icon: { shape: 'ore', color: '#c9b08a' }, weight: 2, price: 200,
+    desc: 'A soft ore used to refine level 1 weapons.' });
+  def('emveretarcon', { name: 'Emveretarcon', type: 'etc', icon: { shape: 'ore', color: '#8fb0d8' }, weight: 2, price: 1000,
+    desc: 'A hard ore used to refine level 2 weapons.' });
+  def('oridecon', { name: 'Oridecon', type: 'etc', icon: { shape: 'ore', color: '#c07aff' }, weight: 2, price: 1100, rarity: 'uncommon',
+    desc: 'A rare metal that glows faintly purple. Refines level 3 and 4 weapons.' });
+  def('elunium', { name: 'Elunium', type: 'etc', icon: { shape: 'ore', color: '#7fe8d0' }, weight: 2, price: 1100, rarity: 'uncommon',
+    desc: 'A rare crystal used to refine armour, shields, garments, shoes and upper headgear.' });
+
   /* ---------- cards: one per monster, rare drops (see monster drop tables) ---------- */
-  const card = (id, monster, cardSlot, bonus, text, color) => def(id, {
+  const card = (id, monster, cardSlot, bonus, text, color, naming) => def(id, Object.assign({ naming }, {
     name: `${monster} Card`, type: 'card', cardSlot, bonus, rarity: 'card', icon: { shape: 'card', color, letter: monster[0], slot: CARD_SLOTS[cardSlot].short },
     weight: 1, price: 20, desc: `A card holding the essence of a ${monster}.`, effectText: text,
-  });
-  card('card_poring', 'Poring', 'armor', { luk: 2, flee: 1 }, 'LUK +2, FLEE +1.', '#ff9cb8');
-  card('card_lunatic', 'Lunatic', 'garment', { luk: 1, crit: 1 }, 'LUK +1, CRIT +1%.', '#fbfbff');
-  card('card_drops', 'Drops', 'acc', { dex: 1, hit: 3 }, 'DEX +1, HIT +3.', '#ffb35c');
-  card('card_fabre', 'Fabre', 'weapon', { vit: 1, maxHp: 100 }, 'VIT +1, Max HP +100.', '#8fd14f');
-  card('card_pupa', 'Pupa', 'armor', { maxHpPct: 10 }, 'Max HP +10%.', '#dcc58f');
-  card('card_rocker', 'Rocker', 'shoes', { agi: 1, flee: 5 }, 'AGI +1, FLEE +5.', '#7fbf3f');
-  card('card_poporing', 'Poporing', 'headgear', { int: 1, maxSpPct: 10 }, 'INT +1, Max SP +10%.', '#93d66c');
-  card('card_familiar', 'Familiar', 'weapon', { atk: 20 }, 'ATK +20.', '#6a5a8a');
-  card('card_spore', 'Spore', 'headgear', { vit: 2 }, 'VIT +2.', '#c96a4a');
-  card('card_whisper', 'Whisper', 'garment', { flee: 20 }, 'FLEE +20.', '#d8e8ff');
-  card('card_king_poring', 'King Poring', 'armor', { str: 1, agi: 1, vit: 1, int: 1, dex: 1, luk: 1, maxHpPct: 15 }, 'Every stat +1, Max HP +15%.', '#ffd84a');
+  }));
+  card('card_poring', 'Poring', 'armor', { luk: 2, flee: 1 }, 'LUK +2, FLEE +1.', '#ff9cb8', { prefix: 'Lucky' });
+  card('card_lunatic', 'Lunatic', 'garment', { luk: 1, crit: 1 }, 'LUK +1, CRIT +1%.', '#fbfbff', { suffix: 'of the Moon' });
+  card('card_drops', 'Drops', 'acc', { dex: 1, hit: 3 }, 'DEX +1, HIT +3.', '#ffb35c', { prefix: 'Dexterous' });
+  card('card_fabre', 'Fabre', 'weapon', { vit: 1, maxHp: 100 }, 'VIT +1, Max HP +100.', '#8fd14f', { prefix: 'Hardy' });
+  card('card_pupa', 'Pupa', 'armor', { maxHpPct: 10 }, 'Max HP +10%.', '#dcc58f', { prefix: 'Sturdy' });
+  card('card_rocker', 'Rocker', 'shoes', { agi: 1, flee: 5 }, 'AGI +1, FLEE +5.', '#7fbf3f', { suffix: 'of Hopping' });
+  card('card_poporing', 'Poporing', 'headgear', { int: 1, maxSpPct: 10 }, 'INT +1, Max SP +10%.', '#93d66c', { prefix: 'Clever' });
+  card('card_familiar', 'Familiar', 'weapon', { atk: 20 }, 'ATK +20.', '#6a5a8a', { prefix: 'Fanged' });
+  card('card_spore', 'Spore', 'headgear', { vit: 2 }, 'VIT +2.', '#c96a4a', { prefix: 'Healthy' });
+  card('card_whisper', 'Whisper', 'garment', { flee: 20 }, 'FLEE +20.', '#d8e8ff', { suffix: 'of Shadows' });
+  card('card_king_poring', 'King Poring', 'armor', { str: 1, agi: 1, vit: 1, int: 1, dex: 1, luk: 1, maxHpPct: 15 }, 'Every stat +1, Max HP +15%.', '#ffd84a', { suffix: 'of the King' });
+
+  const MULTI = ['', '', 'Double', 'Triple', 'Quadruple'];
+  const CARDED_COLOR = '#ffb84d';
+  /* Display name with refine level and card prefixes / suffixes, e.g.
+     "+7 Double Lucky Silk Robe of the King". */
+  function displayName(entry) {
+    const item = I[entry.id];
+    if (!item) return '?';
+    if (item.type !== 'equip') return item.name;
+    const counts = {};
+    for (const c of entry.cards || []) counts[c] = (counts[c] || 0) + 1;
+    const pre = [], suf = [];
+    for (const c in counts) {
+      const n = I[c] && I[c].naming;
+      if (!n) continue;
+      const word = (counts[c] > 1 ? MULTI[Math.min(4, counts[c])] + ' ' : '');
+      if (n.prefix) pre.push(word + n.prefix);
+      if (n.suffix) suf.push(n.suffix + (counts[c] > 1 ? ` ×${counts[c]}` : ''));
+    }
+    const ref = entry.refine ? `+${entry.refine} ` : '';
+    // Forged weapons: "Fire Mira's Knife", like the classics.
+    if (entry.forgedBy) pre.push(...(entry.element ? [{ fire: 'Fire', water: 'Ice', wind: 'Wind', earth: 'Earth' }[entry.element] || ''] : []), `${entry.forgedBy}’s`);
+    return (ref + pre.join(' ') + (pre.length ? ' ' : '') + item.name + (suf.length ? ' ' + suf.join(' ') : '')).trim();
+  }
+  const isCarded = (entry) => !!(entry && entry.cards && entry.cards.length);
 
   G.Items = {
+    displayName, isCarded, CARDED_COLOR,
     DB: I, EQUIP_SLOTS, RARITY, WEAPON_TYPES, CARD_SLOTS,
     get(id) { return I[id] || null; },
     isEquip(id) { return !!I[id] && I[id].type === 'equip'; },

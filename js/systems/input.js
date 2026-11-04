@@ -96,36 +96,36 @@
 
     onKey(e) {
       if (e.target && /input|textarea|select/i.test(e.target.tagName)) return;
-      const g = this.game, k = e.key, code = e.code;
-      // Window shortcuts (Alt combos like the classics, plus single keys).
-      if (k === 'Escape') {
+      if (this.capturing) return;   // the key-binding window is listening
+      const g = this.game;
+      if (e.key === 'Escape') {
         if (g.dialog.isOpen) { g.dialog.close(); return; }
         if (this.targeting) { this.cancelTargeting(true); return; }
+        if (!g.windows.closeTop()) g.player.clearTarget();
+        return;
       }
-      if (!e.altKey && !e.ctrlKey && k.toLowerCase() === 'l') { g.extras.setAutoLoot(!g.autoLoot); return; }
-      if (code === 'Backquote') { g.extras.setDebug(!g.extras.debug); return; }
-      if ((e.altKey && code === 'KeyS') || (!e.altKey && !e.ctrlKey && k.toLowerCase() === 'k')) { e.preventDefault(); g.windows.toggle('skills'); return; }
-      const win = (e.altKey && code === 'KeyA') || (!e.altKey && !e.ctrlKey && k.toLowerCase() === 'c') ? 'status'
-        : (e.altKey && code === 'KeyE') || (!e.altKey && !e.ctrlKey && k.toLowerCase() === 'i') ? 'inventory'
-        : (e.altKey && code === 'KeyQ') || (!e.altKey && !e.ctrlKey && k.toLowerCase() === 'q') ? 'equipment'
-        : (!e.altKey && !e.ctrlKey && k.toLowerCase() === 'o') ? 'options'
-        : (e.altKey && code === 'KeyU') || (!e.altKey && !e.ctrlKey && k.toLowerCase() === 'u') ? 'quests'
-        : (e.altKey && code === 'KeyM') || (!e.altKey && !e.ctrlKey && k.toLowerCase() === 'm') ? 'worldmap' : null;
-      if (win) { e.preventDefault(); g.windows.toggle(win); return; }
-      // Hotbar: F1-F9 or 1-9.
-      const fk = /^F([1-9])$/.exec(k);
-      const nk = !e.altKey && !e.ctrlKey && /^Digit([1-9])$/.exec(code);
-      if (fk || nk) { e.preventDefault(); g.hotbar.trigger(parseInt((fk || nk)[1], 10) - 1); return; }
-      if (k === 'Home') { g.camera.reset(); e.preventDefault(); }
-      else if (k === 'Escape') { if (!g.windows.closeTop()) g.player.clearTarget(); }
-      else if (k === 'h' || k === 'H') g.hud.toggleHelp();
+      const action = G.Keybinds.match(e);
+      if (!action) return;
+      e.preventDefault();
+      const hot = /^hot(\d)$/.exec(action);
+      if (hot) { g.hotbar.trigger(parseInt(hot[1], 10) - 1); return; }
+      switch (action) {
+        case 'status': case 'inventory': case 'equipment': case 'skills': case 'quests': case 'worldmap': case 'options':
+          g.windows.toggle(action); break;
+        case 'autoloot': g.extras.setAutoLoot(!g.autoLoot); break;
+        case 'cart': g.cart.toggle(); break;
+        case 'help': g.hud.toggleHelp(); break;
+        case 'debug': g.extras.setDebug(!g.extras.debug); break;
+        case 'camReset': g.camera.reset(); break;
+      }
     }
 
     startTargeting(skillId, mode) {
       this.targeting = skillId;
       this.targetMode = mode || 'enemy';
       document.body.classList.add('cursor-target');
-      this.game.hud.toast(this.targetMode === 'ally'
+      this.game.hud.toast(this.targetMode === 'ground' ? `Click the ground to place ${G.Skills.get(skillId).name}. Right-click or Esc cancels.`
+        : this.targetMode === 'ally'
         ? `Click a character (yourself) to cast ${G.Skills.get(skillId).name}. Right-click or Esc cancels.`
         : `Click a monster to use ${G.Skills.get(skillId).name}. Right-click or Esc cancels.`);
     }
@@ -149,6 +149,12 @@
       const { ground, mon, npc, loot } = this.pickAt();
       if (this.targeting) {
         const id = this.targeting;
+        if (this.targetMode === 'ground') {
+          const pt = ground || (mon && mon.position);
+          this.cancelTargeting(!pt);
+          if (pt) player.skills.use(id, { ground: true, alive: true, position: new THREE.Vector3(pt.x, G.Terrain.surfaceHeight(pt.x, pt.z), pt.z) });
+          return;
+        }
         if (this.targetMode === 'ally') {
           const self = this.pickSelf(this.ray.ray);
           this.cancelTargeting(!self);

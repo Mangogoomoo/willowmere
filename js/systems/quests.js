@@ -48,7 +48,7 @@
       return {
         complete, lines,
         progress: lines.map((l) => `${l.label}: ${l.have} of ${l.need}`).join('\n'),
-        done: def.kind === 'kill' ? 'The meadow creatures will speak of your courage.' : (def.kind === 'visit' || def.kind === 'pray') ? 'I can feel the pond’s blessing on you.' : 'Everything is here, just as I asked.',
+        done: def.kind === 'kill' ? `The ${G.Config.MONSTERS[def.target].name}s will speak of your courage.` : (def.kind === 'visit' || def.kind === 'pray') ? 'I can feel the pond’s blessing on you.' : 'Everything is here, just as I asked.',
       };
     }
 

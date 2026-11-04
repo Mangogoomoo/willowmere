@@ -12,7 +12,25 @@
     improve_concentration: { name: 'Improve Concentration', icon: 'improve_concentration', bonus: (l) => ({ agi: 1 + Math.ceil(l / 2), dex: 1 + Math.ceil(l / 2) }) },
     angelus: { name: 'Angelus', icon: 'angelus', bonus: (l) => ({ softDef: 3 * l }) },
     crazy_uproar: { name: 'Crazy Uproar', icon: 'crazy_uproar', bonus: () => ({ str: 4, atk: 30 }) },
+    // Second-job buffs
+    two_hand_quicken: { name: 'Two-Hand Quicken', bonus: () => ({ aspd: 30 }) },
+    auto_guard: { name: 'Auto Guard', bonus: (l) => ({ block: 5 + 3 * l }) },
+    endow_blaze: { name: 'Endow Blaze', bonus: () => ({ weaponElement: 'fire' }) },
+    endow_tornado: { name: 'Endow Tornado', bonus: () => ({ weaponElement: 'wind' }) },
+    poem_of_bragi: { name: 'A Poem of Bragi', bonus: (l) => ({ castReduce: 3 * l }) },
+    assassin_cross: { name: 'Assassin Cross of Sunset', bonus: (l) => ({ aspd: 10 + 2 * l }) },
+    whistle: { name: 'Whistle', bonus: (l) => ({ flee: 2 * l, luk: l }) },
+    service_for_you: { name: 'Service for You', bonus: (l) => ({ maxSpPct: 15 + l }) },
+    humming: { name: 'Humming', bonus: (l) => ({ hit: 2 * l }) },
+    sanctuary: { name: 'Sanctuary', bonus: () => ({}) },
+    kyrie_eleison: { name: 'Kyrie Eleison', bonus: () => ({}) },
+    impositio_manus: { name: 'Impositio Manus', bonus: (l) => ({ atk: 5 * l }) },
+    gloria: { name: 'Gloria', bonus: () => ({ luk: 30 }) },
+    enchant_poison: { name: 'Enchant Poison', bonus: (l) => ({ weaponElement: 'poison', poisonChance: 2.5 + 0.5 * l }) },
+    adrenaline_rush: { name: 'Adrenaline Rush', bonus: () => ({ aspd: 30 }) },
+    power_thrust: { name: 'Power Thrust', bonus: (l) => ({ atkPct: 5 * l }) },
   };
+  const addBonus = (out, b) => { for (const k in b) out[k] = typeof b[k] === 'string' ? b[k] : (out[k] || 0) + b[k]; };
 
   class SkillSystem {
     constructor(player, data) {
@@ -34,6 +52,8 @@
     // Drop skills this job can't have (Play Dead after leaving Novice).
     prune() {
       for (const id in this.levels) if (!G.Skills.allowed(id, this.player.job)) { delete this.levels[id]; delete this.selected[id]; }
+      // Basic Training is always kept at 9 once you leave the Novice life.
+      if (this.player.job !== 'novice') this.levels.basic_training = 9;
     }
 
     /* Level a skill is cast at: the learned level unless the player picked a lower one. */
@@ -49,26 +69,107 @@
       this.game.save.markDirty();
     }
 
-    // Jobs whose skills this character may learn: Novice plus the current job.
-    jobs() { return this.player.job === 'novice' ? ['novice'] : ['novice', this.player.job]; }
+    // Jobs whose skills this character may learn: the whole line (Novice, first job, second job).
+    jobs() {
+      const chain = [];
+      for (let j = this.player.job; j; j = j === 'novice' ? null : (G.Jobs.get(j).from || 'novice')) chain.unshift(j);
+      return chain;
+    }
 
-    canLearn(id) {
+    // Planned (not yet confirmed) levels for the skill tree's Confirm button.
+    planned(id, plan) { let n = 0; if (plan) for (const x of plan) if (x === id) n++; return n; }
+    plannedCost(job, plan) { let n = 0; if (plan) for (const x of plan) { const s = G.Skills.get(x); if (s.job === job && !s.quest) n++; } return n; }
+
+    canLearn(id, plan) {
       const s = G.Skills.get(id), p = this.player;
+      const lvl = (x) => this.level(x) + this.planned(x, plan);
       if (!s) return { ok: false, reason: 'Unknown skill.' };
       if (s.granted) return { ok: false, reason: 'Learned automatically.' };
       if (!this.jobs().includes(s.job)) return { ok: false, reason: `Only a ${G.Jobs.get(s.job).name} can learn this.` };
-      if (this.level(id) >= s.max) return { ok: false, reason: 'Already mastered.' };
+      if (lvl(id) >= s.max) return { ok: false, reason: 'Already mastered.' };
       if (s.job === 'novice' && p.job !== 'novice') return { ok: false, reason: 'Novice skills are fixed after a job change.' };
-      for (const [rid, rl] of s.req) if (this.level(rid) < rl) return { ok: false, reason: `Needs ${G.Skills.get(rid).name} level ${rl}.` };
-      if (p.skillPoints <= 0) return { ok: false, reason: 'No skill points left.' };
+      for (const [rid, rl] of s.req) if (lvl(rid) < rl) return { ok: false, reason: `Needs ${G.Skills.get(rid).name} level ${rl}.` };
+      // Quest skills: free, once you reach job level 15 in that job (or have moved past it).
+      if (s.quest) {
+        if (p.job === s.job && p.jobLevel < 15) return { ok: false, reason: `${s.name} is a quest skill: it opens at job level 15.` };
+        return { ok: true, free: true };
+      }
+      // Earlier jobs' points must be used up first (Novice, then the first job).
+      const chain = this.jobs(), pools = p.pools(plan), idx = chain.indexOf(s.job);
+      for (const j of chain.slice(0, idx)) {
+        if (j === 'novice' && p.job !== 'novice') continue;
+        if (pools[j] > 0) return { ok: false, reason: `Spend your ${pools[j]} ${G.Jobs.get(j).name} skill point${pools[j] === 1 ? '' : 's'} first.` };
+      }
+      // This job's points, or any later job's (never an earlier job's).
+      const usable = s.job === 'novice' ? pools.novice : chain.slice(idx).reduce((n, j) => n + Math.max(0, pools[j]), 0);
+      if (usable <= 0) return { ok: false, reason: `No skill points left for ${G.Jobs.get(s.job).name} skills.` };
       return { ok: true };
+    }
+
+    /* Skill reset: refund every point spent. Quest and granted skills stay, and
+       once you've changed jobs your Novice skills (Basic Training) stay too. */
+    reset() {
+      const p = this.player;
+      let refund = 0;
+      for (const id in this.levels) {
+        const s = G.Skills.get(id);
+        // Basic Training is never reset; neither are quest/granted skills or Novice skills after a job change.
+        if (!s || id === 'basic_training' || s.granted || s.quest || (s.job === 'novice' && p.job !== 'novice')) continue;
+        refund += this.levels[id];
+        delete this.levels[id];
+        delete this.selected[id];
+      }
+      this.buffs = {};
+      this.casting = null;
+      p.spheres = 0;
+      if (p.riding) { p.riding = false; p.refreshSprite(); }
+      const hb = this.game.hotbar;
+      if (hb) hb.slots.forEach((sl, i) => { if (sl && sl.type === 'skill' && !this.level(sl.id)) hb.set(i, null); });
+      p.recalc();
+      this.game.events.emit('skillsChanged');
+      this.game.events.emit('buffsChanged');
+      this.game.save.markDirty();
+      return refund;
+    }
+
+    /* Add one level of a skill to a plan, adding any missing prerequisites
+       first (recursively). Returns { ok, reason }; the plan is untouched on failure. */
+    planAdd(id, plan) {
+      const start = plan.length, seen = new Set();
+      const ensure = (sid, want) => {
+        if (seen.has(sid + ':' + want)) return null;
+        seen.add(sid + ':' + want);
+        const s = G.Skills.get(sid);
+        while (this.level(sid) + this.planned(sid, plan) < want) {
+          for (const [rid, rl] of s.req) { const e = ensure(rid, rl); if (e) return e; }
+          const c = this.canLearn(sid, plan);
+          if (!c.ok) return c.reason;
+          plan.push(sid);
+        }
+        return null;
+      };
+      const err = ensure(id, this.level(id) + this.planned(id, plan) + 1);
+      if (err) { plan.length = start; return { ok: false, reason: err }; }
+      return { ok: true };
+    }
+    // Apply a confirmed plan in order.
+    commit(plan) {
+      let n = 0;
+      for (const id of plan) { if (this.canLearn(id).ok) { this.learnQuiet(id); n++; } }
+      this.player.recalc();
+      this.game.events.emit('skillsChanged');
+      this.game.save.markDirty();
+      return n;
+    }
+    learnQuiet(id) {
+      this.levels[id] = this.level(id) + 1;
+      if (this.selected[id] && this.selected[id] >= this.levels[id] - 1) delete this.selected[id];
     }
 
     learn(id) {
       const c = this.canLearn(id);
       if (!c.ok) { this.game.log.add(c.reason, 'warn'); return false; }
-      this.player.skillPoints--;
-      this.levels[id] = this.level(id) + 1;
+      this.levels[id] = this.level(id) + 1;   // points are counted from the pools, nothing to subtract
       // Keep casting at max if that's what the player was doing.
       if (this.selected[id] && this.selected[id] >= this.levels[id] - 1) delete this.selected[id];
       this.player.recalc();
@@ -82,14 +183,10 @@
       for (const id in this.levels) {
         const s = G.Skills.get(id);
         if (s && s.type === 'passive' && s.bonus) {
-          const b = s.bonus(this.levels[id], this.player);
-          for (const k in b) out[k] = (out[k] || 0) + b[k];
+          addBonus(out, s.bonus(this.levels[id], this.player));
         }
       }
-      for (const id in this.buffs) {
-        const b = BUFFS[id].bonus(this.buffs[id].level);
-        for (const k in b) out[k] = (out[k] || 0) + b[k];
-      }
+      for (const id in this.buffs) addBonus(out, BUFFS[id].bonus(this.buffs[id].level));
     }
 
     cooldownLeft(id) { return Math.max(this.cooldowns[id] || 0, this.delay); }
@@ -109,6 +206,12 @@
       if (fail) { game.log.add(fail, 'warn'); return false; }
 
       if (s.target === 'self') { this.begin(s, lv, null); return true; }
+      if (s.target === 'ground') {
+        if (!target || !target.ground) { game.input.startTargeting(id, 'ground'); return false; }
+        if (p.position.distanceTo(target.position) <= this.range(s) + 0.5) this.begin(s, lv, target);
+        else { this.queued = { id, target }; p.approach(target, this.range(s)); }
+        return true;
+      }
       if (s.target === 'ally') {
         // Like the classics: pick a character to bless (yourself for now).
         if (target && target === p) { this.begin(s, lv, p); return true; }
@@ -137,7 +240,8 @@
       if (p.sp < sp) return `Not enough SP for ${s.name} (${sp} needed).`;
       if (hp && p.hp <= hp) return `Not enough HP for ${s.name}.`;
       if (zeny && p.zeny < zeny) return `${s.name} needs ${zeny} Zeny.`;
-      if (s.needs === 'bow' && p.derived.weaponType !== 'bow') return `${s.name} needs a bow.`;
+      if (s.needs && p.derived.weaponType !== s.needs) return `${s.name} needs a ${G.Items.WEAPON_TYPES[s.needs].name.toLowerCase()}.`;
+      if (G.SkillSystem.extraCheck) { const x = G.SkillSystem.extraCheck(this, s, lv); if (x) return x; }
       return null;
     }
 
@@ -148,6 +252,7 @@
       if (base > 0) {
         // DEX shortens cast time (150 DEX would make it instant).
         const dur = this.castTime(s, lv);
+        if (this.buffs.suffragium) { delete this.buffs.suffragium; this.player.recalc(); }
         this.casting = { id: s.id, level: lv, target, t: 0, dur, element: s.element };
         p.path = null;
         p.attacking = false;
@@ -161,7 +266,8 @@
 
     // Cast time after DEX (150 DEX would make spells instant).
     castTime(s, lv) {
-      return s.cast(lv) * Math.max(0, 1 - this.player.derived.total.dex / 150);
+      const D = this.player.derived;
+      return s.cast(lv) * Math.max(0, 1 - D.total.dex / 150) * Math.max(0.3, 1 - (D.castReduce || 0) / 100);
     }
 
     cancelCast(reason) {
@@ -182,13 +288,17 @@
       this.cooldowns[s.id] = s.cd(lv);
       this.delay = 0.25;
       if (target && target !== p) p.faceTowards(target.position.x, target.position.z);
-      EFFECTS[s.id](this, lv, target, s);
+      if (G.SkillSystem.payExtra) G.SkillSystem.payExtra(this, s, lv);
+      const eff = EFFECTS[s.effect || s.id];
+      if (eff) eff(this, lv, target, s);
+      else if (s.fx) runFx(this, s, lv, target);
       if (s.id !== 'play_dead') game.overlay.addText(p.position, s.name + '!', 'skill');
       game.save.markDirty();
     }
 
     addBuff(id, level, seconds) {
       this.game.sfx('buff');
+      if (id === 'kyrie_eleison') this.player.shieldHp = Math.round(this.player.maxHp * (10 + 2 * level) / 100);
       this.buffs[id] = { level, until: this.game.time + seconds, total: seconds };
       this.player.recalc();
       this.game.events.emit('buffsChanged');
@@ -204,6 +314,12 @@
         this.game.log.add(`${BUFFS[id].name} wore off.`, 'info');
       }
       if (changed) { p.recalc(); this.game.events.emit('buffsChanged'); }
+      if (!this.buffs.kyrie_eleison) p.shieldHp = 0;
+      // Sanctuary: heal every second while it lasts.
+      if (this.buffs.sanctuary) {
+        this.sanctT = (this.sanctT || 0) + dt;
+        if (this.sanctT >= 1) { this.sanctT -= 1; p.heal(20 + 15 * this.buffs.sanctuary.level); this.game.spells.aura(p, '#bff2c0'); }
+      } else this.sanctT = 0;
 
       if (p.hidden) {
         this.hideDrain = (this.hideDrain || 0) + dt;
@@ -413,6 +529,30 @@
         if (m.alive) m.knockback(p.position.x, p.position.z, 2);
       }
     },
+    // Monk finisher: pours all SP into one enormous blow.
+    asura_strike(sys, lv, t) {
+      const p = sys.player, game = sys.game, sp = p.sp + G.Skills.get('asura_strike').sp(lv);
+      p.sp = 0;
+      const D = p.derived, atk = D.statusAtk + D.weaponAtk + D.atkBonus;
+      const dmg = Math.round(atk * (8 + sp / 10) + 250 + 150 * lv);
+      game.spells.impact(t, '#ff3b3b', 2.5);
+      game.spells.ring(t.position, '#ff5468', 2.5);
+      game.sfx('slam', t.position);
+      const at = t.position.clone(); at.y += t.def.height * 0.6;
+      game.overlay.addText(at, String(dmg), 'crit');
+      t.takeDamage(dmg, p);
+    },
+    // Alchemist fire bomb: burning ground that ticks for a few seconds.
+    demonstration(sys, lv, t) {
+      const p = sys.player, game = sys.game, c = t.position.clone(), ticks = (4 + lv) * 2;
+      for (let i = 0; i < ticks; i++) {
+        game.after(i * 0.5, () => {
+          if (i % 2 === 0) game.spells.ring(c, '#ff7a3d', 2.5);
+          game.effects.sparks.burst(c.x, c.y + 0.3, c.z, 6, { color: [1, 0.55, 0.2], size: 0.35, speed: 2, up: 2, life: 0.5 });
+          for (const m of enemiesNear(game, c, 2.5)) C().magic(p, m, { mult: 0.6 + 0.1 * lv, element: 'fire' });
+        });
+      }
+    },
     crazy_uproar(sys) {
       sys.addBuff('crazy_uproar', 1, 300);
       sys.game.spells.aura(sys.player, '#ff9f43');
@@ -440,6 +580,44 @@
     },
   };
 
+  /* Generic effect engine for data-described skills (see data/skills2.js). */
+  function runFx(sys, s, lv, target) {
+    const fx = s.fx, p = sys.player, game = sys.game;
+    if (fx.kind === 'buff') { sys.addBuff(fx.id, lv, fx.dur(lv)); game.spells.aura(p, fx.color || '#ffffff'); return; }
+    if (fx.kind === 'heal') { p.heal(fx.amount(lv)); game.spells.aura(p, fx.color || '#7dff9a'); return; }
+    const center = fx.at === 'self' || !target ? p.position.clone() : target.position.clone();
+    const victims = () => (fx.area ? enemiesNear(game, center, fx.area) : (target && target.alive ? [target] : []));
+    if (fx.area && fx.visual === 'ring') game.spells.ring(center, fx.color || '#ffffff', fx.area);
+    const hits = fx.hits ? fx.hits(lv) : 1;
+    const apply = (m) => {
+      if (!m.alive) return;
+      if (fx.kind === 'magic') C().magic(p, m, { mult: fx.mult(lv), element: fx.element });
+      else if (fx.kind === 'phys') C().physical(p, m, { mult: fx.mult(lv), element: fx.element, noMiss: fx.noMiss, ignoreDef: fx.ignoreDef, ranged: fx.ranged, hitBonus: fx.hitBonus || 0, skill: s.id });
+      if (fx.status && m.alive) {
+        const at = m.position.clone(); at.y += m.def.height + 0.3;
+        if (Math.random() * 100 < fx.status.chance(lv)) {
+          m.addStatus(fx.status.id, fx.status.dur(lv));
+          game.overlay.addText(at, { frozen: 'Frozen', stunned: 'Stunned', rooted: 'Snared', slowed: 'Slowed', disarmed: 'Disarmed', poisoned: 'Poisoned' }[fx.status.id] || fx.status.id, 'debuff');
+        } else if (fx.kind === 'status') game.overlay.addText(at, 'Resisted', 'miss');
+      }
+      if (fx.knock && m.alive) m.knockback(p.position.x, p.position.z, fx.knock);
+    };
+    for (let i = 0; i < hits; i++) {
+      game.after(i * (fx.hitDelay || 0.12), () => {
+        for (const m of victims()) {
+          const v = fx.visual;
+          if (fx.kind === 'phys' && !fx._tagged) fx.skill = s.id;
+          if (v === 'bolt' || v === 'meteor') game.spells.bolt(fx.element || 'fire', m, () => apply(m));
+          else if (v === 'orb') game.spells.orb(p, m, fx.color || '#ffffff', () => apply(m));
+          else if (v === 'arrow') game.spells.arrow(p, m, () => apply(m));
+          else if (v === 'beam') game.spells.beam(m, fx.color || '#fff2a0', () => apply(m));
+          else { if (v === 'impact') game.spells.impact(m, fx.color || '#ffffff', 1); apply(m); }
+        }
+        if (fx.visual === 'meteor') game.spells.ring(center, '#ff7a3d', fx.area || 2);
+      });
+    }
+  }
+
   function enemiesNear(game, pos, r) {
     return game.monsters.list.filter((m) => m.alive && Math.hypot(m.position.x - pos.x, m.position.z - pos.z) <= r + m.def.radius);
   }
@@ -456,6 +634,8 @@
 
   G.SkillSystem = SkillSystem;
   G.SkillSystem.BUFFS = BUFFS;
+  G.SkillSystem.EFFECTS = EFFECTS;
+  G.SkillSystem.runFx = runFx;
 
   // Passive skills and buffs feed the stat calculation.
   G.Stats.sources.push(function skills(player, out) { if (player.skills) player.skills.bonuses(out); });

@@ -19,18 +19,46 @@
           type: 'button', 'aria-label': `Hotbar slot ${i + 1}`,
           onclick: () => this.trigger(i),
           oncontextmenu: (e) => { e.preventDefault(); this.set(i, null); },
-          ondragover: (e) => { if (e.dataTransfer.types.includes('text/x-item') || e.dataTransfer.types.includes('text/x-skill')) { e.preventDefault(); cell.classList.add('over'); } },
+          ondragover: (e) => {
+            const t = e.dataTransfer.types;
+            if (t.includes('text/x-item') || t.includes('text/x-skill') || t.includes('text/x-hotslot')) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; cell.classList.add('over'); }
+          },
+          ondragstart: (e) => {
+            if (!this.slots[i]) { e.preventDefault(); return; }
+            e.dataTransfer.setData('text/x-hotslot', String(i));
+            e.dataTransfer.effectAllowed = 'move';
+            this.dragFrom = i; this.dropped = false;
+            G.Tooltip.hide();
+          },
+          // Dropped anywhere that isn't a hotbar slot: take it off the bar.
+          ondragend: () => {
+            if (this.dragFrom != null && !this.dropped) { this.set(this.dragFrom, null); this.game.sfx('click'); }
+            this.dragFrom = null;
+          },
           ondragleave: () => cell.classList.remove('over'),
           ondrop: (e) => {
             cell.classList.remove('over');
+            const from = e.dataTransfer.getData('text/x-hotslot');
+            if (from !== '') {
+              // Move between slots (swap if the target is taken).
+              e.preventDefault();
+              this.dropped = true;
+              const a = parseInt(from, 10);
+              if (a !== i) { const tmp = this.slots[i]; this.slots[i] = this.slots[a]; this.slots[a] = tmp; this.render(); this.game.save.markDirty(); }
+              return;
+            }
             const sk = e.dataTransfer.getData('text/x-skill');
             const d = e.dataTransfer.getData('text/x-item');
-            if (sk) { e.preventDefault(); this.set(i, { type: 'skill', id: sk }); return; }
+            if (sk) {
+              e.preventDefault();
+              if (G.Skills.get(sk).type === 'passive') { this.game.log.add(`${G.Skills.get(sk).name} is passive and always on, so it can't go on the action bar.`, 'warn'); return; }
+              this.set(i, { type: 'skill', id: sk }); return;
+            }
             if (!d) return;
             e.preventDefault();
             this.set(i, { type: 'item', id: JSON.parse(d).id });
           },
-        }, h('kbd', { text: 'F' + (i + 1) }), h('span.cd'));
+        }, h('kbd'), h('span.cd'));
         G.Tooltip.bind(cell, () => this.tip(i));
         this.cells.push(cell);
         this.el.append(cell);
@@ -41,12 +69,17 @@
       const s = this.slots[i];
       if (!s) return '<div class="tt-desc">Drag a potion, piece of gear or skill here.</div>';
       const p = this.game.player;
-      if (s.type === 'skill') return G.skillTooltip(G.Skills.get(s.id), p) + `<div class="tt-hint">F${i + 1} or ${i + 1} to use. Right-click to clear.</div>`;
+      if (s.type === 'skill') return G.skillTooltip(G.Skills.get(s.id), p) + `<div class="tt-hint">${this.keyLabel(i)} to use. Drag to another slot to move it, or off the bar to remove it.</div>`;
       const have = p.inventory.count(s.id);
-      return G.itemTooltip({ id: s.id, qty: have }, p, { hint: `F${i + 1} or ${i + 1} to use. Right-click to clear.` });
+      return G.itemTooltip({ id: s.id, qty: have }, p, { hint: `${this.keyLabel(i)} to use. Drag to another slot to move it, or off the bar to remove it.` });
     }
 
+    keyLabel(i) { return G.Keybinds.label('hot' + (i + 1)); }
+    // Slot labels follow the current key bindings.
+    renderKeys() { this.cells.forEach((c, i) => { c.querySelector('kbd').textContent = G.Keybinds.primary('hot' + (i + 1)) || '·'; }); }
+
     set(i, entry) {
+      if (entry && entry.type === 'skill' && (!G.Skills.get(entry.id) || G.Skills.get(entry.id).type === 'passive')) entry = null;
       this.slots[i] = entry;
       this.render();
       this.game.save.markDirty();
@@ -70,9 +103,11 @@
 
     render() {
       const p = this.game.player;
+      this.renderKeys();
       this.slots.forEach((s, i) => {
         const c = this.cells[i];
         c.querySelectorAll('img,.qty,.slv').forEach((n) => n.remove());
+        c.draggable = !!s;
         if (!s) { c.classList.remove('full', 'none', 'skill'); return; }
         if (s.type === 'skill') {
           const sk = G.Skills.get(s.id), lv = p ? p.skills.level(s.id) : 0, use = lv ? p.skills.useLevel(s.id) : 0;
@@ -114,6 +149,9 @@
         const job = this.game.player ? this.game.player.job : 'novice';
         if ((s.type === 'item' && G.Items.get(s.id)) || (s.type === 'skill' && G.Skills.get(s.id) && G.Skills.allowed(s.id, job))) this.slots[i] = s;
       });
+      this.render();
+      // Passive skills never belong on the bar (older saves might have one).
+      this.slots = this.slots.map((sl) => (sl && sl.type === 'skill' && (!G.Skills.get(sl.id) || G.Skills.get(sl.id).type === 'passive') ? null : sl));
       this.render();
     }
   }

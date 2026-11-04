@@ -24,15 +24,16 @@
       this.jobExp = data.jobExp || 0;
       this.stats = Object.assign({ str: 1, agi: 1, vit: 1, int: 1, dex: 1, luk: 1 }, data.stats || {});
       this.statPoints = data.statPoints || 0;
-      this.skillPoints = data.skillPoints || 0;
+      const legacyPoints = data.skillPoints || 0;
       this.zeny = data.zeny == null ? START_KIT.zeny : data.zeny;
       this.savePoint = Object.assign({ map: 'meadow', x: P.respawn.x, z: P.respawn.z }, data.savePoint || {});
       this.extra = data.extra || {};
-      this.storage = (data.storage || []).filter((e) => G.Items.get(e.id)).map((e) => ({ id: e.id, qty: e.qty, cards: e.cards || [] }));
+      this.storage = (data.storage || []).filter((e) => G.Items.get(e.id)).map((e) => ({ id: e.id, qty: e.qty, cards: e.cards || [], refine: e.refine || 0 }));
       this.equipment = {};
       for (const s of G.Items.EQUIP_SLOTS) this.equipment[s.id] = null;
       this.inventory = new G.Inventory(this);
       this.skills = new G.SkillSystem(this, data.skills);
+      this.initPools(legacyPoints);
       this.playingDead = false;
       this.approachTarget = null;
       this.derived = G.Stats.compute(this);
@@ -42,7 +43,7 @@
         this.inventory.load(data.inventory);
         for (const slot in data.equipment || {}) {
           const e = data.equipment[slot];
-          if (e && G.Items.get(e.id) && slot in this.equipment) this.equipment[slot] = { uid: this.inventory.nextUid++, id: e.id, qty: 1, cards: e.cards || [] };
+          if (e && G.Items.get(e.id) && slot in this.equipment) this.equipment[slot] = { uid: this.inventory.nextUid++, id: e.id, qty: 1, cards: e.cards || [], refine: e.refine || 0, forgedBy: e.forgedBy, element: e.element };
         }
       } else {
         // Fresh Novice with the starter kit.
@@ -95,13 +96,14 @@
       const look = (slot) => { const e = this.equipment[slot]; const it = e && G.Items.get(e.id); return (it && it.look) || ''; };
       return { top: look('headTop'), mid: look('headMid'), low: look('headLow') };
     }
-    lookKey() { const hd = this.headLooks(); return [this.job, this.derived.weaponType, hd.top, hd.mid, hd.low].join(':'); }
+    lookKey() { const hd = this.headLooks(); return [this.riding ? 'ride' : '', this.skills && this.skills.level('falconry_mastery') ? 'falcon' : '', this.job, this.derived.weaponType, hd.top, hd.mid, hd.low].join(':'); }
     refreshSprite() {
       if (!this.sprite) return;
       const key = this.lookKey();
       if (key === this._look) return;
       this._look = key;
-      this.sprite.setSheet(G.SpriteFactory.humanoid(this.appearance, { job: this.job, weapon: this.derived.weaponType, head: this.headLooks() }));
+      this.sprite.setSheet(G.SpriteFactory.humanoid(this.appearance, { job: this.job, weapon: this.derived.weaponType, head: this.headLooks(),
+        mount: this.riding ? (this.job === 'crusader' ? 'grandpeco' : 'peco') : null, falcon: !!this.skills.level('falconry_mastery') }));
       if (this.game.windows) this.game.windows.refresh('equipment');
     }
 
@@ -143,8 +145,62 @@
     }
 
     /* Promote to a first job. */
+    /* ---------- skill point pools ----------
+       Points are kept per job, like the classics: Novice points buy Novice
+       skills, first-job points buy first-job skills, second-job points buy
+       second-job skills. A job's pool = (its job level - 1) - points spent. */
+    initPools(legacyPoints) {
+      const x = this.extra;
+      this.pointAdj = x.pointAdj = x.pointAdj || {};
+      if (!x.jobHistory) {
+        // Older saves: work the history out from what's been learned.
+        x.jobHistory = { novice: 10 };
+        const def = G.Jobs.get(this.job);
+        if (def.tier >= 2 && def.from) x.jobHistory[def.from] = 1 + this.pointsSpent(def.from);
+        if (this.job !== 'novice') this.pointAdj[this.job] = (this.pointAdj[this.job] || 0) + legacyPoints - (this.jobLevel - 1 - this.pointsSpent(this.job));
+      }
+      this.jobHistory = x.jobHistory;
+    }
+    pointsEarned(job) {
+      if (job === this.job) return this.jobLevel - 1;
+      return Math.max(0, (this.jobHistory[job] || 1) - 1);
+    }
+    pointsSpent(job) {
+      let n = 0;
+      for (const id in this.skills.levels) {
+        const s = G.Skills.get(id);
+        if (s && s.job === job && !s.quest && !s.granted) n += this.skills.levels[id];
+      }
+      return n;
+    }
+    /* Unspent points per job. A later job's points may also pay for an earlier
+       job's skills (Monk points into the Acolyte tree), never the other way:
+       anything an earlier tree spent beyond its own points is charged to the
+       next job's pool. `plan` adds the skill window's pending levels. */
+    pools(plan) {
+      const sys = this.skills, chain = sys.jobs(), out = {};
+      let deficit = 0;
+      chain.forEach((j, i) => {
+        let avail = this.pointsEarned(j) + ((this.pointAdj && this.pointAdj[j]) || 0) - this.pointsSpent(j) - (plan ? sys.plannedCost(j, plan) : 0);
+        if (j === 'novice') { out[j] = avail; return; }
+        avail -= deficit;
+        if (avail < 0 && i < chain.length - 1) { deficit = -avail; out[j] = 0; } else { deficit = 0; out[j] = avail; }
+      });
+      return out;
+    }
+    pointsFor(job, plan) { const v = this.pools(plan)[job]; return v == null ? 0 : v; }
+    // Total unspent across the whole job line (Novice points only count while a Novice).
+    get skillPoints() {
+      if (!this.skills) return 0;
+      const pools = this.pools();
+      return this.skills.jobs().filter((j) => j !== 'novice' || this.job === 'novice').reduce((n, j) => n + Math.max(0, pools[j]), 0);
+    }
+    // Debug / legacy writes adjust the current job's pool.
+    set skillPoints(v) { if (!this.skills) return; this.pointAdj[this.job] = (this.pointAdj[this.job] || 0) + (v - this.skillPoints); }
+
     changeJob(id) {
       const job = G.Jobs.get(id), game = this.game;
+      this.jobHistory[this.job] = this.jobLevel;   // remember how many points that job earned
       this.standUp();
       this.job = id;
       this.jobLevel = 1;
@@ -191,6 +247,7 @@
 
     /* ---------- items ---------- */
     applyItem(item) {
+      if (item.use && item.use.fn && G.ItemUse && G.ItemUse[item.use.fn]) return G.ItemUse[item.use.fn](this, item);
       const u = item.use, game = this.game;
       if (u.heal) {
         if (this.hp >= this.maxHp) { game.log.add('Your HP is already full.', 'info'); return false; }
@@ -248,7 +305,8 @@
       this.pendingLoot = null;
       this.approachTarget = null;
       this.standUp();
-      if (this.skills.casting) this.skills.cancelCast('Casting interrupted.');
+      // Free Cast lets Sages keep casting while they walk.
+      if (this.skills.casting && !this.derived.extra.freeCast) this.skills.cancelCast('Casting interrupted.');
       this.skills.queued = null;
       if (this.swinging && this.impactDone) this.swinging = false; // allow cancelling the recovery
       const path = this.game.nav.findPath(this.position.x, this.position.z, point.x, point.z);
@@ -295,6 +353,13 @@
 
     takeDamage(dmg, source) {
       if (!this.alive) return;
+      // Kyrie Eleison barrier soaks up damage first.
+      if (this.shieldHp > 0) {
+        const soak = Math.min(this.shieldHp, dmg);
+        this.shieldHp -= soak; dmg -= soak;
+        if (this.shieldHp <= 0 && this.skills.buffs.kyrie_eleison) { delete this.skills.buffs.kyrie_eleison; this.recalc(); this.game.events.emit('buffsChanged'); }
+        if (dmg <= 0) return;
+      }
       this.hp = Math.max(0, this.hp - dmg);
       this.lastDamageTime = this.game.time;
       // Like the classics: getting hit breaks your concentration (Endure prevents it).
@@ -337,6 +402,7 @@
 
     gainExp(base, job) {
       const game = this.game;
+      if (this.derived.extra && this.derived.extra.expBonus) base = Math.round(base * (1 + this.derived.extra.expBonus / 100));
       if (this.baseLevel < C.MAX_LEVEL) {
         this.baseExp += base;
         while (this.baseExp >= this.expToNext && this.baseLevel < C.MAX_LEVEL) {
@@ -358,8 +424,7 @@
         this.jobExp += job;
         while (this.jobExp >= this.jobExpToNext) {
           this.jobExp -= this.jobExpToNext;
-          this.jobLevel++;
-          this.skillPoints++;
+          this.jobLevel++;   // job levels earn skill points for this job's pool
           game.effects.levelUp(this);
           game.sfx('levelup');
           game.overlay.levelUp(this, 'Job level up!');
@@ -390,7 +455,11 @@
 
       // Lying still (Play Dead), hidden, or channelling a spell: no moving or attacking.
       if (this.hidden) this.sprite.setOpacity(0.35);
-      if (this.playingDead || this.hidden || this.skills.casting) {
+      // Cloaking: invisible but still able to walk.
+      const cloaked = !!this.skills.buffs.cloaking;
+      if (cloaked !== !!this.cloaked) { this.cloaked = cloaked; this.sprite.setOpacity(cloaked ? 0.3 : 1); }
+      const freeCasting = this.skills.casting && this.derived.extra.freeCast && this.path;
+      if (this.playingDead || this.hidden || (this.skills.casting && !freeCasting)) {
         this.moving = false;
         if (this.playingDead) this.sprite.play('dead');
         else if (this.hidden) this.sprite.play('sit');
@@ -498,7 +567,7 @@
           this.regenAcc += this.derived.hpRegen * k * dt;
           if (this.regenAcc >= 1) { const n = Math.floor(this.regenAcc); this.regenAcc -= n; this.hp = Math.min(this.maxHp, this.hp + n); }
         }
-        if (this.sp < this.maxSp) {
+        if (this.sp < this.maxSp && !(this.derived.extra && this.derived.extra.noSpRegen)) {
           this.spRegenAcc += this.derived.spRegen * k * dt;
           if (this.spRegenAcc >= 1) { const n = Math.floor(this.spRegenAcc); this.spRegenAcc -= n; this.sp = Math.min(this.maxSp, this.sp + n); }
         }

@@ -30,6 +30,8 @@
           if (!e) continue;
           const item = G.Items.get(e.id);
           if (item && item.bonus) for (const k in item.bonus) out[k] = (out[k] || 0) + item.bonus[k];
+          // Refine level bonus (ATK for weapons, DEF for armour).
+          if (e.refine && G.Refine) { const rb = G.Refine.bonus(e); for (const k in rb) out[k] = (out[k] || 0) + rb[k]; }
           // Cards inserted into this piece of equipment.
           for (const cid of e.cards || []) {
             const c = G.Items.get(cid);
@@ -40,6 +42,7 @@
     ],
 
     collectBonuses(player) {
+      if (!Stats._x && G.SkillsX) { Stats._x = true; Stats.sources.push((p, out) => { const b = G.SkillsX.bonuses(p); for (const k in b) out[k] = typeof b[k] === 'string' ? b[k] : (out[k] || 0) + b[k]; }); }
       const out = {};
       for (const src of Stats.sources) src(player, out);
       return out;
@@ -83,8 +86,21 @@
       d.aspd = Math.round(200 - d.attackDelay * 55);
       d.attackRange = wtype.range + (d.weaponType === 'bow' ? (b.bowRange || 0) : 0);
       d.moveSpeedMult = 1 + (b.moveSpeed || 0) / 100;
+      // Riding, the cart and cloaking change your pace.
+      if (player.riding) d.moveSpeedMult *= 1.36;
+      if (b.cart && player.job !== 'novice') { const pl = player.skills.level('pushcart'); if (pl < 10) d.moveSpeedMult *= 1 - (50 - 5 * pl) / 100; }
+      if (player.skills && player.skills.buffs.cloaking) d.moveSpeedMult *= 0.6;
       d.doubleAttack = d.weaponType === 'dagger' ? (b.doubleAttack || 0) : 0;
       d.discount = b.discount || 0;
+      d.weaponElement = b.weaponElement || b.forgedElement || 'neutral';
+      d.extra = b;
+      d.atkPct = b.atkPct || 0;
+      d.block = b.block || 0;
+      d.castReduce = b.castReduce || 0;
+      d.tripleAttack = b.tripleAttack || 0;
+      d.snatcher = b.snatcher || 0;
+      d.poisonChance = b.poisonChance || 0;
+      if (d.weaponType === 'katar') d.crit = Math.round(d.crit * 2 * 10) / 10;   // katars double critical rate
       d.overcharge = b.overcharge || 0;
 
       d.maxWeight = 2000 + s.str * 30 + (b.weightLimit || 0);

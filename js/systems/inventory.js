@@ -44,7 +44,7 @@
         this.items.push({ uid: this.nextUid++, id, qty, cards: [] });
       } else {
         if (this.items.length + qty > this.max) return { added: 0, reason: 'full' };
-        for (let i = 0; i < qty; i++) this.items.push({ uid: this.nextUid++, id, qty: 1, cards: (opts.cards || []).slice() });
+        for (let i = 0; i < qty; i++) this.items.push({ uid: this.nextUid++, id, qty: 1, cards: (opts.cards || []).slice(), refine: opts.refine || 0 });
       }
       this.changed();
       return { added: qty };
@@ -88,7 +88,7 @@
       const p = this.player;
       if (item.type !== 'equip') return { ok: false, reason: 'That can’t be equipped.' };
       if (p.baseLevel < (item.reqLevel || 1)) return { ok: false, reason: `Requires base level ${item.reqLevel}.` };
-      if (item.jobs !== 'all' && !item.jobs.includes(p.job)) return { ok: false, reason: `Your job can’t equip ${item.name}.` };
+      if (!G.Jobs.canUse(item.jobs, p.job)) return { ok: false, reason: `Your job can’t equip ${item.name}.` };
       if (item.slot === 'weapon') {
         const job = G.Jobs.get(p.job);
         if (!job.weapons.includes(item.weaponType)) return { ok: false, reason: `A ${G.Jobs.get(p.job).name} can’t use ${G.Items.WEAPON_TYPES[item.weaponType].name.toLowerCase()}s.` };
@@ -120,7 +120,7 @@
       if (item.weaponType && G.Items.WEAPON_TYPES[item.weaponType].twoHanded && eq.shield) { this.items.push(eq.shield); eq.shield = null; }
       eq[slot] = e;
       this.changed();
-      this.player.game.log.add(`Equipped ${item.name}.`, 'info');
+      this.player.game.log.add(`Equipped ${G.Items.displayName(e)}.`, 'info');
       return true;
     }
 
@@ -131,7 +131,7 @@
       this.player.equipment[slot] = null;
       this.items.push(e);
       this.changed();
-      this.player.game.log.add(`Removed ${G.Items.get(e.id).name}.`, 'info');
+      this.player.game.log.add(`Removed ${G.Items.displayName(e)}.`, 'info');
       return true;
     }
 
@@ -161,13 +161,13 @@
 
     update(dt) { if (this.useCd > 0) this.useCd -= dt; }
 
-    serialize() { return { items: this.items.map((e) => ({ id: e.id, qty: e.qty, cards: e.cards })), nextUid: this.nextUid }; }
+    serialize() { return { items: this.items.map((e) => ({ id: e.id, qty: e.qty, cards: e.cards, refine: e.refine || 0, forgedBy: e.forgedBy, element: e.element })), nextUid: this.nextUid }; }
     load(data) {
       this.items = [];
       this.nextUid = 1;
       for (const e of (data && data.items) || []) {
         if (!G.Items.get(e.id)) continue;
-        this.items.push({ uid: this.nextUid++, id: e.id, qty: e.qty, cards: e.cards || [] });
+        this.items.push({ uid: this.nextUid++, id: e.id, qty: e.qty, cards: e.cards || [], refine: e.refine || 0, forgedBy: e.forgedBy, element: e.element });
       }
     }
   }

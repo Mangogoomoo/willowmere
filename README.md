@@ -189,7 +189,7 @@ the database on the same origin.
   Jelly Crown, Round Glasses, Miner's Lamp, Clover Pipe (an upper headgear
   replaces the job hat).
 - **Town NPCs:** Garrick (weapons), Sabine (armour and hats), Pell (tools),
-  Hilde (storage, 300 shelves, keeps cards in gear), Odo (innkeeper: save
+  Hilde (storage, 300 shelves, keeps cards in gear), Elda (free stat and skill reset), Odo (innkeeper: save
   point and rest), Pip (tutor), Captain Brin (Adventurers' Guild quests).
 - **Quest log (U):** nine guild quests from "Pest Control" to "Long Live the
   King?", tracking kills, items, levels, job change and visited maps, with a
@@ -229,8 +229,77 @@ the database on the same origin.
   an optional FPS counter; the game drops to Medium once if High runs below
   about 28 fps.
 
-Possible next steps: second jobs, more dungeon floors, arrows as ammunition,
-party play.
+## Stage 6: second jobs, refining and quality of life
+
+- **Second jobs for every first job** (job level 40 + a trial from Master
+  Rowan): Knight and Crusader (Swordsman), Wizard and Sage (Mage), Hunter,
+  Bard and Dancer (Archer), Priest and Monk (Acolyte), Assassin and Rogue
+  (Thief), Blacksmith and Alchemist (Merchant). Each has its own outfit, HP/SP
+  growth, weapon list, gift and 4-5 skills (57 in total), from Storm Gust,
+  Meteor Storm and Magnus Exorcismus to Sonic Blow, Asura Strike, Kyrie
+  Eleison, Endow Blaze, Ankle Snare and Strip Weapon. The skill window shows
+  Novice, first-job and second-job tabs; second jobs keep first-job gear.
+- **New weapon types:** spears, katars (double crit), knuckles, axes and
+  books, ten new weapons at Garrick's.
+- **Refining (Bram, east street), classic rules:** weapons level 1-4 and
+  armour each have a safe limit (+7/+6/+5/+4, armour +4) and the classic
+  success table above it; a failed refine destroys the item and its cards.
+  Max +10. Phracon and Emveretarcon are sold by Bram; Elunium and Oridecon
+  drop from monsters (mostly Mossy Hollow). Weapons gain ATK (plus an
+  over-refine bonus), armour gains DEF.
+- **Card names:** equipment is named after its cards ("+7 Double Lucky Silk
+  Robe of the King") and gear with cards shows in a warm orange.
+- **Action bar:** drag a slot onto another to move or swap it, or drag it off
+  the bar to remove it.
+- **Key bindings** (Options > Key bindings…): every hotbar slot, window and
+  toggle can be rebound (primary and secondary key, Alt/Ctrl combos).
+- **Balance:** monsters give 1.8× EXP, quests 2× EXP; normal attacks no
+  longer push monsters back (knockback skills still do); dungeon walls are
+  half as tall.
+
+## Stage 7: full pre-renewal skill trees and class looks
+
+- **Every class has its classic skill tree**, with the original max levels and
+  prerequisites (including cross-job ones, e.g. Bowling Bash needs Bash 10,
+  Magnum Break 3, Two-Handed Sword Mastery 5, Two-Hand Quicken 10 and Auto
+  Counter 5). 290+ skills across Novice, the six first jobs and the thirteen
+  second jobs. Quest skills (Holy Light, Back Slide, Charge Arrow, Fatal Blow,
+  Energy Coat, Ki Explosion, Greed...) cost no points and open at job level 15.
+- **New systems behind them:** ground fields and traps (Fire Wall, Safety
+  Wall, Pneuma, Ice Wall, Quagmire, Volcano/Deluge/Whirlwind, Magnetic Earth,
+  Venom Dust, Hunter traps), gemstone catalysts, Teleport and Warp Portal with
+  memo points, Aqua Benedicta at the pond or stream, spirit spheres and the
+  Monk combo chain, Peco Peco riding, the merchant Pushcart (Alt+W, with a
+  cart that follows you) and Vending, forging (named and elemental weapons),
+  tempering, elemental stones, potion brewing and converters, Lex Aeterna,
+  Signum Crucis, stripping, Hindsight, Hocus-pocus, and more.
+- **Distinct class looks:** capes, mantles, helmets, hoods, mitres, berets,
+  feathered hats, masks, waist cloths, prayer beads, goggles, lab coats, a
+  falcon on the Hunter's shoulder, Peco Pecos for Knights and Crusaders.
+- **New weapon types:** two-handed swords, instruments (Bard) and whips
+  (Dancer).
+- **Separate skill point pools:** Novice, first-job and second-job points are
+  kept apart. First-job points must all be spent on the first-job tree before
+  any second-job skill can be learned (also after a skill reset). Second-job
+  points may also be spent in the first-job tree, never the reverse.
+- Passive skills can't be placed on the action bar. Basic
+  Training stays at 9 for good once you change jobs.
+- **Plan, then Confirm:** in the skill window, + plans a level (missing
+  prerequisites are added automatically); nothing is learned until you press
+  Confirm (Clear discards the plan).
+- **Ruwach** circles you with holy light for 10 s and reveals hidden things;
+  **Pneuma** is ground-targeted and blocks ranged physical attacks on anyone
+  inside it; **Teleportation** 1 is a Fly Wing, level 2 a Butterfly Wing.
+- **Training dummies:** three dummies inside the south gate of Willowmere.
+  They can't be killed (HP never drops below 1 and refills after 4 s), never
+  move, attack or get knocked back, and take every skill like a monster.
+- Summon Spirit Sphere is refused (no SP spent) when you already hold the
+  maximum; Snap is ground-targeted.
+- Skills that depend on systems Willowmere doesn't have yet (parties,
+  homunculi, dual wielding, monster skills, ammunition) are in their trees as
+  prerequisites and say so in their descriptions.
+
+Possible next steps: party play, monster skills, ammunition, more dungeons.
 
 
 ## Project layout
@@ -242,6 +311,8 @@ party play.
     js/core/utils.js           math, noise, RNG, geometry merging
     js/data/items.js           item database (consumables, loot, equipment)
     js/data/jobs.js            job definitions, trials and advancement graph
+    js/data/jobs2.js           second jobs
+    js/data/skills2.js         second-job skills (data-driven effects)
     js/data/skills.js          skill database (costs, effects text, tree)
     js/data/npcs.js            NPC placement and dialog scripts
     js/data/maps.js            map definitions (meadow, forest, dungeon)
@@ -259,6 +330,8 @@ party play.
     js/systems/quests.js       job-change trials
     js/systems/questlog.js     guild quest log and storage
     js/systems/stats.js        stat costs and derived combat values
+    js/systems/refine.js       refining rules and tables
+    js/systems/keybinds.js     rebindable keys
     js/systems/inventory.js    inventory, equipping, item use
     js/systems/loot.js         drop rolls, ground items, pickup
     js/systems/portals.js      warp portals between maps

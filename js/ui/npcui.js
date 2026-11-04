@@ -118,7 +118,7 @@
         const qty = h('input.qtyin', { type: 'number', min: '1', max: String(max), value: '1', 'aria-label': 'Quantity' });
         const r = h('div.shop-row' + (onAll ? '.sell' : ''), null,
           h('img', { src: G.Icons.url(id), alt: '' }),
-          h('span.sname2', null, G.Items.get(id).name, entry && entry.qty > 1 ? h('small', { text: ` ×${entry.qty}` }) : null),
+          h('span.sname2' + (entry && G.Items.isCarded(entry) ? '.carded' : ''), null, entry ? G.Items.displayName(entry) : G.Items.get(id).name, entry && entry.qty > 1 ? h('small', { text: ` ×${entry.qty}` }) : null),
           h('span.sprice', { text: priceText }),
           G.Items.get(id).stack ? qty : h('span'),
           h('button.btn.small', { type: 'button', onclick: () => onGo(Math.max(1, Math.min(max, parseInt(qty.value, 10) || 1))) }, goLabel),
@@ -154,6 +154,83 @@
     }
   }
 
+  /* ---------------- Refining (Bram) ---------------- */
+  class RefineWindow {
+    constructor(game) {
+      this.game = game;
+      this.armed = null;
+      this.win = game.windows.create('refine', 'Bram’s Forge: refining', { width: 430, pos: () => ({ x: window.innerWidth / 2 - 215, y: 100 }) });
+      this.win.render = () => this.render();
+    }
+    open() { this.armed = null; this.game.windows.open('refine'); this.render(); }
+
+    targets() {
+      const p = this.game.player, out = [];
+      for (const slot in p.equipment) { const e = p.equipment[slot]; if (e && G.Refine.canRefine(e)) out.push({ e, worn: true }); }
+      for (const e of p.inventory.items) if (G.Refine.canRefine(e)) out.push({ e, worn: false });
+      return out;
+    }
+
+    doRefine(e) {
+      const game = this.game, p = game.player, before = G.Items.displayName(e);
+      const res = G.Refine.attempt(p, e);
+      this.armed = null;
+      if (res === 'success') {
+        game.sfx('levelup'); game.effects.levelUp(p);
+        game.log.add(`Success! ${before} became ${G.Items.displayName(e)}.`, 'level');
+        game.hud.toast(`Refine succeeded: ${G.Items.displayName(e)}`);
+      } else if (res === 'broke') {
+        game.sfx('slam'); game.effects.death({ x: p.position.x, y: p.position.y + 0.5, z: p.position.z }, [0.6, 0.6, 0.65]);
+        game.log.add(`The refine failed and ${before} broke…`, 'warn');
+        game.hud.toast(`Refine failed. ${before} broke.`);
+      } else game.log.add(res, 'warn');
+      this.render();
+    }
+
+    render() {
+      if (!this.game.windows.isOpen('refine')) return;
+      const p = this.game.player, b = this.win.body;
+      b.textContent = '';
+      const list = h('div.shop-list');
+      const items = this.targets();
+      if (!items.length) list.append(h('p.hint', { text: 'You have nothing that can be refined. Weapons, armour, shields, garments, shoes and upper headgear can be.' }));
+      for (const { e, worn } of items) {
+        const item = G.Items.get(e.id), t = G.Refine.table(item), r = e.refine || 0;
+        const max = r >= G.Refine.MAX, chance = G.Refine.nextChance(e);
+        const mat = G.Items.get(t.mat), have = p.inventory.count(t.mat);
+        const risky = !max && chance < 100;
+        const btn = h('button.btn.small' + (risky ? '.danger' : ''), { type: 'button', disabled: max },
+          max ? 'Max' : this.armed === e ? 'Confirm' : 'Refine');
+        btn.addEventListener('click', () => {
+          if (risky && this.armed !== e) { this.armed = e; this.render(); return; }
+          this.doRefine(e);
+        });
+        const row = h('div.refine-row', null,
+          h('img', { src: G.Icons.url(e.id), alt: '' }),
+          h('div.rinfo', null,
+            h('span.sname2' + (G.Items.isCarded(e) ? '.carded' : ''), null, G.Items.displayName(e), worn ? h('small', { text: ' (worn)' }) : null),
+            h('small', { text: max ? 'Fully refined.' : `+${r} → +${r + 1}: ${mat.name} (${have} owned), ${t.zeny.toLocaleString()} z` })),
+          h('span.rchance' + (max ? '' : chance >= 100 ? '.safe' : chance >= 40 ? '.mid' : '.low'), { text: max ? '' : `${chance}%` }),
+          btn);
+        G.Tooltip.bind(row, () => G.itemTooltip(e, p, { equipped: worn }));
+        list.append(row);
+      }
+      b.append(list,
+        h('p.hint' + (this.armed ? '.warnhint' : ''), { text: this.armed
+          ? `Above the safe limit a failed refine destroys ${G.Items.displayName(this.armed)} and any cards in it. Click Confirm to try.`
+          : 'Refining up to the safe limit always works. Beyond it, failure destroys the item. Maximum +10.' }),
+        h('div.inv-foot.shop-foot', null, h('span.hint', { text: 'Bram sells Phracon and Emveretarcon. Elunium and Oridecon come from monsters.' }),
+          h('span.zeny', null, h('img', { src: G.Icons.url('zeny'), alt: '' }), `${p.zeny.toLocaleString()} z`)));
+    }
+
+    update() {
+      if (!this.game.windows.isOpen('refine')) return;
+      const n = this.game.npcs.list.find((x) => x.id === 'refiner');
+      if (!n || this.game.player.distanceTo(n) > 8) this.game.windows.close('refine');
+    }
+  }
+
+  G.RefineWindow = RefineWindow;
   G.Dialog = Dialog;
   G.Shop = Shop;
 })(window.G = window.G || {});

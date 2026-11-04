@@ -65,8 +65,8 @@
 
     rewardText(def) {
       const r = def.rewards, bits = [];
-      if (r.exp) bits.push(`${r.exp} base EXP`);
-      if (r.jobExp) bits.push(`${r.jobExp} job EXP`);
+      if (r.exp) bits.push(`${Math.round(r.exp * G.Config.QUEST_EXP_RATE)} base EXP`);
+      if (r.jobExp) bits.push(`${Math.round(r.jobExp * G.Config.QUEST_EXP_RATE)} job EXP`);
       if (r.zeny) bits.push(`${r.zeny} Zeny`);
       for (const [id, n] of r.items || []) bits.push(`${G.Items.get(id).name} ×${n}`);
       return bits.join(', ');
@@ -92,7 +92,7 @@
       const r = def.rewards;
       p.zeny += r.zeny || 0;
       for (const [iid, n] of r.items || []) p.inventory.add(iid, n, { ignoreWeight: true });
-      if (r.exp || r.jobExp) p.gainExp(r.exp || 0, r.jobExp || 0);
+      if (r.exp || r.jobExp) p.gainExp(Math.round((r.exp || 0) * G.Config.QUEST_EXP_RATE), Math.round((r.jobExp || 0) * G.Config.QUEST_EXP_RATE));
       game.effects.levelUp(p);
       game.hud.toast(`Quest complete: ${def.name}!`);
       game.sfx('quest');
@@ -149,7 +149,7 @@
       } else {
         if (this.items.length >= this.max) { this.game.log.add('Storage is full.', 'warn'); return; }
         inv.remove(uid, 1);
-        this.items.push({ id: e.id, qty: 1, cards: (e.cards || []).slice() });
+        this.items.push({ id: e.id, qty: 1, cards: (e.cards || []).slice(), refine: e.refine || 0 });
       }
       this.game.save.markDirty();
       this.render(G.h);
@@ -158,7 +158,7 @@
       const s = this.items[index];
       if (!s) return;
       const n = Math.min(qty, s.qty);
-      const r = this.game.player.inventory.add(s.id, n, { cards: s.cards });
+      const r = this.game.player.inventory.add(s.id, n, { cards: s.cards, refine: s.refine });
       if (!r.added) { this.game.log.add(r.reason === 'weight' ? 'That would be too heavy to carry.' : 'Your inventory is full.', 'warn'); return; }
       s.qty -= n;
       if (s.qty <= 0) this.items.splice(index, 1);
@@ -178,7 +178,7 @@
         const it = G.Items.get(entry.id);
         const qty = h('input.qtyin', { type: 'number', min: '1', max: String(max), value: String(max), 'aria-label': 'Quantity' });
         const r = h('div.shop-row', null, h('img', { src: G.Icons.url(entry.id), alt: '' }),
-          h('span.sname2', null, it.name, entry.qty > 1 ? h('small', { text: ` ×${entry.qty}` }) : null), h('span'),
+          h('span.sname2' + (G.Items.isCarded(entry) ? '.carded' : ''), null, G.Items.displayName(entry), entry.qty > 1 ? h('small', { text: ` ×${entry.qty}` }) : null), h('span'),
           it.stack ? qty : h('span'),
           h('button.btn.small', { type: 'button', onclick: () => onGo(Math.max(1, Math.min(max, parseInt(qty.value, 10) || 1))) }, label));
         G.Tooltip.bind(r, () => G.itemTooltipCompare(entry, p));

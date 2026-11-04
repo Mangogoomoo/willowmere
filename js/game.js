@@ -93,6 +93,8 @@
     }
 
     unloadMap() {
+      if (this.fields) this.fields.clear();
+      if (this.cart) this.cart.restyle();
       this.monsters.dispose();
       this.npcs.dispose();
       this.portals.dispose();
@@ -162,6 +164,10 @@
       this.dialog = new G.Dialog(this);
       this.shop = new G.Shop(this);
       this.storage = new G.Storage(this);
+      this.refineWin = new G.RefineWindow(this);
+      this.fields = new G.Fields(this);
+      this.cart = new G.Cart(this);
+      this.crafting = new G.Crafting(this);
       this.questlog = new G.QuestLog(this);
       this.questsWin = G.Panels.questsWindow(this);
       this.extras = new G.Extras(this);
@@ -268,6 +274,24 @@
       this.debugGiftChannel = new BroadcastChannel('willowmere-debug');
       this.debugGiftChannel.addEventListener('message', (event) => {
         const request = event.data || {};
+        if (request.type === 'give-zeny' && this.player && this.save.enabled) {
+          // Zeny gift from the database page (capped at the classic 2,147,483,647).
+          if (String(request.playerName || '').trim().toLowerCase() !== String(this.player.name || '').trim().toLowerCase()) return;
+          const MAXZ = 2147483647, amount = Number(request.amount);
+          const zreply = { type: 'give-zeny-result', requestId: request.requestId, ok: false };
+          if (!Number.isInteger(amount) || amount < 1 || amount > 1000000000) zreply.message = 'Invalid amount.';
+          else if (this.player.zeny >= MAXZ) zreply.message = `${this.player.name} already has the maximum Zeny.`;
+          else {
+            const given = Math.min(amount, MAXZ - this.player.zeny);
+            this.player.zeny += given;
+            this.sfx('zeny');
+            this.save.save(true);
+            this.log.add(`[DEBUG] Received ${given.toLocaleString()} Zeny.`, 'system');
+            Object.assign(zreply, { ok: true, given, total: this.player.zeny, characterName: this.player.name });
+          }
+          this.debugGiftChannel.postMessage(zreply);
+          return;
+        }
         if (request.type !== 'give-item' || !this.player || !this.save.enabled) return;
         const reply = { type: 'give-item-result', requestId: request.requestId, ok: false };
         const requestedName = String(request.playerName || '').trim();
@@ -361,6 +385,8 @@
       this.dialog.update(dt);
       this.shop.update(dt);
       this.storage.update(dt);
+      this.refineWin.update(dt);
+      G.SkillsX.update(this, dt);
       this.extras.update(dt);
       this.hotbar.update(dt);
       this.minimap.update(dt);

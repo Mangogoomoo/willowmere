@@ -5,12 +5,13 @@
 (function (G) {
   'use strict';
 
+  // Like the classics: every skill point of your current job must be spent first.
+  const unspentMsg = (p) => `You still have ${p.skillPoints} unspent skill point${p.skillPoints === 1 ? '' : 's'}. A ${p.jobDef.name} must master their own craft before moving on: spend ${p.skillPoints === 1 ? 'it' : 'them all'} in the Skills window (Alt+S), then come back.`;
+
   async function jobMaster(d, game) {
     const p = game.player, Q = game.quests;
-    if (p.job !== 'novice') {
-      const job = p.jobDef;
-      const next = (G.Jobs.NEXT[p.job] || []).map((j) => j[0].toUpperCase() + j.slice(1)).join(' or ');
-      await d.say(`Well met, ${p.name} the ${job.name}! Keep honing your craft. One day you may become a ${next}, but those masters have not yet come to Willowmere.`);
+    if (p.jobDef.tier >= 2) {
+      await d.say(`Well met, ${p.name} the ${p.jobDef.name}! There is no higher path I can teach. Go and make your legend.`);
       return;
     }
 
@@ -19,7 +20,8 @@
       const job = G.Jobs.get(trial.job), st = Q.status();
       if (st.complete) {
         await d.say(`You’ve done it! ${st.done}`);
-        const c = await d.choose(`Are you ready to become a ${job.name}? Your Novice days end here.`, [`Become a ${job.name}`, 'Not yet']);
+        if (p.skillPoints > 0) { await d.say(unspentMsg(p)); return; }
+        const c = await d.choose(`Are you ready to become a ${job.name}? Your ${p.jobDef.name} days end here.`, [`Become a ${job.name}`, 'Not yet']);
         if (c === 0) {
           Q.complete();
           p.changeJob(trial.job);
@@ -35,12 +37,28 @@
       return;
     }
 
+    if (p.jobDef.tier === 1) {
+      const nextIds = G.Jobs.NEXT[p.job];
+      const nextNames = nextIds.map((id) => G.Jobs.get(id).name);
+      await d.say(`${p.name} the ${p.jobDef.name}! When you reach job level 40, you may advance to ${nextNames.join(' or ')}.`);
+      if (p.jobLevel < 40) { await d.say(`You are job level ${p.jobLevel}. Come back at job level 40.`); return; }
+      if (p.skillPoints > 0) { await d.say(unspentMsg(p)); return; }
+      for (;;) {
+        const c = await d.choose('You are ready for the second path. Which will you walk?', [...nextNames, 'Let me think about it']);
+        if (c >= nextIds.length) return;
+        const job = G.Jobs.get(nextIds[c]);
+        const pick = await d.choose(`${job.name}: ${job.blurb}\nStrengths: ${job.strengths}\nWeaknesses: ${job.weaknesses}\nTrial: ${job.trial.text}`, ['Accept this trial', 'Show me the other paths']);
+        if (pick === 0) { Q.start(job.id); await d.say(`So be it. ${job.trial.text} Return when it’s done.`); return; }
+      }
+    }
+
     await d.say('Ah, a new adventurer! I am Master Rowan. I guide Novices onto one of the six paths: Swordsman, Mage, Archer, Acolyte, Thief and Merchant.');
     const bt = p.skills.level('basic_training');
     if (p.jobLevel < 10 || bt < 9) {
       await d.say(`First you must reach job level 10 and learn Basic Training to level 9.\nYou are job level ${p.jobLevel}, with Basic Training at ${bt} of 9.\nHunt in the meadows south of town, and spend your skill points in the Skills window (Alt+S).`);
       return;
     }
+    if (p.skillPoints > 0) { await d.say(unspentMsg(p)); return; }
     const names = G.Jobs.FIRST.map((id) => G.Jobs.get(id).name);
     for (;;) {
       const c = await d.choose('You’re ready. Which path calls to you?', [...names, 'Let me think about it']);
@@ -63,6 +81,31 @@
   const toolDealer = shopkeeper('tools', 'Welcome to Pell’s Provisions! Potions, wings, the works. I’ll also buy whatever you drag back from the meadows.');
   const weaponDealer = shopkeeper('weapons', 'Garrick’s Arms. Every blade here was tested on a training dummy, and most of the dummies survived. What’ll it be?');
   const armorDealer = shopkeeper('armor', 'Sabine’s Outfitters! Cloaks, shields and the finest hats in Willowmere. Do try something on.');
+
+  async function refiner(d, game) {
+    const c = await d.choose('Bram’s the name, refining’s the game. I can make your weapons and armour stronger, up to +10. Push past the safe limit, though, and the metal might not survive.', ['Refine equipment', 'Buy refining materials', 'Leave']);
+    if (c === 0) game.refineWin.open();
+    else if (c === 1) game.shop.open('buy', 'forge');
+  }
+
+  async function resetSage(d, game) {
+    const p = game.player;
+    const c = await d.choose(`Hello, ${p.name}. I’m Elda. Made choices you regret? I can wash your stats or your skills clean, free of charge, so you can spend the points again.`,
+      ['Reset my stats', 'Reset my skills', 'Reset both', 'Leave']);
+    if (c === 3) return;
+    const what = ['your stats', 'your skills', 'both your stats and your skills'][c];
+    const ok = await d.choose(`Are you sure you want to reset ${what}? Every point comes back for you to spend again.`, ['Yes, reset', 'No, keep them']);
+    if (ok !== 0) return;
+    const bits = [];
+    if (c === 0 || c === 2) { const before = p.statPoints; p.resetStats(); bits.push(`${p.statPoints - before} stat points`); }
+    if (c === 1 || c === 2) bits.push(`${p.skills.reset()} skill points`);
+    game.spells.aura(p, '#c79bff');
+    game.sfx('buff');
+    game.save.save(true);
+    game.windows.refresh('status'); game.windows.refresh('skills');
+    game.log.add(`Reset done: ${bits.join(' and ')} returned.`, 'level');
+    await d.say(`There you are: ${bits.join(' and ')} returned. Spend them wisely this time!`);
+  }
 
   async function storageKeeper(d, game) {
     const c = await d.choose(`Hello, ${game.player.name}! The Willowmere Storage keeps your things safe while you adventure. ${game.player.storage.length} of 300 shelves are in use.`, ['Open storage', 'Leave']);
@@ -126,17 +169,17 @@
 
   async function priestess(d, game) {
     const p = game.player, Q = game.quests, t = Q.trial;
-    if (t && t.job === 'acolyte' && !t.progress) {
+    if (t && G.Jobs.get(t.job).trial.kind === 'pray' && !t.progress) {
       await d.say('Welcome, pilgrim. Master Rowan sent word that you might come. I am Sister Lune, keeper of this pond.');
       const c = await d.choose('Will you kneel and pray with me at the water’s edge?', ['Pray with Sister Lune', 'Not yet']);
       if (c === 0) {
         game.spells.aura(p, '#fff2a0');
         Q.prayed();
-        await d.say('The water is still, and so is your heart. I feel its blessing upon you.\nReturn to Master Rowan. The path of the Acolyte is open to you.');
+        await d.say(`The water is still, and so is your heart. I feel its blessing upon you.\nReturn to Master Rowan. The path of the ${G.Jobs.get(t.job).name} is open to you.`);
       }
       return;
     }
-    const greet = p.job === 'acolyte' ? `Welcome back, ${p.name}. The pond remembers you.` : 'Peace be with you, traveller. This pond has soothed weary adventurers for generations.';
+    const greet = (p.job === 'acolyte' || p.job === 'priest' || p.job === 'monk') ? `Welcome back, ${p.name}. The pond remembers you.` : 'Peace be with you, traveller. This pond has soothed weary adventurers for generations.';
     const c = await d.choose(`${greet} Would you like to rest and pray a while?`, ['Pray (restore HP and SP)', 'Goodbye']);
     if (c === 0) {
       p.hp = p.maxHp; p.sp = p.maxSp;
@@ -163,13 +206,18 @@
       appearance: { hair: 'mint', eyes: 'violet', style: 'short' }, script: tutor },
     { id: 'quest_giver', name: 'Captain Brin', title: 'Adventurers’ Guild', costume: 'captain', x: -24, z: -69.2, facing: Math.PI / 2,
       appearance: { hair: 'raven', eyes: 'blue', style: 'ponytail' }, script: questGiver },
+    { id: 'reset_sage', name: 'Elda', title: 'Stat & Skill Reset', costume: 'scholar', x: -24, z: -75.2, facing: Math.PI / 2,
+      appearance: { hair: 'snow', eyes: 'violet', style: 'ponytail' }, script: resetSage },
+    { id: 'refiner', name: 'Bram', title: 'Refiner', costume: 'smith', x: 24, z: -75.2, facing: -Math.PI / 2,
+      appearance: { hair: 'snow', eyes: 'amber', style: 'short' }, script: refiner },
     { id: 'pond_priestess', name: 'Sister Lune', title: 'Pond Keeper', costume: 'priestess', x: 35.2, z: 55.2, facing: Math.atan2(10.8, 0.8),
       appearance: { hair: 'honey', eyes: 'violet', style: 'twintails' }, script: priestess },
   ];
 
   G.SHOPS = {
     tools: { name: 'Pell’s Provisions', npc: 'tool_dealer', stock: ['red_potion', 'orange_potion', 'blue_potion', 'green_herb', 'apple', 'carrot', 'butterfly_wing', 'fly_wing'] },
-    weapons: { name: 'Garrick’s Arms', npc: 'weapon_dealer', stock: ['knife', 'cutter', 'sword', 'club', 'rod', 'wand', 'bow', 'composite_bow'] },
+    weapons: { name: 'Garrick’s Arms', npc: 'weapon_dealer', stock: ['knife', 'cutter', 'sword', 'club', 'rod', 'wand', 'bow', 'composite_bow', 'axe', 'pike', 'katar', 'waghnak', 'bible', 'lance', 'jur', 'knuckle_duster', 'battle_axe', 'encyclopedia'] },
+    forge: { name: 'Bram’s Forge', npc: 'refiner', stock: ['phracon', 'emveretarcon'] },
     armor: { name: 'Sabine’s Outfitters', npc: 'armor_dealer', stock: ['cotton_shirt', 'adventurer_suit', 'sandals', 'hood', 'guard', 'ribbon', 'round_glasses', 'leaf_cap'] },
   };
 })(window.G = window.G || {});

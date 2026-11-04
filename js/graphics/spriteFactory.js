@@ -94,12 +94,26 @@
      the outfit colour and accessories come from the job. */
   const COSTUMES = {
     novice: {},
-    swordsman: { outfit: '#5d84c4', pauldrons: '#c3ccd8', belt: '#4a3324' },
-    mage: { outfit: '#7a59c9', robe: 'short', hat: { type: 'wizard', color: '#4b3796', band: '#e6c25a' } },
-    archer: { outfit: '#5fa04a', quiver: true, hat: { type: 'headband', color: '#e6c25a' } },
-    acolyte: { outfit: '#eceaf4', robe: 'long', trim: '#5c7fd1', hat: { type: 'cap', color: '#5c7fd1' } },
-    thief: { outfit: '#4f4470', hat: { type: 'bandana', color: '#c0394a' }, scarf: '#c0394a' },
-    merchant: { outfit: '#b47a3e', backpack: '#8a5a2c', apron: '#f2e6cc' },
+    swordsman: { outfit: '#5d84c4', pauldrons: '#c3ccd8', chestplate: '#c3ccd8', belt: '#4a3324' },
+    mage: { outfit: '#6a4fb0', robe: 'long', cape: '#3a2a6a', trim: '#e6c25a' },
+    archer: { outfit: '#5fa04a', quiver: true, hat: { type: 'headband', color: '#e6c25a' }, scarf: '#8a5a2c' },
+    acolyte: { outfit: '#eceaf4', robe: 'long', trim: '#5c7fd1', hat: { type: 'cap', color: '#5c7fd1' }, emblem: '#5c7fd1' },
+    thief: { outfit: '#4f4470', hat: { type: 'bandana', color: '#c0394a' }, scarf: '#c0394a', bareArms: true },
+    merchant: { outfit: '#b47a3e', backpack: '#8a5a2c', apron: '#f2e6cc', hat: { type: 'cap', color: '#7a4a2a' } },
+    // Second jobs: each with its own silhouette, after the classics.
+    knight: { outfit: '#2f4a8a', chestplate: '#cfd8e6', pauldrons: '#cfd8e6', cape: '#b8323f', belt: '#2a2a3a' },
+    crusader: { outfit: '#ece6da', chestplate: '#f2efe6', emblem: '#c0394a', pauldrons: '#e6c25a', cape: '#f2efe6', shieldArm: '#c9b27a', hat: { type: 'helm', color: '#e6edf5', plume: '#c0394a' } },
+    wizard: { outfit: '#4b2f8f', robe: 'long', trim: '#e6c25a', collar: '#2a1a5a', cape: '#2a1a5a' },
+    sage: { outfit: '#3f8a6a', robe: 'long', trim: '#f2e6cc', hat: { type: 'hood', color: '#2f6a50' } },
+    hunter: { outfit: '#3f7a3a', quiver: true, scarf: '#8a5a2c', hat: { type: 'feather', color: '#5a7a2a', feather: '#e05a3a' } },
+    bard: { outfit: '#c0394a', robe: 'short', cape: '#2a3a7a', hat: { type: 'beret', color: '#2a3a7a', feather: '#fbfbff' } },
+    dancer: { outfit: '#e86aa0', midriff: true, skirtFlaps: '#ffd84a', bareArms: true, hat: { type: 'tiara', color: '#ffd84a' } },
+    priest: { outfit: '#f2f0f7', robe: 'long', trim: '#e6c25a', cape: '#4a6ad8', emblem: '#e6c25a', hat: { type: 'mitre', color: '#f2f0f7', band: '#e6c25a' } },
+    monk: { outfit: '#c9783a', robe: 'short', belt: '#3a2a1a', bareArms: true, beads: '#7a3a2a', hat: { type: 'headband', color: '#3a2a1a' } },
+    assassin: { outfit: '#3a2a4a', mask: '#2a1a3a', flaps: '#6a3a7a', scarf: '#c0394a', bareArms: true, hat: { type: 'bandana', color: '#2a1a3a' } },
+    rogue: { outfit: '#3a5a3a', coatTails: '#2a3a2a', cape: '#5a3a22', scarf: '#8a5a2c', hat: { type: 'bandana', color: '#6a4a2a' } },
+    blacksmith: { outfit: '#7a4a2a', apron: '#3a2a1a', bareArms: true, goggles: '#c9a24a', hat: { type: 'headband', color: '#c0394a' } },
+    alchemist: { outfit: '#f2f0ea', robe: 'long', trim: '#2f7a8a', glasses: true, bottles: true, backpack: '#5a3a22' },
     master: { outfit: '#3f5fa8', robe: 'long', trim: '#e6c25a', hat: { type: 'wizard', color: '#2e4680', band: '#e6c25a' }, beard: '#f4f2ee', skin: '#f2cfb3' },
     dealer: { outfit: '#d98a4a', apron: '#fbf3e3', hat: { type: 'cap', color: '#a0522d' }, beard: '#7a4a2a' },
     priestess: { outfit: '#f4f1fa', robe: 'long', trim: '#7fb8e8', hat: { type: 'cap', color: '#7fb8e8' } },
@@ -123,6 +137,7 @@
       skin: costume.skin || '#ffdcc4', hair, hairDark: U.shade(hair, hair === '#ece8f2' ? -0.45 : -0.42), tunic, sleeve: U.shade(tunic, -0.1),
       pants: '#6e5641', boots: '#704325', belt: costume.belt || '#5a3a22', satchel: '#ab7642', iris,
     };
+    if (costume.bareArms) NV.sleeve = NV.skin;
     const hairShades = {};
     for (let i = -5; i <= 5; i++) hairShades[i] = U.shade(NV.hair, i * 0.04);
     const HAIR_PTS = RP.fibonacciSphere(230).filter((n) => isHair(n, app.style));
@@ -144,12 +159,13 @@
       blush([0.56, -0.32, 0.76]), blush([-0.56, -0.32, 0.76]),
     ];
     const head = look.head || {};
-    const glasses = head.mid === 'glasses' ? [
+    const glasses = (head.mid === 'glasses' || costume.glasses) ? [
       ...[0.36, -0.36].map((x) => ({ n: norm([x, -0.12, 0.92]), draw(ctx) { ctx.beginPath(); ctx.arc(0, 0, 5.2, 0, TAU); ctx.lineWidth = 1.4; ctx.strokeStyle = '#3b3346'; ctx.stroke(); ctx.fillStyle = 'rgba(190,230,255,0.25)'; ctx.fill(); } })),
       { n: norm([0, -0.06, 1]), draw(ctx) { ctx.beginPath(); ctx.moveTo(-2.4, 0); ctx.quadraticCurveTo(0, 1.6, 2.4, 0); ctx.lineWidth = 1.3; ctx.strokeStyle = '#3b3346'; ctx.stroke(); } },
     ] : [];
-    const headDecalsOpen = [...hairOutline, ...hairFill, ...faceOpen, ...faceCommon, ...glasses];
-    const headDecalsClosed = [...hairOutline, ...hairFill, ...faceClosed, ...faceCommon, ...glasses];
+    const mask = costume.mask ? [{ n: norm([0, -0.5, 0.86]), draw(ctx) { ctx.fillStyle = costume.mask; ctx.fillRect(-9, -4, 18, 9); } }] : [];
+    const headDecalsOpen = [...hairOutline, ...hairFill, ...faceOpen, ...faceCommon, ...glasses, ...mask];
+    const headDecalsClosed = [...hairOutline, ...hairFill, ...faceClosed, ...faceCommon, ...glasses, ...mask];
 
     const torsoDecals = [];
     for (let i = 0; i < 10; i++) {
@@ -166,11 +182,34 @@
     for (const a of [-0.9, 0.9, Math.PI]) {
       torsoDecals.push({ n: norm([Math.sin(a) * 0.5, -0.86, Math.cos(a) * 0.5]), draw(ctx) { ctx.fillStyle = costume.trim || U.shade(NV.tunic, -0.18); ctx.fillRect(-6, -1, 12, 2); } });
     }
+    if (costume.emblem) torsoDecals.push({ n: norm([0, 0.15, 0.99]), draw(ctx) { ctx.fillStyle = costume.emblem; ctx.fillRect(-1.6, -6, 3.2, 12); ctx.fillRect(-5, -2.8, 10, 3.2); } });
+    if (costume.midriff) torsoDecals.push({ n: norm([0, -0.25, 1]), draw(ctx) { ctx.fillStyle = NV.skin; ctx.fillRect(-12, -3.5, 24, 6); } });
     if (costume.apron) torsoDecals.push({ n: norm([0, -0.3, 0.95]), draw(ctx) { ctx.fillStyle = costume.apron; ctx.beginPath(); ctx.moveTo(-6, 6); ctx.lineTo(6, 6); ctx.lineTo(7.5, -10); ctx.lineTo(-7.5, -10); ctx.closePath(); ctx.fill(); } });
     if (costume.trim) torsoDecals.push({ n: norm([0, 0.1, 1]), draw(ctx) { ctx.fillStyle = costume.trim; ctx.fillRect(-1.2, -12, 2.4, 18); } });
     const metal = (c) => ({ light: '#ffffff', outline: U.shade(c, -0.55) });
 
+    const LIFT = look.mount ? 21 : 0;
+    // The Peco Peco (Knight) or Grand Peco (Crusader), drawn under the rider.
+    function drawPeco(P, anim, t) {
+      const body = look.mount === 'grandpeco' ? '#f2efe6' : '#ffd84a', dark = U.shade(body, -0.35), beak = '#ff9f43';
+      const walk = anim === 'walk' ? Math.sin(t * TAU) : 0, bob = anim === 'walk' ? Math.abs(Math.sin(t * TAU)) * 2 : Math.sin(t * TAU) * 0.6;
+      P.setPose(0, 0, [0, 0, 0], [0, 0, 0]);
+      P.sphere([0, 24 + bob, -2], 15, body, { sx: 0.85, sy: 0.8, bias: -0.05, outline: dark });
+      P.capsule([0, 32 + bob, 9], [0, 48 + bob, 18], 4.6, body, { bias: 0.4, outline: dark });
+      P.sphere([0, 52 + bob, 20], 6.5, body, { bias: 0.5, outline: dark });
+      P.capsule([0, 51 + bob, 25.5], [0, 49 + bob, 31], 2.2, beak, { bias: 0.55 });
+      for (const sx of [-1, 1]) P.sphere([sx * 3.6, 54 + bob, 24.5], 1.1, '#1b1b2a', { bias: 0.6 });
+      for (const sx of [-1, 1]) {
+        const k = sx * walk;
+        P.capsule([sx * 5.5, 14 + bob, -1], [sx * 5.5, 2, -1 + k * 7], 1.8, beak, { bias: 0.1 });
+        P.capsule([sx * 5.5, 2, -1 + k * 7], [sx * 5.5, 1, 4 + k * 7], 1.4, beak, { bias: 0.12 });
+      }
+      for (const [dy, dz] of [[4, -6], [8, -3], [0, -8]]) P.capsule([0, 26 + bob, -14], [0, 30 + dy + bob, -24 + dz], 2.6, dark, { bias: -0.4 });
+      P.setPose(0, 0, [0, 0, 0], [0, LIFT, 0]);
+    }
+
     return function drawNovice(P, anim, t) {
+      if (look.mount) drawPeco(P, anim, t);
       const C = NV;
       let bob = 0, swing = 0, liftL = 0, liftR = 0, lean = 0, handR = null, handL = null;
       let eyesClosed = false;
@@ -205,7 +244,7 @@
       } else if (anim === 'dead') {
         eyesClosed = t > 0.3;
         const e = t * t;
-        P.setPose(-Math.PI / 2 * 0.96 * e, 0, [0, 23, 0], [0, -8 * e, 0]);
+        P.setPose(-Math.PI / 2 * 0.96 * e, 0, [0, 23, 0], [0, -8 * e + LIFT * (1 - e), 0]);
       } else if (anim === 'sit') {
         bob = -9; eyesClosed = false;
       }
@@ -259,6 +298,35 @@
         } else if (weapon === 'mace') {
           P.capsule(add(handR, kd, -2), add(handR, kd, 10), 1.3, '#7a4c2a', { bias: 0.1 });
           P.sphere(add(handR, kd, 12), 3.6, '#9aa3ad', Object.assign({ bias: 0.15 }, metal('#9aa3ad')));
+        } else if (weapon === 'twohand') {
+          P.capsule(add(handR, kd, -5), add(handR, kd, 1), 1.4, '#5a3a22', { bias: 0.1 });
+          P.capsule(add(handR, kd, 1), add(handR, kd, 3), 3.2, '#e6c25a', { bias: 0.12 });
+          P.capsule(add(handR, kd, 3), add(handR, kd, 30), 2.2, '#e6edf5', Object.assign({ bias: 0.16 }, steel));
+        } else if (weapon === 'instrument') {
+          P.sphere(add(handL, [1, 4, 5]), 6, '#a8743c', { sx: 0.9, sy: 1.25, bias: 1.2, outline: '#5a3a22' });
+          P.capsule(add(handL, [1, 9, 5]), add(handL, [3, 22, 3]), 1.3, '#5a3a22', { bias: 1.25 });
+        } else if (weapon === 'whip') {
+          const a = add(handR, kd, 4), b2 = add(a, [6, -6, 4]), c2 = add(b2, [4, -9, -2]);
+          P.capsule(handR, a, 1.2, '#7a4c2a', { bias: 0.1 }); P.capsule(a, b2, 1.0, '#c9a06b', { bias: 0.1 }); P.capsule(b2, c2, 0.8, '#c9a06b', { bias: 0.1 });
+        } else if (weapon === 'spear') {
+          // Held upright, butt near the ground, head well above the shoulder.
+          const up = norm([kd[0] * 0.15, 1, kd[2] * 0.15 + 0.12]);
+          P.capsule(add(handR, up, -20), add(handR, up, 30), 1.2, '#7a4c2a', { bias: 0.1 });
+          P.capsule(add(handR, up, 30), add(handR, up, 40), 2.1, '#e6edf5', Object.assign({ bias: 0.16, sx: 0.8 }, steel));
+        } else if (weapon === 'katar') {
+          P.capsule(add(handR, kd, -1), add(handR, kd, 2), 2.2, '#5a3a22', { bias: 0.12 });
+          P.capsule(add(add(handR, kd, 2), [1.2, 0, 0]), add(add(handR, kd, 13), [0.6, 0, 0]), 1.0, '#e6edf5', Object.assign({ bias: 0.16 }, steel));
+          P.capsule(add(add(handR, kd, 2), [-1.2, 0, 0]), add(add(handR, kd, 13), [-0.6, 0, 0]), 1.0, '#e6edf5', Object.assign({ bias: 0.16 }, steel));
+        } else if (weapon === 'knuckle') {
+          for (const hd of [handR, handL]) P.sphere(hd, 3.8, '#c9a24a', Object.assign({ bias: 0.3 }, metal('#c9a24a')));
+        } else if (weapon === 'axe') {
+          P.capsule(add(handR, kd, -3), add(handR, kd, 14), 1.2, '#7a4c2a', { bias: 0.1 });
+          const head = add(handR, kd, 13);
+          P.sphere(add(head, [2.5, 0, 0]), 3.6, '#cfd8e6', Object.assign({ sx: 0.6, bias: 0.16 }, metal('#cfd8e6')));
+          P.sphere(add(head, [-2.5, 0, 0]), 3.6, '#cfd8e6', Object.assign({ sx: 0.6, bias: 0.16 }, metal('#cfd8e6')));
+        } else if (weapon === 'book') {
+          P.sphere(add(handL, [1, 3, 5]), 5.5, '#7a3a3a', { sx: 0.95, sy: 1.2, bias: 1.2, light: '#b85a5a', outline: '#3a1a1a' });
+          P.sphere(add(handL, [1, 3, 6]), 2.4, '#e6c25a', { sy: 0.5, bias: 1.3 });
         } else if (weapon === 'rod') {
           const up = norm(add(kd, [0, 1.2, 0]));
           P.capsule(add(handR, up, -9), add(handR, up, 15), 1.1, '#8b5a33', { bias: 0.1 });
@@ -312,8 +380,54 @@
           P.capsule([0, headY + 7, hz - 19], [3 + sway, headY - 4, hz - 23], 2.2, hc, { bias: 0.2 });
         } else if (hat.type === 'headband') {
           P.sphere([0, headY + 6, hz], 19.1, hc, { sy: 0.14, bias: 1.3 });
+        } else if (hat.type === 'helm') {
+          P.sphere([0, headY + 8, hz - 1], 19.8, hc, Object.assign({ sy: 0.72, bias: 1.5 }, metal(hc)));
+          P.capsule([0, headY + 19, hz - 2], [0, headY + 25, hz - 13], 2.8, hat.plume, { bias: 1.55 });
+        } else if (hat.type === 'mitre') {
+          P.sphere([0, headY + 18, hz - 1], 11.5, hc, { sy: 1.55, bias: 1.8 });
+          P.sphere([0, headY + 11, hz - 1], 17, hat.band, { sy: 0.2, bias: 1.85 });
+          P.capsule([0, headY + 19, hz + 9.5], [0, headY + 27, hz + 7], 1.2, hat.band, { bias: 1.9 });
+        } else if (hat.type === 'beret') {
+          P.sphere([3, headY + 15, hz - 2], 15.5, hc, { sy: 0.38, sx: 1.15, bias: 1.8 });
+          P.capsule([10, headY + 17, hz - 4], [20, headY + 29, hz - 11], 1.5, hat.feather, { bias: 1.85, outline: '#9aa3ad' });
+        } else if (hat.type === 'feather') {
+          P.sphere([0, headY + 11, hz - 1], 19, hc, { sy: 0.32, bias: 1.6 });
+          P.sphere([0, headY + 15, hz - 1], 12.5, hc, { sy: 0.65, bias: 1.65 });
+          P.capsule([8, headY + 16, hz - 6], [14, headY + 31, hz - 14], 1.7, hat.feather, { bias: 1.7 });
+        } else if (hat.type === 'hood') {
+          P.sphere([0, headY + 4, hz - 5], 21.5, hc, { sy: 1.05, bias: -0.35 });
+          P.capsule([0, headY + 18, hz - 9], [0, headY + 27, hz - 17], 4, hc, { bias: -0.3 });
+        } else if (hat.type === 'tiara') {
+          P.sphere([0, headY + 12, hz + 1], 17.8, hc, { sy: 0.1, bias: 1.4, light: '#fff6c0' });
+          P.sphere([0, headY + 13, hz + 17.5], 2.2, '#ff6b8b', { bias: 1.5 });
         }
       }
+      /* ---- class silhouettes ---- */
+      const bob2 = bob * 0.6;
+      if (costume.cape) {
+        P.sphere([0, 30 + bob2, tz - 10 - Math.abs(sway) * 0.3], 12.5, costume.cape, { sx: 1.2, sy: 1.95, bias: -0.7, outline: U.shade(costume.cape, -0.45) });
+        P.capsule([-10, 47 + bob, tz - 4], [10, 47 + bob, tz - 4], 3, costume.cape, { bias: -0.2 });
+      }
+      if (costume.collar) {
+        P.sphere([0, 52 + bob, tz - 8], 12.5, costume.collar, { sx: 1.25, sy: 1.15, bias: -0.45, outline: U.shade(costume.collar, -0.5) });
+        for (const sx of [-1, 1]) P.capsule([sx * 9, 45 + bob, tz - 2], [sx * 15, 62 + bob, tz - 8], 4.2, costume.collar, { bias: -0.25 });
+      }
+      if (costume.chestplate) P.sphere([0, 37 + bob, tz + 2.5], 10, costume.chestplate, Object.assign({ sy: 0.95, sx: 1.05, bias: 0.4 }, metal(costume.chestplate)));
+      if (costume.shieldArm) P.sphere([-15, 30 + bob, tz + 3], 8.5, costume.shieldArm, Object.assign({ sx: 0.4, sy: 1.1, bias: 0.9 }, metal(costume.shieldArm)));
+      if (costume.beads) for (let k = 0; k <= 8; k++) { const u = k / 8 * 2 - 1; P.sphere([u * 8, 47 + bob - (1 - u * u) * 8, tz + 8.5], 1.7, costume.beads, { bias: 0.8 }); }
+      if (costume.flaps) for (const sx of [-1, 1]) for (const fz of [8, -8]) P.capsule([sx * 4.5, 23 + bob, tz + fz], [sx * 6 + sway * 0.4, 3, tz + fz * 1.15], 2.6, costume.flaps, { bias: fz > 0 ? 0.55 : -0.3 });
+      if (costume.coatTails) for (const sx of [-1, 1]) P.capsule([sx * 5, 24 + bob, tz - 7], [sx * 7 + sway * 0.4, 5, tz - 9.5], 3.2, costume.coatTails, { bias: -0.35 });
+      if (costume.skirtFlaps) for (let k = 0; k < 7; k++) { const a = (k / 7) * TAU; P.capsule([Math.sin(a) * 9, 24 + bob, tz + Math.cos(a) * 9], [Math.sin(a) * 11.5, 13, tz + Math.cos(a) * 11.5], 2.2, k % 2 ? costume.skirtFlaps : C.tunic, { bias: Math.cos(a) * 0.5 }); }
+      if (costume.goggles) for (const sx of [-1, 1]) { P.sphere([sx * 5.5, headY + 9, hz + 15.5], 3.6, costume.goggles, { bias: 1.4, light: '#fff6c0' }); P.sphere([sx * 5.5, headY + 9, hz + 17.5], 2.2, '#9fe0ff', { bias: 1.45 }); }
+      if (costume.bottles) [['#e8364a', -8], ['#6fc3ff', -3], ['#9ee86a', 7]].forEach(([c, x]) => P.sphere([x, 22 + bob, tz + 10], 2.4, c, { sy: 1.3, bias: 0.8 }));
+      if (look.falcon) {
+        const fx = -12, fy = 54 + bob, fz = tz - 1;
+        P.sphere([fx, fy, fz], 4.6, '#8a5a2c', { sy: 1.2, bias: 1.0, outline: '#3a2410' });
+        P.sphere([fx, fy + 6, fz + 1.5], 3.2, '#f2e6cc', { bias: 1.05, outline: '#3a2410' });
+        P.capsule([fx, fy + 6, fz + 4.2], [fx, fy + 5, fz + 6.5], 1.0, '#e6c25a', { bias: 1.1 });
+        P.capsule([fx - 1, fy + 2, fz - 3], [fx - 3, fy - 6, fz - 6], 2.2, '#6a4a2a', { bias: 0.95 });
+      }
+
       /* ---- equipped headgear ---- */
       const gold = { light: '#fff6c0', outline: '#8a5a00' };
       if (head.top === 'ribbon') {
@@ -615,6 +729,24 @@
     P.sphere([0, top, -2], 8, '#f5c542', Object.assign({ sy: 0.3, bias: 0.75 }, gold));
   }
 
+  /* ===================================================== TRAINING DUMMY */
+  const DUMMY_FACE = [{ n: norm([0, 0, 1]), draw(ctx) {
+    for (const [r, c] of [[7, '#c0394a'], [5, '#fbf6ec'], [3, '#c0394a'], [1.2, '#fbf6ec']]) { ctx.beginPath(); ctx.arc(0, 0, r, 0, TAU); ctx.fillStyle = c; ctx.fill(); }
+  } }];
+  const DUMMY_HEAD = [{ n: norm([0, -0.1, 1]), draw(ctx) { ctx.strokeStyle = '#6a4a2a'; ctx.lineWidth = 1.2; for (const x of [-2.5, 2.5]) { ctx.beginPath(); ctx.moveTo(x - 1.2, -1.2); ctx.lineTo(x + 1.2, 1.2); ctx.moveTo(x + 1.2, -1.2); ctx.lineTo(x - 1.2, 1.2); ctx.stroke(); } } }];
+  function drawDummy(P, anim, t) {
+    const wob = anim === 'hit' ? Math.sin(t * Math.PI * 4) * 0.18 * (1 - t) : 0;
+    P.setPose(0, wob, [0, 0, 0], [0, 0, 0]);
+    const wood = '#8a5a33', sack = '#d9b98a', o = { outline: '#4a2e18' };
+    for (const a of [0.5, 2.1, 3.7, 5.3]) P.capsule([0, 2, 0], [Math.sin(a) * 9, 0, Math.cos(a) * 9], 1.6, wood, o);
+    P.capsule([0, 0, 0], [0, 54, 0], 2.2, wood, Object.assign({ bias: -0.2 }, o));
+    P.sphere([0, 32, 0], 11, sack, Object.assign({ sy: 1.25, decals: DUMMY_FACE, bias: 0.2 }, { outline: '#8a6a3a' }));
+    P.capsule([-16, 38, 0], [16, 38, 0], 2, wood, Object.assign({ bias: 0.1 }, o));
+    for (const sx of [-1, 1]) P.sphere([sx * 17, 38, 0], 3.2, sack, { outline: '#8a6a3a', bias: 0.15 });
+    P.sphere([0, 53, 0], 7, sack, { decals: DUMMY_HEAD, outline: '#8a6a3a', bias: 0.3 });
+    P.capsule([-5, 41, 6], [5, 41, 6], 0.9, '#c9a24a', { bias: 0.4 });
+  }
+
   /* ===================================================== registry */
   const DEFS = {
     poring: {
@@ -679,6 +811,14 @@
       ],
       draw: drawRocker,
     },
+    training_dummy: {
+      frameW: 112, frameH: 128, originX: 56, originY: 120, scale: 1.25,
+      anims: [
+        { name: 'idle', frames: 1, fps: 1 }, { name: 'walk', frames: 1, fps: 1 }, { name: 'attack', frames: 1, fps: 1, loop: false },
+        { name: 'hit', frames: 6, fps: 14, loop: false }, { name: 'die', frames: 1, fps: 1, loop: false },
+      ],
+      draw: drawDummy,
+    },
     familiar: {
       frameW: 144, frameH: 120, originX: 72, originY: 112, scale: 1.25,
       anims: [
@@ -722,7 +862,9 @@
     { name: 'dead', frames: 4, fps: 8, loop: false },
     { name: 'sit', frames: 1, fps: 1 },
   ];
-  const noviceDef = (app, look) => ({ frameW: 160, frameH: 176, originX: 80, originY: 166, scale: 1.25, anims: NOVICE_ANIMS, draw: makeNovice(app, look) });
+  const noviceDef = (app, look) => (look && look.mount
+    ? { frameW: 176, frameH: 204, originX: 88, originY: 194, scale: 1.25, anims: NOVICE_ANIMS, draw: makeNovice(app, look) }
+    : { frameW: 160, frameH: 176, originX: 80, originY: 166, scale: 1.25, anims: NOVICE_ANIMS, draw: makeNovice(app, look) });
 
   const cache = {};
   G.SpriteFactory = {
@@ -738,7 +880,7 @@
       app = normalizeAppearance(app);
       look = Object.assign({ job: 'novice', weapon: 'dagger' }, look || {});
       const hd = look.head || {};
-      const key = ['h', app.hair, app.outfit, app.eyes, app.style, look.job, look.weapon, look.unarmed ? 'u' : '', hd.top || '', hd.mid || '', hd.low || ''].join(':');
+      const key = ['h', app.hair, app.outfit, app.eyes, app.style, look.job, look.weapon, look.unarmed ? 'u' : '', hd.top || '', hd.mid || '', hd.low || '', look.mount || '', look.falcon ? 'f' : ''].join(':');
       if (!cache[key]) cache[key] = RP.buildSheet(noviceDef(app, look));
       return cache[key];
     },

@@ -63,6 +63,7 @@
         respawn: 9, leash: 26, hitRadius: 0.75, height: 1.6, radius: 0.55, scale: 1.12,
         deathColor: [1.0, 1.0, 1.0],
         drops: [
+          { id: 'phracon', chance: 0.02 }, 
           { id: 'card_lunatic', chance: 0.002 },
           { id: 'clover', chance: 0.65 }, { id: 'fluff', chance: 0.45 }, { id: 'carrot', chance: 0.15 },
           { id: 'red_potion', chance: 0.04 }, { id: 'sandals', chance: 0.008 }, { id: 'hood', chance: 0.006 },
@@ -89,6 +90,7 @@
         attackRange: 1.3, attackInterval: 1.6, impactTime: 0.25,
         respawn: 8, leash: 24, hitRadius: 0.8, height: 1.0, radius: 0.6, scale: 1.2, deathColor: [0.6, 0.9, 0.4],
         drops: [
+          { id: 'phracon', chance: 0.03 }, 
           { id: 'card_fabre', chance: 0.002 },
           { id: 'fluff', chance: 0.5 }, { id: 'clover', chance: 0.3 }, { id: 'green_herb', chance: 0.15 },
           { id: 'fly_wing', chance: 0.03 }, { id: 'hood', chance: 0.005 },
@@ -113,6 +115,7 @@
         attackRange: 1.35, attackInterval: 1.3, impactTime: 0.25,
         respawn: 10, leash: 26, hitRadius: 0.8, height: 1.7, radius: 0.6, scale: 1.15, deathColor: [0.55, 0.85, 0.3],
         drops: [
+          { id: 'elunium', chance: 0.008 }, 
           { id: 'card_rocker', chance: 0.002 },
           { id: 'grasshopper_leg', chance: 0.6 }, { id: 'green_herb', chance: 0.15 }, { id: 'red_potion', chance: 0.05 },
           { id: 'leaf_cap', chance: 0.006 }, { id: 'adventurer_suit', chance: 0.004 },
@@ -125,11 +128,19 @@
         attackRange: 1.3, attackInterval: 1.5, impactTime: 0.3,
         respawn: 11, leash: 26, hitRadius: 0.85, height: 1.25, radius: 0.55, scale: 1.3, deathColor: [0.6, 0.95, 0.5],
         drops: [
+          { id: 'elunium', chance: 0.01 }, { id: 'phracon', chance: 0.05 }, 
           { id: 'card_poporing', chance: 0.002 },
           { id: 'sticky_mucus', chance: 0.4 }, { id: 'jellopy', chance: 0.5 }, { id: 'green_herb', chance: 0.2 },
           { id: 'orange_potion', chance: 0.04 }, { id: 'jelly_brooch', chance: 0.008 },
         ],
         zeny: { chance: 0.6, min: 12, max: 30 },
+      },
+      training_dummy: {
+        name: 'Training Dummy', level: 1, hp: 99999999, atk: [0, 0], def: 0, softDef: 0, mdef: 0, hit: 1, flee: 0, element: 'neutral',
+        speed: 0, chaseSpeed: 0, exp: 0, jobExp: 0, noAttack: true, immortal: true, immovable: true,
+        attackRange: 0, attackInterval: 99, impactTime: 0,
+        respawn: 5, leash: 99, hitRadius: 0.8, height: 2.0, radius: 0.6, scale: 1.25, deathColor: [0.8, 0.65, 0.4],
+        drops: [], zeny: { chance: 0, min: 0, max: 0 },
       },
       familiar: {
         name: 'Familiar', level: 9, hp: 170, atk: [12, 18], def: 3, softDef: 2, mdef: 0, hit: 30, flee: 22, element: 'shadow',
@@ -137,6 +148,7 @@
         attackRange: 1.3, attackInterval: 1.1, impactTime: 0.2,
         respawn: 10, leash: 24, hitRadius: 0.75, height: 1.9, radius: 0.5, scale: 1.1, deathColor: [0.55, 0.45, 0.7],
         drops: [
+          { id: 'elunium', chance: 0.01 }, 
           { id: 'card_familiar', chance: 0.002 }, { id: 'bat_wing', chance: 0.6 }, { id: 'red_potion', chance: 0.06 },
           { id: 'miner_lamp', chance: 0.006 },
         ],
@@ -148,6 +160,7 @@
         attackRange: 1.3, attackInterval: 1.5, impactTime: 0.3,
         respawn: 11, leash: 24, hitRadius: 0.8, height: 1.5, radius: 0.6, scale: 1.2, deathColor: [0.9, 0.5, 0.4],
         drops: [
+          { id: 'elunium', chance: 0.02 }, 
           { id: 'card_spore', chance: 0.002 }, { id: 'spore_cap', chance: 0.55 }, { id: 'green_herb', chance: 0.2 },
           { id: 'orange_potion', chance: 0.05 }, { id: 'leaf_cap', chance: 0.005 },
         ],
@@ -159,6 +172,7 @@
         attackRange: 1.4, attackInterval: 1.3, impactTime: 0.25,
         respawn: 12, leash: 24, hitRadius: 0.8, height: 1.9, radius: 0.55, scale: 1.15, deathColor: [0.85, 0.9, 1],
         drops: [
+          { id: 'elunium', chance: 0.03 }, { id: 'oridecon', chance: 0.01 }, 
           { id: 'card_whisper', chance: 0.002 }, { id: 'ectoplasm', chance: 0.5 }, { id: 'blue_potion', chance: 0.04 },
           { id: 'hood', chance: 0.01 },
         ],
@@ -170,6 +184,7 @@
         attackRange: 2.2, attackInterval: 1.8, impactTime: 0.35,
         respawn: 120, leash: 30, hitRadius: 2.0, height: 3.2, radius: 1.5, scale: 2.7, deathColor: [1, 0.85, 0.3],
         drops: [
+          { id: 'elunium', chance: 0.6, qty: 2 }, { id: 'oridecon', chance: 0.4 }, 
           { id: 'card_king_poring', chance: 0.05 }, { id: 'royal_jelly', chance: 0.8 }, { id: 'jelly_crown', chance: 0.12 },
           { id: 'jelly_brooch', chance: 0.25 }, { id: 'jellopy', chance: 1, qty: 10 }, { id: 'wand', chance: 0.1 }, { id: 'composite_bow', chance: 0.1 },
         ],
@@ -187,6 +202,8 @@
     ],
 
     EXP_TABLE: expTable,
+    EXP_RATE: 1.8,          // multiplier on monster base/job EXP
+    QUEST_EXP_RATE: 2,      // multiplier on quest EXP rewards
 
     // Attack element -> defending element damage multiplier (missing = 1).
     ELEMENTS: {

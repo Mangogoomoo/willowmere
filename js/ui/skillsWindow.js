@@ -4,12 +4,15 @@
 (function (G) {
   'use strict';
   const h = G.h;
-  const CW = 124, CH = 96;
+  const CW = 118, CH = 92;
 
   function skillTooltip(s, player) {
     const sys = player.skills, lv = sys.level(s.id);
     const lines = [`<div class="tt-name" style="color:#ffe27a">${G.esc(s.name)}</div>`];
-    lines.push(`<div class="tt-type">${s.type === 'passive' ? 'Passive' : s.target === 'self' ? 'Active, self' : 'Active, targets an enemy'}, ${G.Jobs.get(s.job).name}</div>`);
+    lines.push(`<div class="tt-type">${s.type === 'passive' ? 'Passive' : s.target === 'self' ? 'Active, self' : s.target === 'ally' ? 'Active, targets a character' : 'Active, targets an enemy'}, ${G.Jobs.get(s.job).name}${s.quest ? ', quest skill' : ''}</div>`);
+    if (s.req.length) lines.push(`<div class="tt-req">Requires: ${s.req.map(([rid, rl]) => { const ok = sys.level(rid) >= rl; return `<span class="${ok ? '' : 'bad'}">${G.esc(G.Skills.get(rid).name)} ${rl}</span>`; }).join(', ')}</div>`);
+    if (s.quest) lines.push('<div class="tt-req">Quest skill: costs no skill points, opens at job level 15.</div>');
+    if (s.catalyst && s.catalyst.length) lines.push(`<div class="tt-req">Uses: ${s.catalyst.map(([id, n]) => `${n} ${G.esc(G.Items.get(id).name)}`).join(', ')}</div>`);
     const use = lv ? sys.useLevel(s.id) : 0;
     if (lv) lines.push(`<div class="tt-desc"><b>Level ${use}${use < lv ? ' (chosen, learned ' + lv + ')' : ''}:</b> ${G.esc(s.desc(use))}</div>`);
     if (lv < s.max) lines.push(`<div class="tt-desc tt-next"><b>${lv ? 'Next' : 'Level 1'}:</b> ${G.esc(s.desc(lv + 1))}</div>`);
@@ -36,6 +39,7 @@
   function skillsWindow(game) {
     const W = game.windows;
     let tab = null, builtKey = null;
+    const plan = [];   // pending skill levels, applied by Confirm
     const nodes = {};
     let refs = {};
     const win = W.create('skills', 'Skills', { width: 430, keyHint: 'Alt+S', pos: { x: 290, y: 120 } });
@@ -52,7 +56,8 @@
       }, G.Jobs.get(j).name)));
 
       const skills = G.Skills.forJob(tab).filter((sk) => G.Skills.allowed(sk.id, p.job));
-      const rows = Math.max(...skills.map((s) => s.pos[0])) + 1, cols = 3;
+      const rows = Math.max(...skills.map((s) => s.pos[0])) + 1, cols = Math.max(3, Math.max(...skills.map((s) => s.pos[1])) + 1);
+      win.el.style.width = Math.min(window.innerWidth - 40, cols * CW + 44) + 'px';
       const tree = h('div.stree');
       tree.style.width = cols * CW + 'px';
       tree.style.height = rows * CH + 'px';
@@ -80,8 +85,13 @@
           onclick: (e) => { e.stopPropagation(); sys.setUseLevel(s.id, sys.useLevel(s.id) + 1); } }, '›');
         const useRow = h('span.sn-use', null, down, h('span.uselv'), up);
         const plus = s.granted ? null : h('button.plus', { type: 'button', 'aria-label': `Learn ${s.name}` }, '+');
-        if (plus) G.holdRepeat(plus, () => { if (sys.canLearn(s.id).ok) sys.learn(s.id); });
-        const node = h('div.snode' + (s.type === 'passive' ? '.passive' : ''), {
+        // + plans a level (prerequisites are planned for you); nothing changes until Confirm.
+        if (plus) G.holdRepeat(plus, () => {
+          const r = sys.planAdd(s.id, plan);
+          if (!r.ok) { refs.note.textContent = r.reason; refs.note.classList.add('warnhint'); }
+          update();
+        });
+        const node = h('div.snode' + (s.type === 'passive' ? '.passive' : '') + (s.quest ? '.quest' : ''), {
           ondragstart: (e) => { e.dataTransfer.setData('text/x-skill', s.id); G.Tooltip.hide(); },
           ondblclick: () => { if (s.type !== 'passive' && sys.level(s.id)) p.skills.use(s.id); },
         }, h('img', { src: G.Icons.skillUrl(s.id), alt: '' }), h('span.sn-name', { text: s.name }), lvEl,
@@ -92,9 +102,15 @@
         tree.append(node);
         nodes[s.id] = { node, lvEl, plus, useRow, down, up };
       }
-      refs = { links, points: h('b.points'), note: h('p.hint') };
+      refs = { links, points: h('b.points'), pointsLabel: h('span'), note: h('p.hint') };
+      refs.confirm = h('button.btn.small', { type: 'button', onclick: () => {
+        const n = sys.commit(plan); plan.length = 0;
+        if (n) { game.sfx('buff'); game.log.add(`Learned ${n} skill level${n === 1 ? '' : 's'}.`, 'level'); }
+        update();
+      } }, 'Confirm');
+      refs.clear = h('button.btn.small.ghost', { type: 'button', onclick: () => { plan.length = 0; update(); } }, 'Clear');
       b.append(tabs, h('div.stree-wrap', null, tree),
-        h('div.status-foot', null, h('span', null, 'Skill points ', refs.points)),
+        h('div.status-foot.skill-foot', null, h('span', null, refs.pointsLabel, ' ', refs.points), h('span.skill-btns', null, refs.clear, refs.confirm)),
         refs.note);
     }
 
@@ -105,8 +121,10 @@
         const s = G.Skills.get(id), n = nodes[id], lv = sys.level(id);
         n.node.classList.toggle('learned', lv > 0);
         n.node.draggable = s.type !== 'passive' && lv > 0;
-        n.lvEl.textContent = `${lv} / ${s.max}`;
-        if (n.plus) n.plus.disabled = !sys.canLearn(id).ok;
+        const pend = sys.planned(id, plan);
+        n.lvEl.textContent = pend ? `${lv} (+${pend}) / ${s.max}` : `${lv} / ${s.max}`;
+        n.node.classList.toggle('pending', pend > 0);
+        if (n.plus) n.plus.disabled = !sys.planAdd(id, plan.slice()).ok;
         if (n.useRow) {
           const use = sys.useLevel(id);
           n.useRow.hidden = lv < 2;
@@ -115,11 +133,21 @@
           n.up.disabled = use >= lv;
         }
       }
-      for (const l of refs.links) l.line.setAttribute('class', sys.level(l.rid) >= l.rl ? 'met' : '');
-      refs.points.textContent = String(p.skillPoints);
-      refs.note.textContent = tab === 'novice' && p.job === 'novice'
-        ? 'Reach Basic Training 9 and job level 10, then visit Master Rowan in the plaza to change jobs.'
-        : 'Hold + to keep learning. ‹ › picks a lower level to cast (cheaper). Drag active skills onto the hotbar.';
+      for (const l of refs.links) l.line.setAttribute('class', sys.level(l.rid) + sys.planned(l.rid, plan) >= l.rl ? 'met' : '');
+      // Each job has its own pool of points.
+      const pools = p.pools(plan), chainAll = sys.jobs(), ti = chainAll.indexOf(tab);
+      const later = tab === 'novice' ? [] : chainAll.slice(ti + 1).filter((j) => pools[j] > 0);
+      refs.pointsLabel.textContent = `${G.Jobs.get(tab).name} skill points`;
+      refs.points.textContent = String(Math.max(0, pools[tab] || 0)) + later.map((j) => ` + ${pools[j]} ${G.Jobs.get(j).name}`).join('');
+      refs.confirm.disabled = !plan.length;
+      refs.clear.disabled = !plan.length;
+      refs.confirm.textContent = plan.length ? `Confirm (${plan.length})` : 'Confirm';
+      const chain = sys.jobs(), earlier = chain.slice(0, chain.indexOf(tab)).filter((j) => j !== 'novice' || p.job === 'novice')
+        .map((j) => [j, pools[j]]).find(([, n]) => n > 0);
+      refs.note.classList.toggle('warnhint', !!earlier);
+      refs.note.textContent = earlier ? `Spend your ${earlier[1]} ${G.Jobs.get(earlier[0]).name} skill point${earlier[1] === 1 ? '' : 's'} before learning ${G.Jobs.get(tab).name} skills.`
+        : tab === 'novice' && p.job === 'novice' ? 'Reach Basic Training 9 and job level 10, then visit Master Rowan in the plaza to change jobs.'
+        : 'Click + to plan points (missing prerequisites are added for you), then press Confirm. ‹ › picks a lower level to cast. Drag active skills onto the hotbar.';
     }
 
     win.render = () => { build(); update(); };
@@ -128,7 +156,7 @@
     game.events.on('statsChanged', refresh);
     game.events.on('levelChanged', refresh);
     // After a job change, open on the new job's tab.
-    game.events.on('jobChanged', () => { tab = null; builtKey = null; if (W.isOpen('skills')) { build(); update(); } });
+    game.events.on('jobChanged', () => { plan.length = 0; tab = null; builtKey = null; if (W.isOpen('skills')) { build(); update(); } });
     return win;
   }
 

@@ -60,7 +60,7 @@
     if (M.cave) {
       const d = caveDist(x, z) + (U.noise2(x * 0.25 + SEED, z * 0.25) - 0.5) * 1.6;
       let h = 0.2 + (U.noise2(x * 0.35, z * 0.35) - 0.5) * 0.12;
-      h += U.smoothstep(-0.2, 2.2, d) * (6.5 + U.fbm(x * 0.08 + SEED, z * 0.08, 3) * 3.5);
+      h += U.smoothstep(-0.2, 2.2, d) * (3.25 + U.fbm(x * 0.08 + SEED, z * 0.08, 3) * 1.75);
       return h;
     }
     let h = 0.25;

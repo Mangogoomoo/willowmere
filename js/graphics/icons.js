@@ -181,6 +181,38 @@
       x.fillText(o.slot || '', 32, 47);
       x.strokeStyle = '#e6c25a'; x.lineWidth = 2; x.strokeRect(16.5, 8.5, 31, 47);
     },
+    ore(x, o) {
+      outlineFill(x, (p) => { p.moveTo(14, 40); p.lineTo(20, 20); p.lineTo(34, 12); p.lineTo(50, 22); p.lineTo(52, 40); p.lineTo(38, 52); p.lineTo(22, 50); p.closePath(); }, o.color);
+      x.strokeStyle = 'rgba(255,255,255,0.6)'; x.lineWidth = 2;
+      x.beginPath(); x.moveTo(20, 20); x.lineTo(30, 32); x.lineTo(34, 12); x.moveTo(30, 32); x.lineTo(38, 52); x.moveTo(30, 32); x.lineTo(50, 22); x.stroke();
+      shine(x, 26, 24, 3, 5, 0.85);
+    },
+    spear(x, o) {
+      x.save(); x.translate(32, 32); x.rotate(-Math.PI / 4);
+      outlineFill(x, (p) => p.rect(-2, -16, 4, 44), '#8b5a33');
+      outlineFill(x, (p) => { p.moveTo(0, -30); p.lineTo(6, -18); p.lineTo(0, -14); p.lineTo(-6, -18); p.closePath(); }, o.color);
+      x.restore();
+    },
+    katar(x, o) {
+      outlineFill(x, (p) => p.rect(20, 40, 24, 12), '#5a3a22');
+      for (const dx of [-5, 5]) outlineFill(x, (p) => { p.moveTo(32 + dx - 3, 40); p.lineTo(32 + dx, 6); p.lineTo(32 + dx + 3, 40); p.closePath(); }, o.color);
+    },
+    knuckle(x, o) {
+      outlineFill(x, (p) => { if (p.roundRect) p.roundRect(10, 22, 44, 22, 8); else p.rect(10, 22, 44, 22); }, o.color);
+      x.fillStyle = 'rgba(0,0,0,0.35)'; for (const cx of [20, 30, 40, 50]) { x.beginPath(); x.arc(cx - 2, 33, 4, 0, Math.PI * 2); x.fill(); }
+    },
+    axe(x, o) {
+      x.save(); x.translate(32, 32); x.rotate(-Math.PI / 4);
+      outlineFill(x, (p) => p.rect(-2.5, -14, 5, 40), '#8b5a33');
+      outlineFill(x, (p) => { p.moveTo(2, -16); p.quadraticCurveTo(20, -18, 18, -4); p.quadraticCurveTo(10, -8, 2, -6); p.closePath(); }, o.color);
+      outlineFill(x, (p) => { p.moveTo(-2, -16); p.quadraticCurveTo(-20, -18, -18, -4); p.quadraticCurveTo(-10, -8, -2, -6); p.closePath(); }, o.color);
+      x.restore();
+    },
+    book(x, o) {
+      outlineFill(x, (p) => p.rect(14, 10, 36, 44), o.color);
+      outlineFill(x, (p) => p.rect(18, 12, 30, 40), U.shade(o.color, 0.15), U.shade(o.color, -0.4), 1);
+      outlineFill(x, (p) => { p.moveTo(32, 20); p.lineTo(32, 42); p.moveTo(24, 28); p.lineTo(40, 28); }, 'rgba(0,0,0,0)', '#e6c25a', 3);
+    },
     crown(x) {
       outlineFill(x, (p) => { p.moveTo(10, 46); p.lineTo(12, 18); p.lineTo(22, 32); p.lineTo(32, 12); p.lineTo(42, 32); p.lineTo(52, 18); p.lineTo(54, 46); p.closePath(); }, '#f5c542', '#8a5a00');
       for (const [cx, c] of [[22, '#ff6b8b'], [32, '#7fc8ff'], [42, '#7dff9a']]) outlineFill(x, (p) => p.arc(cx, 38, 4, 0, Math.PI * 2), c);
@@ -222,6 +254,9 @@
     x.restore();
   }
   const SKILL_SYMBOLS = {
+    s_trap(x, o) { outlineFill(x, (p) => p.rect(14, 30, 36, 14), '#8a6a4a'); for (const cx of [20, 32, 44]) outlineFill(x, (p) => { p.moveTo(cx - 5, 30); p.lineTo(cx, 16); p.lineTo(cx + 5, 30); p.closePath(); }, o.color); },
+    s_hammer(x, o) { x.save(); x.translate(32, 32); x.rotate(-0.6); outlineFill(x, (p) => p.rect(-3, -6, 6, 34), '#8b5a33'); outlineFill(x, (p) => p.rect(-14, -18, 28, 14), o.color); x.restore(); },
+    s_flask(x, o) { outlineFill(x, (p) => { p.moveTo(26, 10); p.lineTo(38, 10); p.lineTo(38, 24); p.lineTo(50, 50); p.lineTo(14, 50); p.lineTo(26, 24); p.closePath(); }, '#eef6ff'); outlineFill(x, (p) => { p.moveTo(20, 38); p.lineTo(44, 38); p.lineTo(50, 50); p.lineTo(14, 50); p.closePath(); }, o.color); },
     s_book(x) { sym(x, (p) => { p.moveTo(14, 18); p.lineTo(32, 22); p.lineTo(50, 18); p.lineTo(50, 46); p.lineTo(32, 50); p.lineTo(14, 46); p.closePath(); }); sym(x, (p) => { p.moveTo(32, 22); p.lineTo(32, 50); }, false, 4); },
     s_cross(x) { sym(x, (p) => { p.moveTo(26, 12); p.lineTo(38, 12); p.lineTo(38, 26); p.lineTo(52, 26); p.lineTo(52, 38); p.lineTo(38, 38); p.lineTo(38, 52); p.lineTo(26, 52); p.lineTo(26, 38); p.lineTo(12, 38); p.lineTo(12, 26); p.lineTo(26, 26); p.closePath(); }); },
     s_zzz(x) { x.save(); x.font = 'bold 24px sans-serif'; x.fillStyle = W; x.strokeStyle = D; x.lineWidth = 4; [['Z', 14, 46], ['z', 30, 34], ['z', 42, 24]].forEach(([t, a, b]) => { x.strokeText(t, a, b); x.fillText(t, a, b); }); x.restore(); },

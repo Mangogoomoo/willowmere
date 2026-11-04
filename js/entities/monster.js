@@ -68,18 +68,25 @@
 
     takeDamage(dmg, attacker) {
       if (!this.alive) return;
+      // Training dummies can't be killed; they just wobble and heal up again.
+      if (this.def.immortal) {
+        this.hp = Math.max(1, this.hp - dmg);
+        this.lastHurtTime = this.game.time;
+        this.sprite.setFlash(1);
+        this.sprite.play('hit', { restart: true });
+        return;
+      }
+      // Lex Aeterna doubles the next damage; any hit wakes a sleeper.
+      if (this.status.lex) { dmg *= 2; delete this.status.lex; const at = this.position.clone(); at.y += this.def.height + 0.6; this.game.overlay.addText(at, 'Lex Aeterna!', 'debuff'); }
+      if (this.status.asleep) delete this.status.asleep;
       this.hp = Math.max(0, this.hp - dmg);
       this.lastHurtTime = this.game.time;
       this.sprite.setFlash(1);
       if (this.hp <= 0) { this.die(attacker); return; }
-      // Flinch: short hit-stun, small knockback away from the attacker.
+      // Flinch: a short hit-stun (no knockback; only some skills push monsters).
       this.hitT = 0.26;
       this.swinging = false;
       this.sprite.play('hit', { restart: true });
-      const dx = this.position.x - attacker.position.x, dz = this.position.z - attacker.position.z;
-      const d = Math.hypot(dx, dz) || 1;
-      const kx = this.position.x + (dx / d) * 0.28, kz = this.position.z + (dz / d) * 0.28;
-      if (this.game.nav.walkable(kx, kz)) this.setPosition(kx, kz);
       if (this.def.noAttack) return;     // e.g. Pupa: it just wobbles
       this.faceTowards(attacker.position.x, attacker.position.z);
       this.aggro = attacker;
@@ -95,7 +102,8 @@
     }
     updateTint() {
       const st = this.status;
-      this.sprite.tint = st.frozen ? [0.6, 0.85, 1.25] : st.poisoned ? [0.75, 1.0, 0.7] : st.slowed ? [0.85, 0.8, 1.05] : null;
+      this.sprite.tint = st.stone ? [0.7, 0.7, 0.7] : st.asleep ? [0.8, 0.85, 1.15] : st.frozen ? [0.6, 0.85, 1.25] : st.stunned ? [1.1, 1.05, 0.6] : st.poisoned ? [0.75, 1.0, 0.7]
+        : st.rooted ? [0.8, 1.05, 0.7] : st.slowed ? [0.85, 0.8, 1.05] : st.disarmed ? [1.0, 0.85, 0.85] : null;
     }
     tickStatus(dt) {
       let changed = false;
@@ -131,7 +139,9 @@
     }
 
     // Shoved away from a point (Magnum Break), stopping at obstacles.
+    maxHpVal() { return this.maxHp || this.def.hp; }
     knockback(fx, fz, dist) {
+      if (this.def.immovable) return;
       const dx = this.position.x - fx, dz = this.position.z - fz, d = Math.hypot(dx, dz) || 1;
       const ux = dx / d, uz = dz / d, nav = this.game.nav;
       let x = this.position.x, z = this.position.z;
@@ -155,7 +165,7 @@
       const p = this.position;
       this.game.effects.death({ x: p.x, y: p.y, z: p.z }, this.def.deathColor);
       this.game.sfx('pop', p);
-      if (killer && killer.gainExp) killer.gainExp(this.def.exp, this.def.jobExp);
+      if (killer && killer.gainExp) killer.gainExp(Math.round(this.def.exp * C.EXP_RATE), Math.round(this.def.jobExp * C.EXP_RATE));
       this.game.loot.rollDrops(this);
       this.game.events.emit('monsterKilled', this);
     }
@@ -170,6 +180,7 @@
     }
 
     update(dt) {
+      if (this.def.immortal && this.alive && this.hp < this.maxHpVal() && this.game.time - (this.lastHurtTime || 0) > 4) this.hp = this.maxHpVal();
       const player = this.game.player, def = this.def;
 
       if (!this.alive) {
@@ -191,7 +202,7 @@
 
       this.tickStatus(dt);
       if (!this.alive) return;
-      if (this.status.frozen) { this.moving = false; this.sprite.speed = 0; return; }
+      if (this.status.frozen || this.status.stunned || this.status.stone || this.status.asleep) { this.moving = false; this.sprite.speed = 0; return; }
       this.sprite.speed = this.status.slowed ? 0.6 : 1;
 
       this.attackCd -= dt;
@@ -213,7 +224,8 @@
       const nav = this.game.nav;
 
       // Aggressive monsters attack anyone who wanders close (unless hidden or playing dead).
-      if (def.aggressive && (this.state === 'idle' || this.state === 'wander') && player && player.alive && !player.hidden && !player.playingDead
+      if (def.aggressive && (this.state === 'idle' || this.state === 'wander') && player && player.alive && !player.hidden && !player.playingDead && !player.cloaked
+          && !(player.derived.extra && player.derived.extra.gangster && !player.moving && !player.attacking)
           && this.distanceTo(player) < (def.aggroRange || 7)) {
         this.aggroOn(player);
         const at = this.position.clone(); at.y += def.height + 0.3;
@@ -282,7 +294,7 @@
         case 'attack': {
           speed = def.chaseSpeed * slow;
           const homeDist = Math.hypot(this.position.x - this.spawnArea.x, this.position.z - this.spawnArea.z);
-          if (!player.alive || player.playingDead || player.hidden || this.aggro !== player || homeDist > def.leash + this.spawnArea.r) {
+          if (!player.alive || player.playingDead || player.hidden || player.cloaked || this.aggro !== player || homeDist > def.leash + this.spawnArea.r) {
             this.state = 'return';
             this.aggro = null;
             this.setPath(nav.findPath(this.position.x, this.position.z, this.home.x, this.home.z, 8000));
@@ -324,7 +336,7 @@
 
       const stop = (this.state === 'chase' || this.state === 'attack') ? (this.goalStop || 0) : 0;
       if (this.state === 'wander' || this.state === 'idle') speed *= slow;
-      this.moving = !this.swinging && def.speed > 0 && this.followPath(dt, speed, stop);
+      this.moving = !this.swinging && def.speed > 0 && !this.status.rooted && this.followPath(dt, speed, stop);
 
       if (this.swinging) this.sprite.play('attack');
       else if (this.moving) this.sprite.play('walk', { speed: speed / def.speed });

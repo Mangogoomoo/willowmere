@@ -116,8 +116,8 @@
         const e = list[i];
         if (!e) { grid.append(h('div.cell.empty')); continue; }
         const item = G.Items.get(e.id);
-        const cell = h('div.cell' + (selected === e.uid ? '.sel' : '') + '.r-' + item.rarity, {
-          draggable: 'true', tabindex: '0', role: 'button', 'aria-label': `${item.name}${e.qty > 1 ? ', ' + e.qty : ''}`,
+        const cell = h('div.cell' + (selected === e.uid ? '.sel' : '') + '.r-' + item.rarity + (G.Items.isCarded(e) ? '.carded' : ''), {
+          draggable: 'true', tabindex: '0', role: 'button', 'aria-label': `${G.Items.displayName(e)}${e.qty > 1 ? ', ' + e.qty : ''}`,
           'data-slot': item.type === 'card' ? G.Items.CARD_SLOTS[item.cardSlot].long : null,
           onclick: () => { selected = e.uid; win.render(); },
           ondblclick: () => { act(e); },
@@ -125,7 +125,8 @@
           onkeydown: (ev) => { if (ev.key === 'Enter') act(e); },
           ondragstart: (ev) => { ev.dataTransfer.setData('text/x-item', JSON.stringify({ uid: e.uid, id: e.id })); ev.dataTransfer.effectAllowed = 'copyMove'; G.Tooltip.hide(); },
         }, h('img', { src: G.Icons.url(e.id), alt: '', draggable: 'false' }), e.qty > 1 ? h('span.qty', { text: String(e.qty) }) : null,
-          item.type === 'card' ? h('span.cslot', { text: G.Items.CARD_SLOTS[item.cardSlot].tag, title: `Goes into: ${G.Items.CARD_SLOTS[item.cardSlot].long}` }) : null);
+          item.type === 'card' ? h('span.cslot', { text: G.Items.CARD_SLOTS[item.cardSlot].tag, title: `Goes into: ${G.Items.CARD_SLOTS[item.cardSlot].long}` }) : null,
+          e.refine ? h('span.refbadge', { text: '+' + e.refine }) : null);
         G.Tooltip.bind(cell, () => G.itemTooltipCompare(e, p, { hint: item.type === 'equip' ? 'Double-click to equip.' : item.type === 'use' ? 'Double-click or right-click to use. Drag to the hotbar.' : item.type === 'card' ? 'Double-click to insert into equipment.' : '' }));
         grid.append(cell);
       }
@@ -137,7 +138,7 @@
         const item = G.Items.get(sel.id);
         const qty = h('input.qtyin', { type: 'number', min: '1', max: String(sel.qty), value: String(sel.qty), 'aria-label': 'Quantity to drop' });
         actions.append(
-          h('span.selname', { text: item.name }),
+          h('span.selname' + (G.Items.isCarded(sel) ? '.carded' : ''), { text: G.Items.displayName(sel) }),
           item.type !== 'etc' ? h('button.btn.small', { type: 'button', onclick: () => act(sel) }, item.type === 'equip' ? 'Equip' : item.type === 'card' ? 'Insert' : 'Use') : null,
           sel.qty > 1 ? qty : null,
           h('button.btn.small.ghost', { type: 'button', onclick: () => win.dropSelected(sel.uid, sel.qty > 1 ? Math.max(1, Math.min(sel.qty, parseInt(qty.value, 10) || 1)) : 1) }, 'Drop'));
@@ -181,7 +182,7 @@
           if (p.inventory.insertCard(cardEntry.uid, t)) { cardEntry = null; W.close('cards'); }
         });
         const row = h('div.shop-row', null, h('img', { src: G.Icons.url(t.entry.id), alt: '' }),
-          h('span.sname2', null, it.name, h('small', { text: t.worn ? ' (worn)' : '' })),
+          h('span.sname2' + (G.Items.isCarded(t.entry) ? '.carded' : ''), null, G.Items.displayName(t.entry), h('small', { text: t.worn ? ' (worn)' : '' })),
           h('span.sprice', { text: `${free} free` }), h('span'), btn);
         G.Tooltip.bind(row, () => G.itemTooltip(t.entry, p, { equipped: t.worn }));
         b.append(row);
@@ -214,13 +215,13 @@
       const item = e && G.Items.get(e.id);
       const el = h('div.eslot' + (e ? '.full' : ''), {
         tabindex: e ? '0' : null, role: e ? 'button' : null,
-        'aria-label': e ? `${def.name}: ${item.name}` : `${def.name}: empty`,
+        'aria-label': e ? `${def.name}: ${G.Items.displayName(e)}` : `${def.name}: empty`,
         ondblclick: () => { if (e) p.inventory.unequip(slotId); },
         oncontextmenu: (ev) => { ev.preventDefault(); if (e) p.inventory.unequip(slotId); },
         onkeydown: (ev) => { if (ev.key === 'Enter' && e) p.inventory.unequip(slotId); },
       },
       h('div.eicon', null, e ? h('img', { src: G.Icons.url(e.id), alt: '' }) : null),
-      h('div.etext', null, h('small', { text: SHORT[slotId] || def.name }), h('span', { text: e ? item.name : 'Empty' })));
+      h('div.etext', null, h('small', { text: SHORT[slotId] || def.name }), h('span' + (G.Items.isCarded(e) ? '.carded' : ''), { text: e ? G.Items.displayName(e) : 'Empty' })));
       if (e) G.Tooltip.bind(el, () => G.itemTooltip(e, p, { equipped: true, hint: 'Double-click to remove.' }));
       return el;
     }
@@ -301,6 +302,8 @@
         h('label.opt.check', null,
           h('input', { type: 'checkbox', checked: !document.getElementById('fps').hidden, onchange: (e) => { document.getElementById('fps').hidden = !e.target.checked; G.SaveSystem.setPrefs({ fps: e.target.checked }); } }),
           h('span', { text: 'Show frames per second' })),
+        h('h3', { text: 'Controls' }),
+        h('div.opt-btns', null, h('button.btn.small', { type: 'button', onclick: () => keysWindow(game).open() }, 'Key bindings…')),
         h('h3', { text: 'Game' }),
         h('label.opt.check', null,
           h('input', { type: 'checkbox', checked: !!game.autoLoot, onchange: (e) => game.extras.setAutoLoot(e.target.checked) }),
@@ -316,6 +319,50 @@
     return win;
   }
 
+  /* ===================================================== Key bindings */
+  let keysWin = null;
+  function keysWindow(game) {
+    if (keysWin) return keysWin;
+    const W = game.windows, KB = G.Keybinds;
+    const win = W.create('keys', 'Key bindings', { width: 400, pos: () => ({ x: window.innerWidth / 2 - 200, y: 80 }) });
+    let capture = null;   // { action, slot, btn }
+    const finish = () => { capture = null; game.input.capturing = false; win.render(); game.hotbar.renderKeys(); game.menu.relabel(); };
+    window.addEventListener('keydown', (e) => {
+      if (!capture) return;
+      e.preventDefault(); e.stopPropagation();
+      if (['Shift', 'Control', 'Alt', 'Meta'].includes(e.key)) return;   // wait for the real key
+      if (e.key === 'Escape') { finish(); return; }
+      if (e.key === 'Backspace' || e.key === 'Delete') { KB.set(capture.action, capture.slot, ''); finish(); return; }
+      const combo = KB.comboFromEvent(e);
+      if (!combo) return;
+      const stolen = KB.set(capture.action, capture.slot, combo);
+      if (stolen) game.log.add(`${combo} was moved from “${KB.actionLabel(stolen)}”.`, 'info');
+      finish();
+    }, true);
+    win.open = () => { W.open('keys'); win.render(); };
+    win.render = () => {
+      const b = win.body;
+      b.textContent = '';
+      const list = h('div.keylist');
+      for (const a of KB.ACTIONS) {
+        const btn = (slot) => {
+          const k = KB.map[a.id][slot];
+          const el = h('button.keybtn' + (capture && capture.action === a.id && capture.slot === slot ? '.listening' : ''), {
+            type: 'button', 'aria-label': `${a.label}, ${slot ? 'secondary' : 'primary'} key: ${k || 'none'}`,
+            onclick: () => { capture = { action: a.id, slot }; game.input.capturing = true; win.render(); },
+          }, capture && capture.action === a.id && capture.slot === slot ? 'Press a key…' : (k || '—'));
+          return el;
+        };
+        list.append(h('div.keyrow', null, h('span', { text: a.label }), btn(0), btn(1)));
+      }
+      b.append(list,
+        h('div.opt-btns', null, h('button.btn.small.ghost', { type: 'button', onclick: () => { KB.reset(); finish(); } }, 'Reset to defaults')),
+        h('p.hint', { text: 'Click a key, then press the new one (Alt and Ctrl combinations work). Backspace clears it, Esc cancels. Esc and Shift (compare gear) are fixed.' }));
+    };
+    keysWin = win;
+    return win;
+  }
+
   /* ===================================================== Menu bar */
   function menuBar(game) {
     const el = document.getElementById('menubar');
@@ -323,15 +370,19 @@
       ['status', 'Status', 'Alt+A'], ['inventory', 'Items', 'Alt+E'], ['equipment', 'Gear', 'Alt+Q'], ['skills', 'Skills', 'Alt+S'], ['quests', 'Quests', 'U'], ['options', 'Options', 'O'],
     ];
     const btns = {};
-    items.forEach(([id, label, key]) => {
-      const b = h('button.mbtn', { type: 'button', 'aria-pressed': 'false', onclick: () => game.windows.toggle(id) }, label, h('kbd', { text: key }));
+    items.forEach(([id, label]) => {
+      const b = h('button.mbtn', { type: 'button', 'aria-pressed': 'false', onclick: () => game.windows.toggle(id) }, label, h('kbd', { text: G.Keybinds.primary(id) }));
       btns[id] = b; el.append(b);
     });
-    const loot = h('button.mbtn.toggle', { type: 'button', 'aria-pressed': String(!!game.autoLoot), onclick: () => game.extras.setAutoLoot(!game.autoLoot) }, 'Auto-loot', h('kbd', { text: 'L' }));
+    const loot = h('button.mbtn.toggle', { type: 'button', 'aria-pressed': String(!!game.autoLoot), onclick: () => game.extras.setAutoLoot(!game.autoLoot) }, 'Auto-loot', h('kbd', { text: G.Keybinds.primary('autoloot') }));
     el.prepend(loot);
     el.append(h('button.mbtn', { type: 'button', title: 'Monster and item encyclopedia (opens in a new tab)', onclick: () => window.open(G.Config.DB_URL, '_blank', 'noopener') }, 'Database', h('kbd', { text: '↗' })));
     el.append(h('button.mbtn', { type: 'button', onclick: () => game.save.save() }, 'Save'));
     return {
+      relabel() {
+        for (const id in btns) btns[id].querySelector('kbd').textContent = G.Keybinds.primary(id) || '·';
+        loot.querySelector('kbd').textContent = G.Keybinds.primary('autoloot') || '·';
+      },
       sync() {
         for (const id in btns) btns[id].setAttribute('aria-pressed', String(game.windows.isOpen(id)));
         loot.setAttribute('aria-pressed', String(!!game.autoLoot));

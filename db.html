@@ -23,7 +23,13 @@
     .give-submit:hover{background:#2d5940}
     .give-submit:disabled{opacity:.55;cursor:wait}
     .give-status{min-height:17px;margin:8px 0 0;font-size:11px;color:var(--muted)}
-    .give-status.ok{color:var(--green)}.give-status.error{color:#ff9b9b}@media(max-width:460px){.modal-head{padding:15px}.modal-body{padding:15px}.modal-icon{width:62px;height:62px}.modal-title h2{font-size:19px}.detail-grid{grid-template-columns:1fr 1fr}}.footer{text-align:center;color:#78859c;font-size:11px;margin-top:28px}
+    .give-status.ok{color:var(--green)}.give-status.error{color:#ff9b9b}
+    .zeny-panel{margin:0 0 22px;max-width:620px}
+    .zeny-panel .give-fields{grid-template-columns:minmax(0,1fr) 150px}
+    .zeny-quick{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+    .zeny-quick button{padding:5px 10px;border-radius:999px;border:1px solid var(--line);background:#0b1220;color:var(--gold);font:inherit;font-size:12px;font-weight:700;cursor:pointer}
+    .zeny-quick button:hover{border-color:var(--gold)}
+    .zeny-note{margin:6px 0 0;font-size:11px;color:var(--muted)}@media(max-width:460px){.modal-head{padding:15px}.modal-body{padding:15px}.modal-icon{width:62px;height:62px}.modal-title h2{font-size:19px}.detail-grid{grid-template-columns:1fr 1fr}}.footer{text-align:center;color:#78859c;font-size:11px;margin-top:28px}
     @media(max-width:600px){.wrap{padding:18px 12px 40px}.top{align-items:flex-start}.brand h1{font-size:21px}.back{padding:9px 10px;font-size:12px}.hero{padding:19px}.hero h2{font-size:23px}.monster-grid{grid-template-columns:1fr}.facts{grid-template-columns:repeat(2,1fr)}.tab{padding:11px 12px}.toolbar select{flex:1}.card-head{padding:13px}.drop-wrap{padding:0 12px 12px}}
   </style>
 </head>
@@ -38,6 +44,20 @@
       <div class="stats"><div class="stat"><b id="monster-total">—</b><span>Monster types</span></div><div class="stat"><b id="item-total">—</b><span>Known items</span></div><div class="stat"><b id="drop-total">—</b><span>Drop entries</span></div></div>
     </section>
     <nav class="tabs" aria-label="Database sections"><button class="tab active" data-tab="monsters">Monsters & Drops</button><button class="tab" data-tab="items">Item Database</button></nav>
+    <section class="give-panel zeny-panel" aria-labelledby="zeny-title">
+      <h3 id="zeny-title">Debug: give Zeny</h3>
+      <div class="give-fields">
+        <input id="zeny-player-name" type="text" autocomplete="off" placeholder="Character name" aria-label="Character name">
+        <input id="zeny-amount" type="number" min="1" max="1000000000" step="1" value="10000" aria-label="Amount of Zeny">
+      </div>
+      <div class="zeny-quick" role="group" aria-label="Quick amounts">
+        <button type="button" data-zeny="1000">+1K</button><button type="button" data-zeny="10000">+10K</button>
+        <button type="button" data-zeny="100000">+100K</button><button type="button" data-zeny="1000000">+1M</button>
+      </div>
+      <button id="give-zeny-submit" class="give-submit" type="button">Send Zeny</button>
+      <p id="give-zeny-status" class="give-status" role="status" aria-live="polite"></p>
+      <p class="zeny-note">The character must be online in another tab of this same website. Up to 1,000,000,000 per send; a character can hold at most 2,147,483,647.</p>
+    </section>
     <section id="monster-section">
       <div class="toolbar"><label class="search"><input id="monster-search" type="search" placeholder="Search monsters or drop items…" autocomplete="off"></label><select id="monster-sort" aria-label="Sort monsters"><option value="level">Sort: Level</option><option value="name">Sort: Name</option><option value="drops">Sort: Most drops</option></select></div>
       <div class="section-title"><h3>Monster encyclopedia</h3><span class="count" id="monster-count"></span></div><div class="monster-grid" id="monster-grid"></div>
@@ -222,6 +242,18 @@
       if (debugChannel) {
         debugChannel.addEventListener('message', event => {
           const data = event.data || {};
+          if (data.type === 'give-zeny-result' && pendingGifts.has(data.requestId)) {
+            const pending = pendingGifts.get(data.requestId);
+            clearTimeout(pending.timer);
+            pendingGifts.delete(data.requestId);
+            const zs = $('give-zeny-status');
+            zs.textContent = data.ok
+              ? `Sent ${data.given.toLocaleString()} Zeny to ${data.characterName}${data.given < pending.amount ? ' (capped at the maximum)' : ''}. They now have ${data.total.toLocaleString()} z.`
+              : (data.message || 'Delivery failed.');
+            zs.className = `give-status ${data.ok ? 'ok' : 'error'}`;
+            $('give-zeny-submit').disabled = false;
+            return;
+          }
           if (data.type !== 'give-item-result' || !pendingGifts.has(data.requestId)) return;
           const pending = pendingGifts.get(data.requestId);
           clearTimeout(pending.timer);
@@ -276,6 +308,33 @@
           debugChannel.postMessage({ type: 'give-item', requestId, playerName, itemId, qty });
           return;
         }
+      });
+
+      // Give Zeny: same live channel as items.
+      document.querySelectorAll('[data-zeny]').forEach(b => b.addEventListener('click', () => { $('zeny-amount').value = b.dataset.zeny; }));
+      // Remember the character name between the Zeny panel and the item form.
+      let lastName = '';
+      document.addEventListener('input', event => {
+        if (event.target.id === 'zeny-player-name' || event.target.id === 'give-player-name') lastName = event.target.value;
+      });
+      new MutationObserver(() => { const f = $('give-player-name'); if (f && !f.value && lastName) f.value = lastName; })
+        .observe($('item-modal'), { childList: true, subtree: true });
+      $('give-zeny-submit').addEventListener('click', () => {
+        const playerName = $('zeny-player-name').value.trim(), amount = Number($('zeny-amount').value), status = $('give-zeny-status');
+        const fail = (msg) => { status.textContent = msg; status.className = 'give-status error'; };
+        if (!playerName) return fail('Enter the character name first.');
+        if (!Number.isInteger(amount) || amount < 1 || amount > 1000000000) return fail('Amount must be a whole number between 1 and 1,000,000,000.');
+        if (!debugChannel) return fail('This browser does not support live debug delivery. Try a current Chrome or Edge version.');
+        const requestId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        $('give-zeny-submit').disabled = true;
+        status.textContent = `Looking for ${playerName} online…`; status.className = 'give-status';
+        const timer = setTimeout(() => {
+          pendingGifts.delete(requestId);
+          $('give-zeny-submit').disabled = false;
+          fail(`No response from ${playerName}. Make sure their character is online in another tab on this same website.`);
+        }, 3500);
+        pendingGifts.set(requestId, { timer, amount });
+        debugChannel.postMessage({ type: 'give-zeny', requestId, playerName, amount });
       });
 
       document.addEventListener('click', event => {

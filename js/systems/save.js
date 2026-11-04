@@ -42,7 +42,7 @@
     serialize() {
       const p = this.game.player;
       const eq = {};
-      for (const s in p.equipment) if (p.equipment[s]) eq[s] = { id: p.equipment[s].id, cards: p.equipment[s].cards };
+      for (const s in p.equipment) if (p.equipment[s]) eq[s] = { id: p.equipment[s].id, cards: p.equipment[s].cards, refine: p.equipment[s].refine || 0, forgedBy: p.equipment[s].forgedBy, element: p.equipment[s].element };
       return {
         version: VERSION,
         savedAt: Date.now(),

@@ -179,7 +179,8 @@
     const item = G.Items.get(entry.id);
     const rarity = G.Items.RARITY[item.rarity] || G.Items.RARITY.common;
     const slots = item.slots ? ` [${item.slots}]` : '';
-    let html = `<div class="tt-name" style="color:${rarity.color}">${esc(item.name)}${slots}${entry.qty > 1 ? ` <span class="tt-qty">×${entry.qty}</span>` : ''}</div>`;
+    const nameColor = G.Items.isCarded(entry) ? G.Items.CARDED_COLOR : rarity.color;
+    let html = `<div class="tt-name" style="color:${nameColor}">${esc(G.Items.displayName(entry))}${slots}${entry.qty > 1 ? ` <span class="tt-qty">×${entry.qty}</span>` : ''}</div>`;
     let kind = { use: 'Consumable', etc: 'Material', card: item.type === 'card' ? `Card for ${G.Items.CARD_SLOTS[item.cardSlot].name.toLowerCase()}` : '' }[item.type];
     if (item.type === 'equip') {
       const slotName = item.slot === 'acc' ? 'Accessory' : G.Items.EQUIP_SLOTS.find((s) => s.id === item.slot).name;
@@ -188,8 +189,14 @@
     html += `<div class="tt-type">${kind}${item.rarity !== 'common' && item.type !== 'card' ? `, ${rarity.name.toLowerCase()}` : ''}</div>`;
 
     if (item.type === 'equip') {
-      if (item.slot === 'weapon') html += `<div class="tt-main">ATK ${item.bonus.atk || 0}</div>`;
+      if (item.slot === 'weapon') html += `<div class="tt-main">ATK ${item.bonus.atk || 0}${item.wlv ? ` <span class="tt-wlv">Weapon level ${item.wlv}</span>` : ''}</div>`;
       else if (item.bonus.def) html += `<div class="tt-main">DEF ${item.bonus.def}</div>`;
+      const rt = G.Refine && G.Refine.table(item);
+      if (entry.refine) {
+        const rb = G.Refine.bonus(entry);
+        html += `<div class="tt-refine">Refined +${entry.refine}: ${rb.atk ? `ATK +${rb.atk}` : `DEF +${rb.def}`}</div>`;
+      }
+      if (rt) html += `<div class="tt-req">Refinable (safe up to +${rt.safe}, max +${G.Refine.MAX})</div>`;
       const extra = Object.assign({}, item.bonus);
       if (item.slot !== 'weapon') delete extra.def;
       html += bonusLines(extra, item.slot === 'weapon');
@@ -203,7 +210,7 @@
       const lvOk = player.baseLevel >= (item.reqLevel || 1);
       req.push(`<span class="${lvOk ? '' : 'bad'}">Base level ${item.reqLevel || 1}</span>`);
       if (item.jobs !== 'all') {
-        const ok = item.jobs.includes(player.job);
+        const ok = G.Jobs.canUse(item.jobs, player.job);
         req.push(`<span class="${ok ? '' : 'bad'}">${item.jobs.map((j) => j[0].toUpperCase() + j.slice(1)).join(', ')}</span>`);
       }
       html += `<div class="tt-req">Requires ${req.join('; ')}</div>`;

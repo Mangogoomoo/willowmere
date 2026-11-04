@@ -64,17 +64,21 @@
     }
 
     sphere(c, r, fill, opts) {
-      this.prims.push(Object.assign({ type: 'sphere', c, r, fill, sx: 1, sy: 1, bias: 0 }, opts || {}));
+      this.prims.push(Object.assign({ type: 'sphere', c, r, fill, sx: 1, sy: 1, bias: 0, pose: this.pose }, opts || {}));
     }
     capsule(a, b, r, fill, opts) {
-      this.prims.push(Object.assign({ type: 'capsule', a, b, r, fill, bias: 0 }, opts || {}));
+      this.prims.push(Object.assign({ type: 'capsule', a, b, r, fill, bias: 0, pose: this.pose }, opts || {}));
     }
     custom(at, draw, bias) {
-      this.prims.push({ type: 'custom', c: at, draw, bias: bias || 0 });
+      this.prims.push({ type: 'custom', c: at, draw, bias: bias || 0, pose: this.pose });
     }
 
+    // Each primitive keeps the pose that was active when it was added
+    // (so a mount and its rider can be posed separately).
     render(ctx) {
+      const finalPose = this.pose;
       for (const p of this.prims) {
+        this.pose = p.pose === undefined ? finalPose : p.pose;
         if (p.type === 'capsule') {
           p.pa = this.proj(p.a); p.pb = this.proj(p.b);
           p.depth = (p.pa.depth + p.pb.depth) / 2 + p.bias;
@@ -85,12 +89,14 @@
       }
       const sorted = this.prims.map((p, i) => [p, i]).sort((a, b) => a[0].depth - b[0].depth || a[1] - b[1]);
       for (const [p] of sorted) {
+        this.pose = p.pose === undefined ? finalPose : p.pose;
         ctx.globalAlpha = p.alpha == null ? 1 : p.alpha;
         if (p.type === 'sphere') this._drawSphere(ctx, p);
         else if (p.type === 'capsule') this._drawCapsule(ctx, p);
         else p.draw(ctx, p.pc, this);
       }
       ctx.globalAlpha = 1;
+      this.pose = finalPose;
     }
 
     _drawSphere(ctx, p) {

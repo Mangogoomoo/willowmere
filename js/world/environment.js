@@ -697,7 +697,7 @@
         const x = U.randRange(rng, -100, 100), z = U.randRange(rng, -100, 100), d = TRd(x, z);
         if (d < 0.2 || d > 3) continue;
         const s = 0.5 + rng() * 1.4, y = TR.height(x, z);
-        stal.push({ x, y: y - 0.1, z, ry: rng() * 6, s: [s * 0.6, s * (1.8 + rng() * 1.6), s * 0.6], color: _c.setHSL(0.07, 0.12, 0.55 + rng() * 0.25).getStyle() });
+        stal.push({ x, y: y - 0.1, z, ry: rng() * 6, s: [s * 0.6, s * (1.0 + rng() * 0.9), s * 0.6], color: _c.setHSL(0.07, 0.12, 0.55 + rng() * 0.25).getStyle() });
         if (d < 0.9) this.nav.blockCircle(x, z, s * 0.35);
       }
       this.instanced(U.mergeParts([{ geo: cone, color: '#8a7f70', pos: [0, 0.5, 0], jitter: 0.2 }]), this.propMat, stal, { cast: true });

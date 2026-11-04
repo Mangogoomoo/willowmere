@@ -102,21 +102,38 @@
       const at = mon.position.clone(); at.y += d.height * 0.55;
       const crit = !opts.mult && Math.random() * 100 < D.crit;
       const hitPct = U.clamp(80 + D.hit - d.flee + (opts.hitBonus || 0), 5, 100);
-      if (!crit && Math.random() * 100 >= hitPct) { game.overlay.addText(at, 'Miss', 'miss'); game.sfx('miss', at); return 0; }
+      // Pneuma: ranged physical attacks can't reach anyone standing inside it.
+      const ranged = opts.ranged || (!opts.mult && D.weaponType === 'bow') || (opts.mult && D.weaponType === 'bow' && opts.ranged !== false && opts.skill && /strafe|shower|arrow|repel|blitz|musical|throw/.test(opts.skill));
+      if (ranged && game.fields && game.fields.list.some((f) => f.kind === 'pneuma' && Math.hypot(mon.position.x - f.x, mon.position.z - f.z) <= f.r)) {
+        game.overlay.addText(at, 'Pneuma', 'miss'); return 0;
+      }
+      if (!crit && !opts.noMiss && Math.random() * 100 >= hitPct) { game.overlay.addText(at, 'Miss', 'miss'); game.sfx('miss', at); return 0; }
       const prov = mon.provoke && mon.provoke.until > game.time ? mon.provoke : null;
       const def = d.def * (prov ? 1 - prov.defDown : 1);
       let dmg;
       if (crit) dmg = (D.statusAtk + D.weaponAtk + D.atkBonus) * 1.4;
       else {
         const weapon = D.weaponAtk * U.randRange(Math.random, D.weaponMinFrac, 1);
-        dmg = ((D.statusAtk + weapon + D.atkBonus) * (opts.mult || 1) + (opts.flat || 0)) * (1 - Math.min(def, 90) / 100) - (d.softDef || 0);
+        const st = mon.status || {};
+        const defMult = (st.signum ? 0.8 : 1) * (st.strip_shield ? 0.85 : 1) * (st.strip_armor ? 0.6 : 1);
+        const hard = opts.ignoreDef ? 0 : Math.min(def * defMult, 90), soft = opts.ignoreDef ? 0 : (d.softDef || 0) * defMult;
+        const X = D.extra || {}, mel = mon.elementOverride || d.element || 'neutral';
+        if (X.demonBane && /shadow|ghost|undead/.test(mel)) opts.flat = (opts.flat || 0) + X.demonBane;
+        if (opts.skill === 'sonic_blow' && X.sonicAccel) opts.mult = (opts.mult || 1) * 1.5;
+        dmg = ((D.statusAtk + weapon + D.atkBonus) * (opts.mult || 1) + (opts.flat || 0)) * (1 - hard / 100) - soft;
       }
-      dmg *= Combat.element(opts.element || 'neutral', d.element || 'neutral');
+      dmg *= 1 + (D.atkPct || 0) / 100;
+      dmg *= Combat.element(opts.element || D.weaponElement || 'neutral', mon.elementOverride || d.element || 'neutral');
       dmg = Math.max(1, Math.round(dmg));
       game.effects.hit(at, crit);
       game.sfx(crit ? 'crit' : 'hit', at);
       game.overlay.addText(at, String(dmg), crit ? 'crit' : opts.mult ? 'skilldmg' : 'dmg');
       mon.takeDamage(dmg, player);
+      // Enchant Poison: a chance to poison on every hit.
+      if (mon.alive && D.poisonChance && Math.random() * 100 < D.poisonChance && !mon.status.poisoned) {
+        mon.addStatus('poisoned', 10, { dps: Math.max(1, Math.round(D.statusAtk / 8)) });
+        game.overlay.addText(at, 'Poisoned', 'debuff');
+      }
       return dmg;
     },
 
@@ -135,7 +152,20 @@
 
     // Normal attack, including the Thief's Double Attack proc.
     playerAttack(player, mon) {
+      const D = player.derived;
+      // Monk's Raging Trifecta Blow: sometimes a normal attack becomes a 3-hit combo.
+      if (D.tripleAttack && Math.random() < 0.2) {
+        for (let i = 0; i < 3; i++) player.game.after(i * 0.1, () => { if (mon.alive) Combat.physical(player, mon, { mult: 1 + 0.2 * D.tripleAttack }); });
+        player.game.overlay.addText(player.position, 'Trifecta!', 'skill');
+        return;
+      }
       Combat.physical(player, mon);
+      // Rogue's Snatcher: sometimes steal on hit.
+      if (D.snatcher && mon.alive && !mon.stolen && Math.random() * 100 < D.snatcher) {
+        const table = mon.def.drops || [];
+        const pick = table.filter((x) => !/^card_/.test(x.id))[Math.floor(Math.random() * Math.max(1, table.length - 1))];
+        if (pick && player.inventory.add(pick.id, 1).added) { mon.stolen = true; player.game.log.add(`Snatched ${G.Items.get(pick.id).name}!`, 'loot'); }
+      }
       if (mon.alive && player.derived.doubleAttack && Math.random() * 100 < player.derived.doubleAttack) {
         player.game.after(0.12, () => { if (mon.alive) Combat.physical(player, mon); });
       }
@@ -145,15 +175,20 @@
     monsterAttack(mon, player) {
       const D = player.derived, d = mon.def, game = mon.game, U = G.Utils;
       const at = player.position.clone(); at.y += 1.3;
-      const hitPct = U.clamp(80 + d.hit - D.flee, 5, 95);
+      const st = mon.status || {};
+      const hitPct = U.clamp((80 + d.hit - D.flee) * (st.blinded ? 0.75 : 1) * (st.strip_helm ? 0.85 : 1), 5, 95);
       if (Math.random() * 100 >= hitPct) { game.overlay.addText(at, 'Miss', 'miss'); game.sfx('miss', at); return; }
+      if (Combat.preHit) { const why = Combat.preHit(player, mon); if (why) { game.overlay.addText(at, why, 'miss'); game.sfx('miss', at); return; } }
+      if (D.block && Math.random() * 100 < D.block) { game.overlay.addText(at, 'Blocked', 'miss'); game.sfx('miss', at); return; }
       const prov = mon.provoke && mon.provoke.until > game.time ? mon.provoke : null;
-      const raw = U.randInt(Math.random, d.atk[0], d.atk[1]) * (prov ? 1 + prov.atkUp : 1);
-      const dmg = Math.max(1, Math.round(raw * (1 - Math.min(D.def, 90) / 100) - D.softDef));
+      const raw = U.randInt(Math.random, d.atk[0], d.atk[1]) * (prov ? 1 + prov.atkUp : 1) * (mon.status && mon.status.disarmed ? 0.75 : 1);
+      let dmg = Math.max(1, Math.round(raw * (1 - Math.min(D.def, 90) / 100) - D.softDef));
+      if (Combat.modHit) dmg = Combat.modHit(player, mon, dmg);
       game.effects.hit(at, false);
       game.overlay.addText(at, String(dmg), 'hurt');
       game.sfx('hurt');
       player.takeDamage(dmg, mon);
+      if (Combat.postHit) Combat.postHit(player, mon, dmg);
     },
   };
 
