@@ -44,40 +44,63 @@
         const user = h('input#auth-user', { type: 'text', maxlength: '24', autocomplete: 'username', spellcheck: 'false', placeholder: 'Username' });
         const pass = h('input#auth-pass', { type: 'password', maxlength: '200', autocomplete: 'current-password', placeholder: 'Password' });
         const pass2 = h('input#auth-pass2', { type: 'password', maxlength: '200', autocomplete: 'new-password', placeholder: 'Repeat password' });
-        const err = h('p.err', { role: 'alert' });
-        const go = h('button.btn.big', { type: 'button' }, h('span', { text: 'Log in' }));
-        const swap = h('button.btn.ghost', { type: 'button' }, 'Create an account');
-        const row2 = h('label.cc-group', null, h('span.cc-label', { text: 'Repeat password' }), pass2);
+        const err = h('p.auth-err', { role: 'alert' });
+        const go = h('button.auth-go', { type: 'button' }, h('span', { text: 'Log in' }));
+        const swap = h('button.auth-swap', { type: 'button' }, 'Create an account');
+        const row2 = h('label.auth-field', null, h('span.auth-label', { text: 'Repeat password' }), h('span.auth-input', null, pass2));
         const render = () => {
           go.firstChild.textContent = mode === 'login' ? 'Log in' : 'Create account';
           swap.textContent = mode === 'login' ? 'Create an account' : 'I already have an account';
           row2.hidden = mode === 'login';
+          err.hidden = true;
           pass.autocomplete = mode === 'login' ? 'current-password' : 'new-password';
           err.textContent = '';
         };
+        const showErr = (t) => { err.textContent = t; err.hidden = !t; };
         swap.addEventListener('click', () => { mode = mode === 'login' ? 'register' : 'login'; render(); user.focus(); });
         const submit = async () => {
           const u = user.value.trim(), p = pass.value;
-          if (!/^[A-Za-z0-9_]{3,24}$/.test(u)) { err.textContent = 'Usernames are 3 to 24 letters, numbers or underscores.'; return; }
+          if (!/^[A-Za-z0-9_]{3,24}$/.test(u)) { showErr('Usernames are 3 to 24 letters, numbers or underscores.'); return; }
           if (mode === 'register') {
-            if (p.length < 8) { err.textContent = 'Passwords need at least 8 characters.'; return; }
-            if (p !== pass2.value) { err.textContent = 'The passwords don’t match.'; return; }
+            if (p.length < 8) { showErr('Passwords need at least 8 characters.'); return; }
+            if (p !== pass2.value) { showErr('The passwords don’t match.'); return; }
           }
-          go.disabled = true; err.textContent = '';
+          go.disabled = true; showErr('');
           try {
             const r = await Online.api(mode === 'login' ? '/api/login' : '/api/register', 'POST', { username: u, password: p });
             Online.setToken(r.token); Online.username = r.username;
             resolve();
-          } catch (e) { err.textContent = e.message; } finally { go.disabled = false; }
+          } catch (e) { showErr(e.message); } finally { go.disabled = false; }
         };
         go.addEventListener('click', submit);
         for (const el of [user, pass, pass2]) el.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') submit(); });
+        // Show / hide the password.
+        const eye = h('button.auth-eye', { type: 'button', 'aria-label': 'Show password', title: 'Show password' }, '👁');
+        eye.addEventListener('click', () => {
+          const show = pass.type === 'password';
+          pass.type = pass2.type = show ? 'text' : 'password';
+          eye.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+          eye.classList.toggle('on', show);
+        });
+        const field = (label, input, extra) => h('label.auth-field', null, h('span.auth-label', { text: label }), h('span.auth-input', null, input, extra || null));
+        const title = h('h2.auth-title');
+        const sub = h('p.auth-sub');
+        const renderTitle = () => {
+          title.textContent = mode === 'login' ? 'Welcome back' : 'Create your account';
+          sub.textContent = mode === 'login' ? 'Log in to the online world' : 'Join the online world: pick a username and password';
+        };
+        swap.addEventListener('click', renderTitle);
         root.append(h('div.title-card.auth', null,
           h('h1', { text: 'Willowmere' }),
-          h('p.hint', { text: 'Online world' }),
-          h('label.cc-group', null, h('span.cc-label', { text: 'Username' }), user),
-          h('label.cc-group', null, h('span.cc-label', { text: 'Password' }), pass),
-          row2, err, go, swap));
+          h('div.auth-panel', null,
+            title,
+            sub,
+            field('Username', user),
+            field('Password', pass, eye),
+            row2, err, go,
+            h('div.auth-or', null, h('span', { text: 'or' })),
+            swap)));
+        renderTitle();
         render();
         setTimeout(() => user.focus(), 50);
       });

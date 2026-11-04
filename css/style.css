@@ -599,8 +599,50 @@ button:focus-visible { outline: 2px solid #ffd76a; outline-offset: 2px; }
 @media (max-width: 760px) { .cs { flex-direction: column; } .cs-side { width: auto; } .cs-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 
 /* ---------- online ---------- */
-.title-card.auth { width: min(360px, 92vw); display: grid; gap: 10px; }
-.title-card.auth input { width: 100%; }
+.title-card.auth { width: min(400px, 92vw); gap: 4px; }
+.title-card.auth h1 { margin-bottom: 0; }
+.auth-panel { width: 100%; display: grid; gap: 12px; text-align: left; padding: 24px 26px 22px; border-radius: 18px; color: #1b2b4a;
+  background: rgba(250, 252, 255, 0.92); border: 1px solid rgba(255, 255, 255, 0.9);
+  box-shadow: 0 18px 50px rgba(15, 25, 60, 0.35), inset 0 1px 0 #fff; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+.auth-title { margin: 0; font: 700 22px var(--font); color: #1b2b4a; text-align: center; }
+.auth-sub { margin: -6px 0 4px; text-align: center; font-size: 13px; color: #5b6a90; }
+.auth-field { display: grid; gap: 6px; }
+.auth-label { font: 600 12.5px var(--font); color: #44527a; letter-spacing: 0.02em; }
+.auth-input { position: relative; display: block; }
+.auth-input input { width: 100%; box-sizing: border-box; height: 44px; padding: 0 14px; border-radius: 11px; font: 500 15px var(--font); color: #1b2b4a;
+  background: #fff; border: 1.5px solid #c9d4ee; transition: border-color 0.15s, box-shadow 0.15s; }
+.auth-input input::placeholder { color: #9aa6c4; }
+.auth-input input:hover { border-color: #a9bbe6; }
+.auth-input input:focus { outline: none; border-color: #5b8cff; box-shadow: 0 0 0 4px rgba(91, 140, 255, 0.2); }
+.auth-input input[type="password"], .auth-input input#auth-pass { padding-right: 46px; }
+.auth-eye { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); width: 34px; height: 32px; border: 0; border-radius: 8px; cursor: pointer;
+  background: transparent; font-size: 16px; opacity: 0.45; filter: grayscale(1); }
+.auth-eye:hover, .auth-eye.on { opacity: 0.9; background: #eef2fb; }
+.auth-err { margin: 0; padding: 9px 12px; border-radius: 10px; font: 600 13px var(--font); color: #a12a3a; background: #fdecee; border: 1px solid #f5c2ca; }
+.auth-err[hidden] { display: none; }
+.auth-go { margin-top: 4px; height: 48px; border: 0; border-radius: 12px; cursor: pointer; font: 700 17px var(--font); color: #fff; letter-spacing: 0.01em;
+  background: linear-gradient(180deg, #6e9bff, #3f6fe0); box-shadow: 0 6px 16px rgba(63, 111, 224, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  transition: transform 0.1s, filter 0.15s, box-shadow 0.15s; }
+.auth-go:hover:not(:disabled) { filter: brightness(1.06); transform: translateY(-1px); box-shadow: 0 8px 20px rgba(63, 111, 224, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.35); }
+.auth-go:active:not(:disabled) { transform: translateY(0); }
+.auth-go:focus-visible { outline: 3px solid #ffd76a; outline-offset: 2px; }
+.auth-go:disabled { filter: grayscale(0.4); opacity: 0.7; cursor: wait; }
+.auth-or { display: flex; align-items: center; gap: 10px; color: #9aa6c4; font-size: 12px; }
+.auth-or::before, .auth-or::after { content: ''; flex: 1; height: 1px; background: #dbe2f2; }
+.auth-swap { height: 42px; border-radius: 12px; cursor: pointer; font: 600 14.5px var(--font); color: #3f6fe0; background: #fff; border: 1.5px solid #c9d4ee; transition: border-color 0.15s, background 0.15s; }
+.auth-swap:hover { border-color: #6e9bff; background: #f4f7ff; }
+.auth-swap:focus-visible { outline: 3px solid #5b8cff; outline-offset: 2px; }
+@media (prefers-color-scheme: dark) {
+  .auth-panel { background: rgba(22, 30, 54, 0.9); border-color: rgba(120, 150, 220, 0.35); color: #e8eefc; box-shadow: 0 18px 50px rgba(0, 0, 0, 0.5); }
+  .auth-title { color: #f0f4ff; } .auth-sub, .auth-label { color: #aab8dc; }
+  .auth-input input { background: #121a30; color: #e8eefc; border-color: #34446e; }
+  .auth-input input:hover { border-color: #4a5e94; }
+  .auth-eye:hover, .auth-eye.on { background: #1f2a48; }
+  .auth-err { color: #ffb3bd; background: #3a1820; border-color: #6a2a36; }
+  .auth-or { color: #6f7ea6; } .auth-or::before, .auth-or::after { background: #2c3a60; }
+  .auth-swap { background: transparent; color: #9db8ff; border-color: #34446e; }
+  .auth-swap:hover { background: #1a2442; border-color: #6e9bff; }
+}
 #chat-input { width: 100%; margin-top: 6px; padding: 6px 9px; border-radius: 8px; border: 1px solid var(--cell-edge); background: rgba(255,255,255,0.92); font: 500 12.5px var(--font); color: #1b2b4a; pointer-events: auto; }
 #chat-input:focus { outline: 2px solid var(--accent); }
 .log li.chat { color: #2f7a3a; font-weight: 600; }
