@@ -257,6 +257,31 @@ the database on the same origin.
   longer push monsters back (knockback skills still do); dungeon walls are
   half as tall.
 
+## Stage 8: shared world, social systems, more content
+
+- **Shared monsters online:** one player per map hosts the monsters; everyone
+  sees the same positions, HP, statuses and deaths; hits, kills and rewards
+  are routed to the right player; hosting moves on when the host leaves.
+- **Parties (Alt+Z):** classic settings (EXP Each Take / Even Share within 15
+  levels, Item Each Take / Party Share), invites, kick, leave, %party chat,
+  and "Name [Party]" over heads.
+- **Guilds (Alt+G):** founded with an Emperium (dropped by Orc Dungeon orcs
+  and the Orc Lord), invites, expel, disband, $guild chat, the Guild Emblem
+  guild skill and 24x24 emblems shown beside the guild name under players.
+- **Orc Dungeon** (west of Whisperwood Glade) and **Ember Ruins** (from the
+  Orc Dungeon's far end): monsters from level 24 to 94 (Orc Zombie, Orc
+  Skeleton, Zenorc, Drainliar, Wind Ghost, Raydric, Wraith, Evil Druid,
+  Khalitzburg, Abysmal Knight, Bloody Knight) and MVPs Orc Lord, Dark Lord and
+  Lord of Death; map bosses Eclipse, Vocal and Marin outdoors. Levels, HP,
+  ATK, DEF and elements follow the classic database; EXP fits our curve.
+- **Every item in the SQL database;** db.html reads items and monsters from
+  the server when it's online (falls back to the built-in list otherwise).
+- Inventory-style **storage and cart** windows with drag and drop; no ground
+  drops while storage is open.
+- Other players' cast bars and effects, buffing other players, visible carts,
+  ground-targeted skills, more male hairstyles, menu hide toggle, buffs and
+  debuffs under the target frame, classic stat points (1,273 at level 99).
+
 ## Online multiplayer (Neon)
 
 Run the game through the server in `server/` to play online: register/login,

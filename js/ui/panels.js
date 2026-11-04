@@ -97,6 +97,7 @@
     win.dropSelected = (uid, qty) => {
       const p = game.player, e = p.inventory.find(uid);
       if (!e) return;
+      if (game.windows.isOpen('storage')) { game.log.add('Close your storage before dropping items on the ground.', 'warn'); return; }
       const n = p.inventory.remove(uid, qty);
       game.loot.spawn(e.id, n, p.position.x, p.position.z);
       game.log.add(`Dropped ${G.Items.get(e.id).name}${n > 1 ? ' ×' + n : ''}.`, 'info');
@@ -368,7 +369,7 @@
   function menuBar(game) {
     const el = document.getElementById('menubar');
     const items = [
-      ['status', 'Status', 'Alt+A'], ['inventory', 'Items', 'Alt+E'], ['equipment', 'Gear', 'Alt+Q'], ['skills', 'Skills', 'Alt+S'], ['quests', 'Quests', 'U'], ['options', 'Options', 'O'],
+      ['status', 'Status', 'Alt+A'], ['inventory', 'Items', 'Alt+E'], ['equipment', 'Gear', 'Alt+Q'], ['skills', 'Skills', 'Alt+S'], ['quests', 'Quests', 'U'], ['party', 'Party', 'Alt+Z'], ['guild', 'Guild', 'Alt+G'], ['options', 'Options', 'O'],
     ];
     const btns = {};
     items.forEach(([id, label]) => {

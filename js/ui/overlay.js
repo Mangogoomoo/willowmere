@@ -123,7 +123,8 @@
           const frac = player.hp / player.maxHp;
           this.bar(ctx, foot.x, foot.y + 10, 52, 5, frac, frac < 0.3 ? '#ff5a5a' : '#5fd66e');
           this.bar(ctx, foot.x, foot.y + 17, 52, 3, player.sp / player.maxSp, '#5f9cff');
-          this.outlined(ctx, player.name, foot.x, foot.y + 32, 13, '#ffffff', 'rgba(20,24,46,0.85)', 600);
+          if (G.Social && G.Net && G.Net.ws) G.Social.drawName(this, ctx, player.name, G.Social.myTags(), foot.x, foot.y + 32, '#ffffff', 'rgba(20,24,46,0.85)');
+          else this.outlined(ctx, player.name, foot.x, foot.y + 32, 13, '#ffffff', 'rgba(20,24,46,0.85)', 600);
         }
       }
 
@@ -131,7 +132,7 @@
       if (G.Net && G.Net.players.size) for (const r of G.Net.players.values()) {
         if (r.distanceTo(player) > 45) continue;
         const f = this.project(r.position.x, r.position.y, r.position.z);
-        if (f) this.outlined(ctx, r.name, f.x, f.y + 16, 13, '#d8ffd0', 'rgba(16,40,20,0.9)', 600);
+        if (f) G.Social.drawName(this, ctx, r.name, { party: r.party, guild: r.guild }, f.x, f.y + 16, '#d8ffd0', 'rgba(16,40,20,0.9)');
       }
       for (const who of [player, ...(G.Net ? G.Net.players.values() : [])]) {
         if (!who.bubble || game.time > who.bubble.until) continue;

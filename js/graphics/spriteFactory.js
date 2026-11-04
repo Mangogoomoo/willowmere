@@ -118,6 +118,18 @@
     rogue: { outfit: '#3a5a3a', coatTails: '#2a3a2a', cape: '#5a3a22', scarf: '#8a5a2c', hat: { type: 'bandana', color: '#6a4a2a' } },
     blacksmith: { outfit: '#7a4a2a', apron: '#3a2a1a', bareArms: true, goggles: '#c9a24a', hat: { type: 'headband', color: '#c0394a' } },
     alchemist: { outfit: '#f2f0ea', robe: 'long', trim: '#2f7a8a', glasses: true, bottles: true, backpack: '#5a3a22' },
+    // Monsters built on the character painter.
+    orc_zombie: { outfit: '#5a4a3a', robe: 'short', belt: '#3a2a1a', bareArms: true },
+    orc_skeleton: { outfit: '#4a4038', pauldrons: '#9aa3ad', bareArms: true, hat: { type: 'helm', color: '#7a7a6a', plume: '#6a2a2a' } },
+    zenorc: { outfit: '#6a3a2a', bareArms: true, belt: '#2a1a10', hat: { type: 'bandana', color: '#c0394a' } },
+    orc_lord: { outfit: '#7a5a2a', chestplate: '#c9a24a', pauldrons: '#c9a24a', cape: '#8a1a1a', hat: { type: 'helm', color: '#c9a24a', plume: '#c0394a' } },
+    raydric: { outfit: '#2a2a3a', chestplate: '#4a4a5a', pauldrons: '#5a5a6a', cape: '#3a1a2a', hat: { type: 'helm', color: '#3a3a4a', plume: '#5a2a3a' } },
+    evil_druid: { outfit: '#2f4a2f', robe: 'long', beads: '#6a6a4a', hat: { type: 'hood', color: '#1f3a1f' } },
+    khalitzburg: { outfit: '#3a3a40', chestplate: '#9aa3ad', pauldrons: '#cfd8e6', hat: { type: 'helm', color: '#9aa3ad', plume: '#2a2a2a' } },
+    abysmal_knight: { outfit: '#141420', chestplate: '#2a2a3a', pauldrons: '#3a3a4a', cape: '#6a0a1a', hat: { type: 'helm', color: '#1a1a24', plume: '#8a0a1a' } },
+    bloody_knight: { outfit: '#3a0a14', chestplate: '#8a1a2a', pauldrons: '#a8283a', cape: '#1a0a0a', hat: { type: 'helm', color: '#7a1a2a', plume: '#1a0a0a' } },
+    dark_lord: { outfit: '#1a1424', robe: 'long', collar: '#2a1a3a', cape: '#3a0a2a', trim: '#c9a24a' },
+    lord_of_death: { outfit: '#0e0e16', robe: 'long', cape: '#1a1a24', mask: '#000000', hat: { type: 'hood', color: '#0a0a12' } },
     master: { outfit: '#3f5fa8', robe: 'long', trim: '#e6c25a', hat: { type: 'wizard', color: '#2e4680', band: '#e6c25a' }, beard: '#f4f2ee', skin: '#f2cfb3' },
     dealer: { outfit: '#d98a4a', apron: '#fbf3e3', hat: { type: 'cap', color: '#a0522d' }, beard: '#7a4a2a' },
     priestess: { outfit: '#f4f1fa', robe: 'long', trim: '#7fb8e8', hat: { type: 'cap', color: '#7fb8e8' } },
@@ -141,6 +153,7 @@
       skin: costume.skin || '#ffdcc4', hair, hairDark: U.shade(hair, hair === '#ece8f2' ? -0.45 : -0.42), tunic, sleeve: U.shade(tunic, -0.1),
       pants: '#6e5641', boots: '#704325', belt: costume.belt || '#5a3a22', satchel: '#ab7642', iris,
     };
+    if (look.skin) { NV.skin = look.skin; }
     if (costume.bareArms) NV.sleeve = NV.skin;
     const hairShades = {};
     for (let i = -5; i <= 5; i++) hairShades[i] = U.shade(NV.hair, i * 0.04);
@@ -887,10 +900,45 @@
     : { frameW: 160, frameH: 176, originX: 80, originY: 166, scale: 1.25, anims: NOVICE_ANIMS, draw: makeNovice(app, look) });
 
   const cache = {};
+  /* New monsters: recoloured variants of existing ones, or humanoids. */
+  function recolor(sheet, hueDeg, sat, light) {
+    const src = sheet.canvas, c = document.createElement('canvas');
+    c.width = src.width; c.height = src.height;
+    const x = c.getContext('2d'); x.drawImage(src, 0, 0);
+    const img = x.getImageData(0, 0, c.width, c.height), d = img.data, dh = (hueDeg || 0) / 360;
+    for (let i = 0; i < d.length; i += 4) {
+      if (!d[i + 3]) continue;
+      let r = d[i] / 255, g = d[i + 1] / 255, b = d[i + 2] / 255;
+      const max = Math.max(r, g, b), min = Math.min(r, g, b), l0 = (max + min) / 2;
+      let h = 0, s = 0;
+      if (max !== min) {
+        const k = max - min; s = l0 > 0.5 ? k / (2 - max - min) : k / (max + min);
+        h = max === r ? (g - b) / k + (g < b ? 6 : 0) : max === g ? (b - r) / k + 2 : (r - g) / k + 4; h /= 6;
+      }
+      h = (h + dh + 1) % 1; s = Math.min(1, s * (sat || 1)); const l = Math.min(1, l0 * (light || 1));
+      const q = l < 0.5 ? l * (1 + s) : l + s - l * s, p = 2 * l - q;
+      const f = (t) => { t = (t + 1) % 1; return t < 1 / 6 ? p + (q - p) * 6 * t : t < 0.5 ? q : t < 2 / 3 ? p + (q - p) * (2 / 3 - t) * 6 : p; };
+      d[i] = f(h + 1 / 3) * 255; d[i + 1] = f(h) * 255; d[i + 2] = f(h - 1 / 3) * 255;
+    }
+    x.putImageData(img, 0, 0);
+    return Object.assign({}, sheet, { canvas: c });
+  }
+  function monsterSheet(spec) {
+    if (spec.base) return recolor(G.SpriteFactory.get(spec.base), spec.hue, spec.sat, spec.light);
+    const hm = spec.humanoid;
+    const sheet = G.SpriteFactory.humanoid({ hair: hm.hair || 'raven', style: hm.style || 'buzz', eyes: hm.eyes || 'amber', outfit: 'sky' },
+      { job: hm.costume, weapon: hm.weapon === 'none' ? 'dagger' : hm.weapon, unarmed: hm.weapon === 'none', skin: hm.skin });
+    // Monsters play "die"; characters call it "dead".
+    return Object.assign({}, sheet, { anims: Object.assign({}, sheet.anims, { die: sheet.anims.die || sheet.anims.dead }) });
+  }
+
   G.SpriteFactory = {
     get(name) {
       if (name === 'novice') return G.SpriteFactory.novice({});
-      if (!cache[name]) cache[name] = RP.buildSheet(DEFS[name]);
+      if (!cache[name]) {
+        const def = !DEFS[name] && G.Config && G.Config.MONSTERS[name];
+        cache[name] = def && def.sprite ? monsterSheet(def.sprite) : RP.buildSheet(DEFS[name]);
+      }
       return cache[name];
     },
     // Sprite sheet for a player character with the given appearance.
@@ -900,7 +948,7 @@
       app = normalizeAppearance(app);
       look = Object.assign({ job: 'novice', weapon: 'dagger' }, look || {});
       const hd = look.head || {};
-      const key = ['h', app.hair, app.outfit, app.eyes, app.style, look.job, look.weapon, look.unarmed ? 'u' : '', hd.top || '', hd.mid || '', hd.low || '', look.mount || '', look.falcon ? 'f' : ''].join(':');
+      const key = ['h', app.hair, app.outfit, app.eyes, app.style, look.job, look.weapon, look.unarmed ? 'u' : '', hd.top || '', hd.mid || '', hd.low || '', look.mount || '', look.falcon ? 'f' : '', look.skin || ''].join(':');
       if (!cache[key]) cache[key] = RP.buildSheet(noviceDef(app, look));
       return cache[key];
     },

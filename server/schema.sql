@@ -100,3 +100,33 @@ CREATE TABLE IF NOT EXISTS monster_spawns (
   count INT NOT NULL,
   PRIMARY KEY (map, monster_id, x, z)
 );
+
+-- Parties (classic settings) and guilds.
+CREATE TABLE IF NOT EXISTS parties (
+  id          BIGSERIAL PRIMARY KEY,
+  name        TEXT   NOT NULL,
+  leader_id   BIGINT NOT NULL REFERENCES characters(id) ON DELETE CASCADE,
+  exp_share   TEXT   NOT NULL DEFAULT 'each' CHECK (exp_share IN ('each', 'even')),
+  item_share  TEXT   NOT NULL DEFAULT 'each' CHECK (item_share IN ('each', 'party')),
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS parties_name_lower ON parties (lower(name));
+CREATE TABLE IF NOT EXISTS party_members (
+  party_id     BIGINT NOT NULL REFERENCES parties(id) ON DELETE CASCADE,
+  character_id BIGINT NOT NULL UNIQUE REFERENCES characters(id) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS guilds (
+  id           BIGSERIAL PRIMARY KEY,
+  name         TEXT   NOT NULL,
+  master_id    BIGINT NOT NULL REFERENCES characters(id) ON DELETE CASCADE,
+  emblem       TEXT,                       -- small PNG as a data: URL
+  emblem_ver   INT    NOT NULL DEFAULT 0,
+  skill_points INT    NOT NULL DEFAULT 1,
+  skills       JSONB  NOT NULL DEFAULT '{}',
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS guilds_name_lower ON guilds (lower(name));
+CREATE TABLE IF NOT EXISTS guild_members (
+  guild_id     BIGINT NOT NULL REFERENCES guilds(id) ON DELETE CASCADE,
+  character_id BIGINT NOT NULL UNIQUE REFERENCES characters(id) ON DELETE CASCADE
+);

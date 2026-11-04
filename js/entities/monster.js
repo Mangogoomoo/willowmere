@@ -165,9 +165,13 @@
       const p = this.position;
       this.game.effects.death({ x: p.x, y: p.y, z: p.z }, this.def.deathColor);
       this.game.sfx('pop', p);
-      if (killer && killer.gainExp) killer.gainExp(Math.round(this.def.exp * C.EXP_RATE), Math.round(this.def.jobExp * C.EXP_RATE));
+      if (killer && killer.gainExp) {
+        const be = Math.round(this.def.exp * C.EXP_RATE), je = Math.round(this.def.jobExp * C.EXP_RATE);
+        if (G.Social && killer === this.game.player) G.Social.awardKill(killer, be, je); else killer.gainExp(be, je);
+      }
       this.game.loot.rollDrops(this);
       this.game.events.emit('monsterKilled', this);
+      if (this.def.mvp) { this.game.hud.toast(`MVP! ${killer && killer.name ? killer.name : 'Someone'} defeated ${this.name}!`); this.game.log.add(`MVP: ${this.name} has fallen.`, 'level'); }
     }
 
     startSwing() {

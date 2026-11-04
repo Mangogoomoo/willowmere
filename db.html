@@ -25,6 +25,7 @@
     .give-status{min-height:17px;margin:8px 0 0;font-size:11px;color:var(--muted)}
     .give-status.ok{color:var(--green)}.give-status.error{color:#ff9b9b}
     .zeny-panel{margin:0 0 22px;max-width:620px}
+    .src-badge{display:inline-block;margin-top:8px;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:700;color:#0b1220;background:#ffcc4d}
     .zeny-panel .give-fields{grid-template-columns:minmax(0,1fr) 150px}
     .zeny-quick{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
     .zeny-quick button{padding:5px 10px;border-radius:999px;border:1px solid var(--line);background:#0b1220;color:var(--gold);font:inherit;font-size:12px;font-weight:700;cursor:pointer}
@@ -88,17 +89,41 @@
   <script src="js/core/utils.js"></script>
   <script src="js/data/items.js"></script>
   <script src="js/data/maps.js"></script>
+  <script src="js/data/content.js"></script>
   <script src="js/graphics/spriteRig.js"></script>
   <script src="js/graphics/spriteFactory.js"></script>
   <script src="js/graphics/icons.js"></script>
   <script>
-    (() => {
+    (async () => {
       'use strict';
+      // Served by the Willowmere server? Then read items and monsters from the SQL database.
+      let source = 'built-in list';
+      if (/^https?:$/.test(location.protocol)) {
+        try {
+          const r = await fetch('/api/db', { cache: 'no-store' });
+          if (r.ok) {
+            const j = await r.json();
+            if (j.items && j.items.length && j.monsters && j.monsters.length) {
+              const items = {}; for (const it of j.items) items[it.id] = it;
+              const mons = {}; for (const m of j.monsters) { const id = m.id; const copy = Object.assign({}, m); delete copy.id; mons[id] = Object.assign({}, window.G.Config.MONSTERS[id] || {}, copy); }
+              for (const k of Object.keys(window.G.Items.DB)) delete window.G.Items.DB[k];
+              Object.assign(window.G.Items.DB, items);
+              for (const k of Object.keys(window.G.Config.MONSTERS)) delete window.G.Config.MONSTERS[k];
+              Object.assign(window.G.Config.MONSTERS, mons);
+              source = 'server database';
+            }
+          }
+        } catch (e) { /* offline: keep the built-in list */ }
+      }
       const C = window.G.Config, DB = window.G.Items.DB;
+      setTimeout(() => {
+        const hero = document.querySelector('.hero p, header p');
+        if (hero) { const b = document.createElement('span'); b.className = 'src-badge'; b.textContent = `Data: ${source}`; hero.after(b); }
+      }, 0);
       const $ = id => document.getElementById(id);
       const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
       const pct = n => Number((n * 100).toFixed(n < 0.01 ? 2 : 1)).toString() + '%';
-      const monsterIds = Object.keys(C.MONSTERS);
+      const monsterIds = Object.keys(C.MONSTERS).filter(id => !C.MONSTERS[id].immortal);
       const TYPE_NAMES = { use: 'Consumable', etc: 'Loot / Material', equip: 'Equipment', card: 'Card' };
       const STAT_NAMES = { atk:'ATK', matk:'MATK', def:'DEF', mdef:'MDEF', str:'STR', agi:'AGI', vit:'VIT', int:'INT', dex:'DEX', luk:'LUK', maxHp:'Max HP', maxSp:'Max SP', maxHpPct:'Max HP', maxSpPct:'Max SP', hit:'HIT', flee:'FLEE', crit:'CRIT', aspd:'ASPD' };
       const TYPE_SYMBOLS = { use:'⚗', etc:'✦', equip:'⚔', card:'▣' };

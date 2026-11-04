@@ -657,3 +657,23 @@ button:focus-visible { outline: 2px solid #ffd76a; outline-offset: 2px; }
 .tg-status .buff { position: relative; width: 26px; height: 26px; }
 .tg-status .buff img { width: 26px; height: 26px; border-radius: 6px; }
 .tg-status .buff span { position: absolute; right: -2px; bottom: -3px; font: 700 9px/1 var(--font); color: #fff; text-shadow: 0 0 2px #000, 0 1px 1px #000; }
+
+/* ---------- party & guild ---------- */
+.soc-title { font: 700 16px var(--font); margin: 2px 0 6px; }
+.soc-list { display: grid; gap: 4px; margin-bottom: 8px; }
+.soc-row { display: grid; grid-template-columns: 10px 1fr auto auto; gap: 8px; align-items: center; padding: 5px 8px; border-radius: 8px; background: var(--cell-bg); font-size: 13px; }
+.soc-row.off { opacity: 0.55; }
+.soc-dot { width: 8px; height: 8px; border-radius: 50%; background: #3fae3a; }
+.soc-row.off .soc-dot { background: #9aa6c4; }
+.soc-name small, .soc-map { color: var(--ink-soft); font-size: 11px; }
+.soc-inv { display: flex; gap: 6px; margin: 8px 0; }
+.soc-in { flex: 1; min-width: 0; padding: 6px 9px; border-radius: 8px; border: 1px solid var(--cell-edge); font: 500 13px var(--font); }
+.soc-head { display: flex; gap: 10px; align-items: center; margin-bottom: 8px; }
+.soc-emblem { width: 40px; height: 40px; border-radius: 6px; image-rendering: pixelated; border: 1px solid var(--cell-edge); background: #fff; }
+.soc-emblem.empty { display: grid; place-items: center; color: var(--ink-soft); font-weight: 700; }
+.soc-skill { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; align-items: center; padding: 6px 8px; border-radius: 8px; background: var(--cell-bg); }
+.soc-skill small { grid-column: 1; color: var(--ink-soft); font-size: 11px; }
+.soc-skill .btn { grid-row: 1 / span 2; grid-column: 2; }
+.log li.party { color: #8fd0ff; font-weight: 600; }
+.log li.guild { color: #ffd77a; font-weight: 600; }
+.ext-grid { max-height: 300px; overflow-y: auto; }

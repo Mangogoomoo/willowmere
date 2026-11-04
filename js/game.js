@@ -169,6 +169,8 @@
       this.fields = new G.Fields(this);
       this.cart = new G.Cart(this);
       this.crafting = new G.Crafting(this);
+      G.bindInventoryDrops(this);
+      G.Social.init(this);
       this.questlog = new G.QuestLog(this);
       this.questsWin = G.Panels.questsWindow(this);
       this.extras = new G.Extras(this);

@@ -177,7 +177,7 @@
       else if (m.op === 'killed') {
         // Our kill, confirmed by the host: EXP, drops and quest progress are ours.
         const p = game.player, C = G.Config;
-        p.gainExp(Math.round(x.def.exp * C.EXP_RATE), Math.round(x.def.jobExp * C.EXP_RATE));
+        G.Social.awardKill(p, Math.round(x.def.exp * C.EXP_RATE), Math.round(x.def.jobExp * C.EXP_RATE));
         game.loot.rollDrops(x);
         game.events.emit('monsterKilled', x);
       }

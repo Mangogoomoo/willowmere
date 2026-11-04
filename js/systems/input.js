@@ -36,6 +36,7 @@
         if (!data) return;
         e.preventDefault();
         const { uid } = JSON.parse(data);
+        if (this.game.windows.isOpen('storage')) { this.game.log.add('Close your storage before dropping items on the ground.', 'warn'); return; }
         const entry = this.game.player.inventory.find(uid);
         if (entry) this.game.inventoryWin.dropSelected(uid, entry.qty);
       });
@@ -110,7 +111,7 @@
       const hot = /^hot(\d)$/.exec(action);
       if (hot) { g.hotbar.trigger(parseInt(hot[1], 10) - 1); return; }
       switch (action) {
-        case 'status': case 'inventory': case 'equipment': case 'skills': case 'quests': case 'worldmap': case 'options':
+        case 'status': case 'inventory': case 'equipment': case 'skills': case 'quests': case 'worldmap': case 'options': case 'party': case 'guild':
           g.windows.toggle(action); break;
         case 'autoloot': g.extras.setAutoLoot(!g.autoLoot); break;
         case 'cart': g.cart.toggle(); break;

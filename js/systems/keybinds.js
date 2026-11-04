@@ -15,6 +15,8 @@
     { id: 'worldmap', label: 'World map', def: ['Alt+M', 'M'] },
     { id: 'options', label: 'Options', def: ['O', ''] },
     { id: 'cart', label: 'Cart (merchant classes)', def: ['Alt+W', ''] },
+    { id: 'party', label: 'Party', def: ['Alt+Z', ''] },
+    { id: 'guild', label: 'Guild', def: ['Alt+G', ''] },
     { id: 'autoloot', label: 'Toggle auto-loot', def: ['L', ''] },
     { id: 'help', label: 'Show / hide controls', def: ['H', ''] },
     { id: 'debug', label: 'Show / hide debug tools', def: ['`', ''] },

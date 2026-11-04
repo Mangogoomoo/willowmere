@@ -135,7 +135,7 @@
       this.win.render = () => this.render(h);
     }
     get items() { return this.game.player.storage; }
-    open() { this.game.windows.open('storage'); this.render(G.h); }
+    open() { this.game.windows.open('storage'); this.render(); }
 
     deposit(uid, qty) {
       const inv = this.game.player.inventory, e = inv.find(uid);
@@ -152,7 +152,7 @@
         this.items.push({ id: e.id, qty: 1, cards: (e.cards || []).slice(), refine: e.refine || 0 });
       }
       this.game.save.markDirty();
-      this.render(G.h);
+      this.render();
     }
     withdraw(index, qty) {
       const s = this.items[index];
@@ -163,36 +163,16 @@
       s.qty -= n;
       if (s.qty <= 0) this.items.splice(index, 1);
       this.game.save.markDirty();
-      this.render(G.h);
+      this.render();
     }
 
-    render(h) {
+    render() {
       if (!this.game.windows.isOpen('storage')) return;
-      const p = this.game.player, b = this.win.body;
-      b.textContent = '';
-      const tabs = h('div.tabs', null, [['deposit', 'Deposit'], ['withdraw', 'Withdraw']].map(([id, label]) => h('button.tab' + (this.mode === id ? '.on' : ''), {
-        type: 'button', onclick: () => { this.mode = id; this.render(h); },
-      }, label)));
-      const list = h('div.shop-list');
-      const row = (entry, max, onGo, label) => {
-        const it = G.Items.get(entry.id);
-        const qty = h('input.qtyin', { type: 'number', min: '1', max: String(max), value: String(max), 'aria-label': 'Quantity' });
-        const r = h('div.shop-row', null, h('img', { src: G.Icons.url(entry.id), alt: '' }),
-          h('span.sname2' + (G.Items.isCarded(entry) ? '.carded' : ''), null, G.Items.displayName(entry), entry.qty > 1 ? h('small', { text: ` ×${entry.qty}` }) : null), h('span'),
-          it.stack ? qty : h('span'),
-          h('button.btn.small', { type: 'button', onclick: () => onGo(Math.max(1, Math.min(max, parseInt(qty.value, 10) || 1))) }, label));
-        G.Tooltip.bind(r, () => G.itemTooltipCompare(entry, p));
-        list.append(r);
-      };
-      if (this.mode === 'deposit') {
-        if (!p.inventory.items.length) list.append(h('p.hint', { text: 'Your inventory is empty.' }));
-        for (const e of p.inventory.items) row(e, e.qty, (n) => this.deposit(e.uid, n), 'Deposit');
-      } else {
-        if (!this.items.length) list.append(h('p.hint', { text: 'Nothing in storage yet.' }));
-        this.items.forEach((s, i) => row(s, s.qty, (n) => this.withdraw(i, n), 'Take'));
-      }
-      b.append(tabs, list, h('div.inv-foot.shop-foot', null, h('span.hint', { text: `${this.items.length} of ${this.max} shelves used` }),
-        h('span.hint', { text: `Weight ${p.inventory.weight()} / ${p.derived.maxWeight}` })));
+      const p = this.game.player;
+      this.win.put = (uid, qty) => this.deposit(uid, qty);
+      G.itemGrid(this.game, this.win, { source: 'storage', label: 'Storage', entries: this.items,
+        note: 'Drag items here from your inventory, or back again. Double-click takes a whole stack; hold Shift while dragging to choose an amount.',
+        take: (i, qty) => this.withdraw(i, qty), count: `${this.items.length} / ${this.max} shelves`, weight: `Your weight ${p.inventory.weight()} / ${p.derived.maxWeight}` });
     }
 
     update() {

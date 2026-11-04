@@ -163,6 +163,19 @@ async function api(req, res, url) {
   const ip = req.socket.remoteAddress || '?';
   const m = (re) => re.exec(url.pathname);
   if (url.pathname === '/api/health') return send(res, 200, { ok: true, online: online.size });
+  if (url.pathname === '/api/db') {
+    const items = (await pool.query('SELECT data FROM item_defs ORDER BY id')).rows.map((r) => r.data);
+    const monsters = (await pool.query('SELECT id, data FROM monster_defs ORDER BY level, id')).rows.map((r) => Object.assign({ id: r.id }, r.data));
+    const spawns = (await pool.query('SELECT map, monster_id, count FROM monster_spawns')).rows;
+    return send(res, 200, { items, monsters, spawns });
+  }
+  let em;
+  if ((em = /^\/api\/guilds\/(\d+)\/emblem$/.exec(url.pathname))) {
+    const r = (await pool.query('SELECT emblem FROM guilds WHERE id = $1', [Number(em[1])])).rows[0];
+    if (!r || !r.emblem) { res.writeHead(404); return res.end(); }
+    res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=300' });
+    return res.end(Buffer.from(r.emblem.split(',')[1], 'base64'));
+  }
 
   if (url.pathname === '/api/register' && req.method === 'POST') {
     if (limited(ip)) return send(res, 429, { error: 'Too many attempts. Wait a minute.' });
@@ -256,7 +269,7 @@ const server = http.createServer(async (req, res) => {
 
 /* ---------------------------------------------------------------- multiplayer */
 const online = new Map();   // ws -> session { accountId, charId, name, map, x, z, facing, moving, look }
-const publicState = (s) => ({ id: s.charId, name: s.name, map: s.map, x: s.x, z: s.z, facing: s.facing, moving: s.moving, look: s.look });
+const publicState = (s) => ({ id: s.charId, name: s.name, map: s.map, x: s.x, z: s.z, facing: s.facing, moving: s.moving, look: s.look, party: s.partyName || null, guild: s.guild || null });
 function broadcast(map, msg, except) {
   const data = JSON.stringify(msg);
   for (const [ws, s] of online) if (s.map === map && ws !== except && ws.readyState === 1) ws.send(data);
@@ -305,8 +318,12 @@ wss.on('connection', (ws) => {
       if (!c) { ws.send(JSON.stringify({ t: 'error', text: 'Not allowed.' })); return ws.close(); }
       // One character per account online at a time: the newer login wins.
       for (const [other, s] of online) if (s.accountId === acct.id) { other.send(JSON.stringify({ t: 'kicked', text: 'This account logged in somewhere else.' })); other.close(); }
-      me = { accountId: acct.id, charId: Number(c.id), name: c.name, map: String(msg.map || c.map), x: 0, z: 0, facing: 0, moving: false, look: cleanLook(msg.look), chatT: 0 };
+      me = { accountId: acct.id, charId: Number(c.id), name: c.name, map: String(msg.map || c.map), x: 0, z: 0, facing: 0, moving: false, look: cleanLook(msg.look), chatT: 0, level: Number(msg.level) || 1 };
       online.set(ws, me);
+      await Social.load(me);
+      Social.sendPartyTo(me); Social.sendGuildTo(me);
+      if (me.partyId) Social.refreshParty(me.partyId).catch(() => {});
+      if (me.guild) Social.refreshGuild(me.guild.id).catch(() => {});
       ws.send(JSON.stringify({ t: 'welcome', you: me.charId, players: [...online.values()].filter((s) => s !== me && s.map === me.map).map(publicState), online: online.size, mobs: cachedMobs(me.map) }));
       broadcast(me.map, { t: 'join', p: publicState(me) }, ws);
       electHost(me.map);
@@ -328,6 +345,7 @@ wss.on('connection', (ws) => {
         return;
       }
       Object.assign(me, { x: num(msg.x, me.x), z: num(msg.z, me.z), facing: num(msg.facing, me.facing), moving: !!msg.moving });
+      if (Number.isInteger(msg.level)) me.level = Math.max(1, Math.min(999, msg.level));
       broadcast(me.map, { t: 'state', id: me.charId, x: me.x, z: me.z, facing: me.facing, moving: me.moving }, ws);
     } else if (msg.t === 'look') {
       me.look = cleanLook(msg.look);
@@ -337,7 +355,10 @@ wss.on('connection', (ws) => {
       if (now - me.chatT < 400) return;   // a little flood protection
       me.chatT = now;
       const text = String(msg.text || '').replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 120);
-      if (text) broadcast(me.map, { t: 'chat', id: me.charId, from: me.name, text });
+      // "%message" goes to your party, "$message" to your guild, like the classics.
+      if (text.startsWith('%') && me.partyId) Social.toParty(me.partyId, { t: 'chat', id: me.charId, from: me.name, text: text.slice(1).trim(), channel: 'party' });
+      else if (text.startsWith('$') && me.guild) Social.toGuild(me.guild.id, { t: 'chat', id: me.charId, from: me.name, text: text.slice(1).trim(), channel: 'guild' });
+      else if (text) broadcast(me.map, { t: 'chat', id: me.charId, from: me.name, text });
     } else if (msg.t === 'mobs') {
       // Snapshot from the map's host.
       if (hosts.get(me.map) !== ws || !Array.isArray(msg.list)) return;
@@ -363,6 +384,8 @@ wss.on('connection', (ws) => {
       const target = wsOfChar(Number(msg.to));
       if (target && target.readyState === 1 && online.get(target).map === me.map)
         target.send(JSON.stringify({ t: 'buff', from: me.charId, fromName: me.name, skill: String(msg.skill || '').slice(0, 40), lv: Math.max(1, Math.min(10, Number(msg.lv) || 1)) }));
+    } else if (typeof msg.t === 'string' && (msg.t.startsWith('party_') || msg.t.startsWith('guild_') || msg.t === 'pexp' || msg.t === 'ploot')) {
+      await Social.handle(ws, me, msg).catch((e) => { console.error(e); ws.send(JSON.stringify({ t: 'notice', text: 'That didn’t work. Try again.' })); });
     } else if (msg.t === 'action') {
       // Small visual events (attack swing, sit, emote) for others to see.
       const kind = ['attack', 'cast', 'emote'].includes(msg.kind) ? msg.kind : null;
@@ -372,12 +395,212 @@ wss.on('connection', (ws) => {
   ws.on('close', () => {
     if (me && online.get(ws) === me) {
       online.delete(ws); broadcast(me.map, { t: 'leave', id: me.charId });
+      if (me.partyId) Social.refreshParty(me.partyId).catch(() => {});
+      if (me.guild) Social.refreshGuild(me.guild.id).catch(() => {});
       if (hosts.get(me.map) === ws) hosts.delete(me.map);
       electHost(me.map);
     }
   });
 });
 setInterval(() => { for (const ws of wss.clients) { if (!ws.isAlive) { ws.terminate(); continue; } ws.isAlive = false; ws.ping(); } }, 30_000);
+
+/* ---------------------------------------------------------------- parties & guilds */
+const Social = {
+  invites: new Map(),   // charId -> { kind, id, from }
+  online(charId) { for (const [ws, s] of online) if (s.charId === charId) return [ws, s]; return null; },
+  async load(me) {
+    const p = (await pool.query('SELECT p.id, p.name FROM party_members m JOIN parties p ON p.id = m.party_id WHERE m.character_id = $1', [me.charId])).rows[0];
+    me.partyId = p ? Number(p.id) : null; me.partyName = p ? p.name : null;
+    const g = (await pool.query('SELECT g.id, g.name, g.emblem_ver FROM guild_members m JOIN guilds g ON g.id = m.guild_id WHERE m.character_id = $1', [me.charId])).rows[0];
+    me.guild = g ? { id: Number(g.id), name: g.name, ev: g.emblem_ver } : null;
+  },
+  async partyState(id) {
+    const p = (await pool.query('SELECT * FROM parties WHERE id = $1', [id])).rows[0];
+    if (!p) return null;
+    const mem = (await pool.query('SELECT c.id, c.name, c.job, c.base_level FROM party_members m JOIN characters c ON c.id = m.character_id WHERE m.party_id = $1 ORDER BY c.name', [id])).rows;
+    return { id: Number(p.id), name: p.name, leader: Number(p.leader_id), expShare: p.exp_share, itemShare: p.item_share,
+      members: mem.map((c) => { const o = Social.online(Number(c.id)); return { id: Number(c.id), name: c.name, job: c.job, level: o ? o[1].level : c.base_level, online: !!o, map: o ? o[1].map : null }; }) };
+  },
+  async guildState(id) {
+    const g = (await pool.query('SELECT id, name, master_id, emblem_ver, skill_points, skills FROM guilds WHERE id = $1', [id])).rows[0];
+    if (!g) return null;
+    const mem = (await pool.query('SELECT c.id, c.name, c.job, c.base_level FROM guild_members m JOIN characters c ON c.id = m.character_id WHERE m.guild_id = $1 ORDER BY c.name', [id])).rows;
+    return { id: Number(g.id), name: g.name, master: Number(g.master_id), ev: g.emblem_ver, skillPoints: g.skill_points, skills: g.skills,
+      members: mem.map((c) => { const o = Social.online(Number(c.id)); return { id: Number(c.id), name: c.name, job: c.job, level: o ? o[1].level : c.base_level, online: !!o, map: o ? o[1].map : null }; }) };
+  },
+  sendTo(me, msg) { const o = Social.online(me.charId); if (o && o[0].readyState === 1) o[0].send(JSON.stringify(msg)); },
+  async sendPartyTo(me) { Social.sendTo(me, { t: 'party', party: me.partyId ? await Social.partyState(me.partyId) : null }); },
+  async sendGuildTo(me) { Social.sendTo(me, { t: 'guild', guild: me.guild ? await Social.guildState(me.guild.id) : null }); },
+  async toParty(id, msg) { for (const [ws, s] of online) if (s.partyId === id && ws.readyState === 1) ws.send(JSON.stringify(msg)); },
+  async toGuild(id, msg) { for (const [ws, s] of online) if (s.guild && s.guild.id === id && ws.readyState === 1) ws.send(JSON.stringify(msg)); },
+  // Tell everyone on the map what to show next to this player's name.
+  pinfo(s) { broadcast(s.map, { t: 'pinfo', id: s.charId, party: s.partyName || null, guild: s.guild || null }); },
+  async refreshParty(id) { const st = await Social.partyState(id); for (const [, s] of online) if (s.partyId === id) Social.sendTo(s, { t: 'party', party: st }); },
+  async refreshGuild(id) { const st = await Social.guildState(id); for (const [, s] of online) if (s.guild && s.guild.id === id) { Social.sendTo(s, { t: 'guild', guild: st }); } },
+  notice(me, text) { Social.sendTo(me, { t: 'notice', text }); },
+  findByName(name) { const n = String(name || '').trim().toLowerCase(); for (const [ws, s] of online) if (s.name.toLowerCase() === n) return [ws, s]; return null; },
+  NAME: /^[A-Za-z0-9][A-Za-z0-9 '\-]{1,23}$/,
+
+  async handle(ws, me, m) {
+    switch (m.t) {
+      /* ---------- party ---------- */
+      case 'party_create': {
+        if (me.partyId) return Social.notice(me, 'You are already in a party.');
+        const name = String(m.name || '').trim().replace(/\s+/g, ' ');
+        if (!Social.NAME.test(name)) return Social.notice(me, 'Party names are 2 to 24 letters or numbers.');
+        try {
+          const r = await pool.query('INSERT INTO parties (name, leader_id) VALUES ($1, $2) RETURNING id', [name, me.charId]);
+          await pool.query('INSERT INTO party_members (party_id, character_id) VALUES ($1, $2)', [r.rows[0].id, me.charId]);
+          me.partyId = Number(r.rows[0].id); me.partyName = name;
+        } catch (e) { if (e.code === '23505') return Social.notice(me, 'That party name is taken.'); throw e; }
+        await Social.refreshParty(me.partyId); Social.pinfo(me); return;
+      }
+      case 'party_invite': {
+        const st = me.partyId && await Social.partyState(me.partyId);
+        if (!st) return Social.notice(me, 'Create a party first.');
+        if (st.leader !== me.charId) return Social.notice(me, 'Only the party leader can invite.');
+        if (st.members.length >= 12) return Social.notice(me, 'The party is full (12 members).');
+        const t = Social.findByName(m.name);
+        if (!t) return Social.notice(me, `${m.name} isn't online.`);
+        if (t[1].partyId) return Social.notice(me, `${t[1].name} is already in a party.`);
+        Social.invites.set(t[1].charId, { kind: 'party', id: me.partyId, from: me.name });
+        t[0].send(JSON.stringify({ t: 'invite', kind: 'party', name: st.name, from: me.name }));
+        return Social.notice(me, `Invited ${t[1].name} to ${st.name}.`);
+      }
+      case 'party_reply': case 'guild_reply': {
+        const inv = Social.invites.get(me.charId);
+        const kind = m.t === 'party_reply' ? 'party' : 'guild';
+        if (!inv || inv.kind !== kind) return;
+        Social.invites.delete(me.charId);
+        const from = Social.findByName(inv.from);
+        if (!m.accept) { if (from) Social.notice(from[1], `${me.name} declined.`); return; }
+        if (kind === 'party') {
+          if (me.partyId) return Social.notice(me, 'You are already in a party.');
+          await pool.query('INSERT INTO party_members (party_id, character_id) VALUES ($1, $2)', [inv.id, me.charId]);
+          const p = (await pool.query('SELECT name FROM parties WHERE id = $1', [inv.id])).rows[0];
+          me.partyId = inv.id; me.partyName = p ? p.name : null;
+          await Social.refreshParty(inv.id); Social.pinfo(me);
+          Social.toParty(inv.id, { t: 'notice', text: `${me.name} joined the party.` });
+        } else {
+          if (me.guild) return Social.notice(me, 'You are already in a guild.');
+          await pool.query('INSERT INTO guild_members (guild_id, character_id) VALUES ($1, $2)', [inv.id, me.charId]);
+          const g = (await pool.query('SELECT name, emblem_ver FROM guilds WHERE id = $1', [inv.id])).rows[0];
+          me.guild = { id: inv.id, name: g.name, ev: g.emblem_ver };
+          await Social.refreshGuild(inv.id); Social.pinfo(me);
+          Social.toGuild(inv.id, { t: 'notice', text: `${me.name} joined the guild.` });
+        }
+        return;
+      }
+      case 'party_leave': case 'party_kick': {
+        if (!me.partyId) return;
+        const pid = me.partyId, st = await Social.partyState(pid);
+        const who = m.t === 'party_leave' ? me.charId : Number(m.id);
+        if (m.t === 'party_kick' && st.leader !== me.charId) return Social.notice(me, 'Only the leader can remove members.');
+        await pool.query('DELETE FROM party_members WHERE party_id = $1 AND character_id = $2', [pid, who]);
+        const left = st.members.filter((x) => x.id !== who);
+        if (!left.length) await pool.query('DELETE FROM parties WHERE id = $1', [pid]);
+        else if (st.leader === who) await pool.query('UPDATE parties SET leader_id = $2 WHERE id = $1', [pid, (left.find((x) => x.online) || left[0]).id]);
+        const o = Social.online(who);
+        if (o) { o[1].partyId = null; o[1].partyName = null; Social.sendTo(o[1], { t: 'party', party: null }); Social.pinfo(o[1]); Social.notice(o[1], m.t === 'party_leave' ? 'You left the party.' : 'You were removed from the party.'); }
+        if (left.length) { await Social.refreshParty(pid); Social.toParty(pid, { t: 'notice', text: `${(st.members.find((x) => x.id === who) || {}).name} left the party.` }); }
+        return;
+      }
+      case 'party_settings': {
+        const st = me.partyId && await Social.partyState(me.partyId);
+        if (!st || st.leader !== me.charId) return Social.notice(me, 'Only the leader can change party settings.');
+        const expShare = m.expShare === 'even' ? 'even' : 'each', itemShare = m.itemShare === 'party' ? 'party' : 'each';
+        if (expShare === 'even') {
+          const lv = st.members.filter((x) => x.online).map((x) => x.level);
+          if (lv.length && Math.max(...lv) - Math.min(...lv) > 15) return Social.notice(me, 'Even Share needs every online member within 15 base levels of each other.');
+        }
+        await pool.query('UPDATE parties SET exp_share = $2, item_share = $3 WHERE id = $1', [me.partyId, expShare, itemShare]);
+        await Social.refreshParty(me.partyId); return;
+      }
+      case 'pexp': {
+        // Even Share: split a kill's EXP among party members on the same map.
+        const st = me.partyId && await Social.partyState(me.partyId);
+        const base = Math.max(0, Math.min(1e8, Math.floor(Number(m.base) || 0))), job = Math.max(0, Math.min(1e8, Math.floor(Number(m.job) || 0)));
+        const here = st && st.expShare === 'even' ? st.members.filter((x) => x.online && x.map === me.map) : [];
+        const list = here.length ? here : [{ id: me.charId }];
+        for (const x of list) { const o = Social.online(x.id); if (o) Social.sendTo(o[1], { t: 'gainexp', base: Math.floor(base / list.length), job: Math.floor(job / list.length), from: me.name, shared: list.length > 1 }); }
+        return;
+      }
+      case 'ploot': {
+        // Party Share: each drop goes to a random member on the map.
+        const st = me.partyId && await Social.partyState(me.partyId);
+        const item = String(m.item || ''), qty = Math.max(1, Math.min(1000, Math.floor(Number(m.qty) || 1)));
+        if (!/^[a-z0-9_]{1,40}$/.test(item)) return;
+        const here = st && st.itemShare === 'party' ? st.members.filter((x) => x.online && x.map === me.map) : [];
+        const pick = here.length ? here[Math.floor(Math.random() * here.length)] : { id: me.charId };
+        const o = Social.online(pick.id);
+        if (o) Social.sendTo(o[1], { t: 'loot_gift', item, qty, from: me.name });
+        return;
+      }
+      /* ---------- guild ---------- */
+      case 'guild_create': {
+        if (me.guild) return Social.notice(me, 'You are already in a guild.');
+        const name = String(m.name || '').trim().replace(/\s+/g, ' ');
+        if (!Social.NAME.test(name)) return Social.notice(me, 'Guild names are 2 to 24 letters or numbers.');
+        try {
+          const r = await pool.query('INSERT INTO guilds (name, master_id) VALUES ($1, $2) RETURNING id', [name, me.charId]);
+          await pool.query('INSERT INTO guild_members (guild_id, character_id) VALUES ($1, $2)', [r.rows[0].id, me.charId]);
+          me.guild = { id: Number(r.rows[0].id), name, ev: 0 };
+        } catch (e) { if (e.code === '23505') return Social.notice(me, 'That guild name is taken.'); throw e; }
+        Social.sendTo(me, { t: 'guild_created', name });
+        await Social.refreshGuild(me.guild.id); Social.pinfo(me); return;
+      }
+      case 'guild_invite': {
+        const st = me.guild && await Social.guildState(me.guild.id);
+        if (!st) return Social.notice(me, 'You are not in a guild.');
+        if (st.master !== me.charId) return Social.notice(me, 'Only the guild master can invite.');
+        if (st.members.length >= 16) return Social.notice(me, 'The guild is full (16 members).');
+        const t = Social.findByName(m.name);
+        if (!t) return Social.notice(me, `${m.name} isn't online.`);
+        if (t[1].guild) return Social.notice(me, `${t[1].name} is already in a guild.`);
+        Social.invites.set(t[1].charId, { kind: 'guild', id: st.id, from: me.name });
+        t[0].send(JSON.stringify({ t: 'invite', kind: 'guild', name: st.name, from: me.name }));
+        return Social.notice(me, `Invited ${t[1].name} to ${st.name}.`);
+      }
+      case 'guild_leave': case 'guild_expel': {
+        if (!me.guild) return;
+        const gid = me.guild.id, st = await Social.guildState(gid);
+        if (m.t === 'guild_leave' && st.master === me.charId) {
+          // The master breaking the guild disbands it, like the classics.
+          await pool.query('DELETE FROM guilds WHERE id = $1', [gid]);
+          for (const [, s] of online) if (s.guild && s.guild.id === gid) { s.guild = null; Social.sendTo(s, { t: 'guild', guild: null }); Social.pinfo(s); Social.notice(s, `${st.name} was disbanded.`); }
+          return;
+        }
+        const who = m.t === 'guild_leave' ? me.charId : Number(m.id);
+        if (m.t === 'guild_expel' && st.master !== me.charId) return Social.notice(me, 'Only the guild master can expel.');
+        if (who === st.master) return;
+        await pool.query('DELETE FROM guild_members WHERE guild_id = $1 AND character_id = $2', [gid, who]);
+        const o = Social.online(who);
+        if (o) { o[1].guild = null; Social.sendTo(o[1], { t: 'guild', guild: null }); Social.pinfo(o[1]); Social.notice(o[1], m.t === 'guild_leave' ? `You left ${st.name}.` : `You were expelled from ${st.name}.`); }
+        await Social.refreshGuild(gid); return;
+      }
+      case 'guild_skill': {
+        const st = me.guild && await Social.guildState(me.guild.id);
+        if (!st || st.master !== me.charId) return Social.notice(me, 'Only the guild master can learn guild skills.');
+        if (m.skill !== 'emblem' || (st.skills && st.skills.emblem)) return;
+        if (st.skillPoints < 1) return Social.notice(me, 'No guild skill points left.');
+        await pool.query("UPDATE guilds SET skill_points = skill_points - 1, skills = skills || '{\"emblem\":1}'::jsonb WHERE id = $1", [st.id]);
+        await Social.refreshGuild(st.id); return;
+      }
+      case 'guild_emblem': {
+        const st = me.guild && await Social.guildState(me.guild.id);
+        if (!st || st.master !== me.charId) return Social.notice(me, 'Only the guild master can change the emblem.');
+        if (!st.skills || !st.skills.emblem) return Social.notice(me, 'Learn the Guild Emblem skill first.');
+        const data = String(m.data || '');
+        if (!/^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(data) || data.length > 20000) return Social.notice(me, 'The emblem must be a small PNG image.');
+        const buf = Buffer.from(data.split(',')[1], 'base64');
+        if (buf.length < 24 || buf.readUInt32BE(0) !== 0x89504e47 || buf.readUInt32BE(16) > 64 || buf.readUInt32BE(20) > 64) return Social.notice(me, 'The emblem must be a PNG of at most 64×64 pixels.');
+        const r = await pool.query('UPDATE guilds SET emblem = $2, emblem_ver = emblem_ver + 1 WHERE id = $1 RETURNING emblem_ver', [st.id, data]);
+        for (const [, s] of online) if (s.guild && s.guild.id === st.id) { s.guild.ev = r.rows[0].emblem_ver; Social.pinfo(s); }
+        await Social.refreshGuild(st.id); return;
+      }
+    }
+  },
+};
 
 /* ---------------------------------------------------------------- start-up: schema + reference data */
 function loadGameData() {
@@ -388,7 +611,7 @@ function loadGameData() {
   sandbox.window.G = {};
   sandbox.G = sandbox.window.G;
   vm.createContext(sandbox);
-  for (const f of ['js/core/utils.js', 'js/core/config.js', 'js/data/items.js', 'js/data/maps.js']) {
+  for (const f of ['js/core/utils.js', 'js/core/config.js', 'js/data/items.js', 'js/data/maps.js', 'js/data/content.js']) {
     try { vm.runInContext(fs.readFileSync(path.join(ROOT, f), 'utf8'), sandbox, { filename: f }); } catch (e) { console.warn(`(reference data) skipped ${f}: ${e.message}`); }
   }
   return sandbox.window.G;

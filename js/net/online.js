@@ -117,6 +117,7 @@
       this.derived = { extra: {}, def: 0, softDef: 0, flee: 0 };
       this.hidden = false; this.cloaked = false; this.playingDead = false;
       this.cast = null;
+      this.party = p.party || null; this.guild = p.guild || null;
       this.syncCart();
       this.target = { x: p.x, z: p.z };
       this.position.set(p.x, G.Terrain.surfaceHeight(p.x, p.z), p.z);
@@ -163,7 +164,7 @@
     connect(game, charId) {
       this.game = game; this.charId = charId;
       const ws = this.ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`);
-      ws.onopen = () => ws.send(JSON.stringify({ t: 'hello', token: Online.token, charId, map: game.mapId, look: this.myLook() }));
+      ws.onopen = () => ws.send(JSON.stringify({ t: 'hello', token: Online.token, charId, map: game.mapId, look: this.myLook(), level: game.player.baseLevel }));
       ws.onmessage = (ev) => { let m; try { m = JSON.parse(ev.data); } catch (e) { return; } this.handle(m); };
       ws.onclose = () => {
         this.clear();
@@ -182,6 +183,7 @@
     handle(m) {
       const game = this.game;
       if (m.t === 'host' || m.t === 'mobs' || m.t === 'mob') { G.MobSync.handle(m); return; }
+      if (['party', 'guild', 'guild_created', 'invite', 'notice', 'pinfo', 'gainexp', 'loot_gift'].includes(m.t)) { G.Social.handle(m); return; }
       if (m.t === 'fx') { this.showFx(m); return; }
       if (m.t === 'buff') { this.receiveBuff(m); return; }
       if (m.t === 'welcome' || m.t === 'players') {
@@ -195,7 +197,8 @@
       else if (m.t === 'look') { const r = this.players.get(m.id); if (r) r.setLook(m.look); }
       else if (m.t === 'action') { const r = this.players.get(m.id); if (r && m.kind === 'attack') { r.sprite.play('attack', { restart: true }); r.swingT = 0.45; } }
       else if (m.t === 'chat') {
-        game.log.add(`${m.from}: ${m.text}`, 'chat');
+        game.log.add(m.channel === 'party' ? `(Party) ${m.from}: ${m.text}` : m.channel === 'guild' ? `(Guild) ${m.from}: ${m.text}` : `${m.from}: ${m.text}`, m.channel || 'chat');
+        if (m.channel) return;
         const who = m.id === this.charId ? game.player : this.players.get(m.id);
         if (who) who.bubble = { text: m.text, until: game.time + 5 };
       } else if (m.t === 'kicked') { this.kicked = true; game.log.add(m.text, 'warn'); game.hud.toast(m.text); }
@@ -271,7 +274,7 @@
       this.sendT -= dt;
       if (this.sendT <= 0) {
         this.sendT = 0.12;   // about 8 updates a second
-        const s = { t: 'state', map: game.mapId, x: +p.position.x.toFixed(2), z: +p.position.z.toFixed(2), facing: +p.facing.toFixed(2), moving: !!p.moving };
+        const s = { t: 'state', map: game.mapId, x: +p.position.x.toFixed(2), z: +p.position.z.toFixed(2), facing: +p.facing.toFixed(2), moving: !!p.moving, level: p.baseLevel };
         const key = JSON.stringify(s);
         if (key !== this.last) { this.last = key; this.send(s); }
         const look = JSON.stringify(this.myLook());

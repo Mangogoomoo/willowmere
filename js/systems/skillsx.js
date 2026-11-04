@@ -10,38 +10,7 @@
   const say = (game, text, kind) => game.log.add(text, kind || 'info');
 
   /* ---------------- items used by skills ---------------- */
-  const D = G.Items.DB;
-  const item = (id, o) => { D[id] = Object.assign({ id, rarity: 'common', weight: 1, price: 10, stack: o.type !== 'equip' }, o); };
-  item('blue_gemstone', { name: 'Blue Gemstone', type: 'etc', icon: { shape: 'ore', color: '#4f8ae8' }, price: 600, weight: 1, desc: 'A catalyst for Warp Portal, Safety Wall, Magnetic Earth and Resurrection.' });
-  item('red_gemstone', { name: 'Red Gemstone', type: 'etc', icon: { shape: 'ore', color: '#e84f5a' }, price: 600, weight: 1, desc: 'A catalyst for Stone Curse, Venom Dust and Scribble.' });
-  item('yellow_gemstone', { name: 'Yellow Gemstone', type: 'etc', icon: { shape: 'ore', color: '#ffd84a' }, price: 600, weight: 1, desc: 'A catalyst for the Sage\'s zones, Dispell and Hocus-pocus.' });
-  item('holy_water', { name: 'Holy Water', type: 'use', icon: { shape: 'potion', color: '#bfe8ff' }, price: 20, weight: 3, use: { sp: 10 }, desc: 'Water blessed by Aqua Benedicta. Drink for 10 SP, or use it for Aspersio.' });
-  item('stone', { name: 'Stone', type: 'etc', icon: { shape: 'ore', color: '#9aa3ad' }, price: 1, weight: 3, desc: 'Just a stone. Good for throwing.' });
-  item('iron_ore', { name: 'Iron Ore', type: 'etc', icon: { shape: 'ore', color: '#8a7f70' }, price: 75, weight: 15, desc: 'Raw ore. Iron Tempering turns it into Iron.' });
-  item('iron', { name: 'Iron', type: 'etc', icon: { shape: 'ore', color: '#b8c0cc' }, price: 100, weight: 10, desc: 'A refined iron ingot, the base of forged weapons.' });
-  item('coal', { name: 'Coal', type: 'etc', icon: { shape: 'ore', color: '#3a3a40' }, price: 200, weight: 10, desc: 'Fuel for Steel Tempering.' });
-  item('steel', { name: 'Steel', type: 'etc', icon: { shape: 'ore', color: '#dfe6f0' }, price: 600, weight: 10, rarity: 'uncommon', desc: 'Hard steel for advanced forging.' });
-  item('ember', { name: 'Ember', type: 'etc', icon: { shape: 'ore', color: '#ff7a3d' }, price: 30, weight: 1, desc: 'A still-warm cinder dropped by Drops.' });
-  for (const [id, name, color] of [['flame_heart', 'Flame Heart', '#ff5a2a'], ['mystic_frozen', 'Mystic Frozen', '#6fc3ff'], ['rough_wind', 'Rough Wind', '#ffe066'], ['great_nature', 'Great Nature', '#8fd16a']])
-    item(id, { name, type: 'etc', icon: { shape: 'ore', color }, price: 1500, weight: 5, rarity: 'uncommon', desc: 'An elemental stone. Forge it into a weapon to give the weapon its element.' });
-  for (const [el, name, color] of [['fire', 'Fire', '#ff5a2a'], ['water', 'Water', '#6fc3ff'], ['wind', 'Wind', '#ffe066'], ['earth', 'Earth', '#c9a06b']])
-    item(`${el}_converter`, { name: `${name} Elemental Converter`, type: 'use', icon: { shape: 'book', color }, price: 200, weight: 3, use: { fn: 'converter', element: el }, desc: `Endow your weapon with ${el} for 3 minutes.` });
-  item('acid_bottle', { name: 'Acid Bottle', type: 'etc', icon: { shape: 'potion', color: '#9ee86a' }, price: 100, weight: 10, desc: 'Ammunition for Acid Terror.' });
-  item('bottle_grenade', { name: 'Bottle Grenade', type: 'etc', icon: { shape: 'potion', color: '#ff7a3d' }, price: 100, weight: 10, desc: 'Ammunition for Demonstration.' });
-  item('arrow', { name: 'Arrow', type: 'etc', icon: { shape: 'arrow', color: '#c9a06b' }, price: 1, weight: 0.1, desc: 'A plain arrow. (Arrows aren\'t used as ammunition yet; sell them.)' });
-  const W = (id, name, wt, wlv, atk, req, jobs, price, iconShape, color, desc, extra) => item(id, Object.assign({ name, type: 'equip', slot: 'weapon', weaponType: wt, wlv, icon: { shape: iconShape, color },
-    weight: 70, price, slots: wlv >= 3 ? 1 : 2, reqLevel: req, jobs, bonus: { atk }, desc }, extra || {}));
-  W('claymore', 'Claymore', 'twohand', 3, 180, 33, ['swordsman'], 15000, 'sword', '#e6edf5', 'A huge two-handed sword.', { slots: 0 });
-  W('slayer', 'Slayer', 'twohand', 2, 120, 18, ['swordsman'], 8000, 'sword', '#cfd8e6', 'A broad two-handed blade.');
-  W('violin', 'Violin', 'instrument', 2, 60, 1, ['bard'], 3000, 'book', '#a8743c', 'A sweet-voiced fiddle that doubles as a club.');
-  W('guitar', 'Guitar', 'instrument', 3, 95, 20, ['bard'], 11000, 'book', '#c0394a', 'A guitar strung with steel. Rocks hard.');
-  W('rope', 'Rope', 'whip', 1, 45, 1, ['dancer'], 1500, 'knuckle', '#c9a06b', 'A braided rope whip.');
-  W('chain', 'Chain', 'whip', 2, 80, 15, ['dancer'], 7000, 'knuckle', '#cfd8e6', 'A whip of iron links.');
-  Object.assign(G.Items.WEAPON_TYPES, {
-    twohand: { name: 'Two-handed Sword', delay: 1.1, range: 1.85, twoHanded: true },
-    instrument: { name: 'Instrument', delay: 0.95, range: 1.6 },
-    whip: { name: 'Whip', delay: 0.9, range: 2.0 },
-  });
+  const D = G.Items.DB;   // skill items now live in data/content.js
   for (const j of ['swordsman', 'knight', 'crusader']) { const job = G.Jobs.get(j); if (!job.weapons.includes('twohand')) job.weapons.push('twohand'); }
   G.Jobs.get('bard').weapons.push('instrument');
   G.Jobs.get('dancer').weapons.push('whip');
@@ -52,9 +21,6 @@
   shop('forge', ['iron_ore', 'coal']);
   shop('weapons', ['slayer', 'claymore', 'violin', 'guitar', 'rope', 'chain']);
   if (!D.empty_bottle.price) D.empty_bottle.price = 3;
-  const drops = { drops: [['ember', 0.4], ['flame_heart', 0.004]], rocker: [['iron_ore', 0.15], ['great_nature', 0.004]], poporing: [['iron_ore', 0.1]], familiar: [['coal', 0.08]],
-    spore: [['mystic_frozen', 0.004], ['coal', 0.05]], whisper: [['rough_wind', 0.006]], king_poring: [['steel', 0.3], ['flame_heart', 0.05]] };
-  for (const m in drops) for (const [id, chance] of drops[m]) G.Config.MONSTERS[m].drops.push({ id, chance });
 
   G.ItemUse = {
     converter(p, it) { p.skills.addBuff('converter_' + it.use.element, 1, 180); p.game.spells.aura(p, it.icon.color); return true; },
@@ -505,7 +471,15 @@
     }
     render() {
       if (!this.game.windows.isOpen('cart')) return;
-      const h = G.h, b = this.win.body, p = this.game.player; b.textContent = '';
+      const h = G.h, b = this.win.body, p = this.game.player;
+      if (!this.vend) {
+        this.win.put = (uid, qty) => this.put(uid, qty);
+        G.itemGrid(this.game, this.win, { source: 'cart', label: 'Cart', entries: this.items,
+          note: 'Drag items between your inventory and the cart. Double-click takes a whole stack; hold Shift while dragging to choose an amount.',
+          take: (i, qty) => this.take(i, qty), count: `${this.items.length} / 100 kinds`, weight: `Cart weight ${Math.round(this.weight())} / 8000` });
+        return;
+      }
+      b.textContent = '';
       const list = h('div.shop-list');
       list.append(h('p.hint', { text: this.vend ? `Vending: ${this.vend.left} sale${this.vend.left === 1 ? '' : 's'} left (full price).` : 'Put items in from your inventory below; take them out any time.' }));
       this.items.forEach((s, i) => {
