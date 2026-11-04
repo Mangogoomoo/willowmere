@@ -204,7 +204,7 @@
       appearance: { hair: 'chestnut', eyes: 'green', style: 'short' }, script: innkeeper },
     { id: 'tutor', name: 'Pip', title: 'Tutor', costume: 'scholar', x: -5.2, z: -62.4, facing: Math.PI / 2,
       appearance: { hair: 'mint', eyes: 'violet', style: 'short' }, script: tutor },
-    { id: 'quest_giver', name: 'Captain Brin', title: 'Adventurers’ Guild', costume: 'captain', x: -24, z: -69.2, facing: Math.PI / 2,
+    { id: 'quest_giver', name: 'Captain Brin', title: 'Adventurers’ Guild', costume: 'captain', x: -4.5, z: -41.5, facing: 0,
       appearance: { hair: 'raven', eyes: 'blue', style: 'ponytail' }, script: questGiver },
     { id: 'reset_sage', name: 'Elda', title: 'Stat & Skill Reset', costume: 'scholar', x: -24, z: -75.2, facing: Math.PI / 2,
       appearance: { hair: 'snow', eyes: 'violet', style: 'ponytail' }, script: resetSage },

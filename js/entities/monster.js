@@ -181,7 +181,7 @@
 
     update(dt) {
       if (this.def.immortal && this.alive && this.hp < this.maxHpVal() && this.game.time - (this.lastHurtTime || 0) > 4) this.hp = this.maxHpVal();
-      const player = this.game.player, def = this.def;
+      const player = (this.aggro && this.aggro.isRemote && this.aggro.alive) ? this.aggro : this.game.player, def = this.def;
 
       if (!this.alive) {
         this.corpseT += dt;

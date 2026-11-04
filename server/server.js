@@ -266,12 +266,31 @@ const cleanLook = (l) => {
   const out = {};
   for (const k of ['job', 'weapon', 'mount']) if (typeof l[k] === 'string') out[k] = l[k].slice(0, 24);
   out.falcon = !!l.falcon;
+  out.cart = Number.isInteger(l.cart) && l.cart >= 0 && l.cart < 8 ? l.cart : null;
   if (l.appearance && typeof l.appearance === 'object') { out.appearance = {}; for (const k of ['hair', 'outfit', 'eyes', 'style']) if (typeof l.appearance[k] === 'string') out.appearance[k] = l.appearance[k].slice(0, 20); }
   if (l.head && typeof l.head === 'object') { out.head = {}; for (const k of ['top', 'mid', 'low']) if (typeof l.head[k] === 'string') out.head[k] = l.head[k].slice(0, 24); }
   return out;
 };
 
-const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 16 * 1024 });
+/* Shared monsters: one player per map (the earliest to arrive) runs that map's
+   monsters with the game's own AI and sends snapshots; the server keeps the
+   latest state, relays it to everyone else, and passes their hits to the host. */
+const hosts = new Map();      // map -> ws
+const mobCache = new Map();   // map -> Map(id -> state)
+const onMap = (map) => [...online].filter(([, s]) => s.map === map);
+function electHost(map) {
+  const players = onMap(map);
+  const cur = hosts.get(map);
+  if (!players.length) { hosts.delete(map); mobCache.delete(map); return; }
+  if (cur && online.has(cur) && online.get(cur).map === map) return;
+  const next = players[0][0];
+  hosts.set(map, next);
+  for (const [ws] of players) if (ws.readyState === 1) ws.send(JSON.stringify({ t: 'host', map, isHost: ws === next }));
+}
+const cachedMobs = (map) => [...((mobCache.get(map) || new Map()).values())];
+const wsOfChar = (id) => { for (const [ws, s] of online) if (s.charId === id) return ws; return null; };
+
+const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 64 * 1024 });
 wss.on('connection', (ws) => {
   let me = null;
   ws.isAlive = true;
@@ -288,19 +307,24 @@ wss.on('connection', (ws) => {
       for (const [other, s] of online) if (s.accountId === acct.id) { other.send(JSON.stringify({ t: 'kicked', text: 'This account logged in somewhere else.' })); other.close(); }
       me = { accountId: acct.id, charId: Number(c.id), name: c.name, map: String(msg.map || c.map), x: 0, z: 0, facing: 0, moving: false, look: cleanLook(msg.look), chatT: 0 };
       online.set(ws, me);
-      ws.send(JSON.stringify({ t: 'welcome', you: me.charId, players: [...online.values()].filter((s) => s !== me && s.map === me.map).map(publicState), online: online.size }));
+      ws.send(JSON.stringify({ t: 'welcome', you: me.charId, players: [...online.values()].filter((s) => s !== me && s.map === me.map).map(publicState), online: online.size, mobs: cachedMobs(me.map) }));
       broadcast(me.map, { t: 'join', p: publicState(me) }, ws);
+      electHost(me.map);
       return;
     }
     if (msg.t === 'state') {
       const map = String(msg.map || me.map).slice(0, 24);
       const num = (v, d) => (Number.isFinite(Number(v)) ? Math.max(-500, Math.min(500, Number(v))) : d);
       if (map !== me.map) {
-        broadcast(me.map, { t: 'leave', id: me.charId }, ws);
+        const old = me.map;
+        broadcast(old, { t: 'leave', id: me.charId }, ws);
         me.map = map;
-        ws.send(JSON.stringify({ t: 'players', players: [...online.values()].filter((s) => s !== me && s.map === map).map(publicState) }));
+        if (hosts.get(old) === ws) hosts.delete(old);
+        electHost(old);
+        ws.send(JSON.stringify({ t: 'players', map, players: [...online.values()].filter((s) => s !== me && s.map === map).map(publicState), mobs: cachedMobs(map) }));
         Object.assign(me, { x: num(msg.x, 0), z: num(msg.z, 0) });
         broadcast(map, { t: 'join', p: publicState(me) }, ws);
+        electHost(map);
         return;
       }
       Object.assign(me, { x: num(msg.x, me.x), z: num(msg.z, me.z), facing: num(msg.facing, me.facing), moving: !!msg.moving });
@@ -314,6 +338,31 @@ wss.on('connection', (ws) => {
       me.chatT = now;
       const text = String(msg.text || '').replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 120);
       if (text) broadcast(me.map, { t: 'chat', id: me.charId, from: me.name, text });
+    } else if (msg.t === 'mobs') {
+      // Snapshot from the map's host.
+      if (hosts.get(me.map) !== ws || !Array.isArray(msg.list)) return;
+      if (!mobCache.has(me.map)) mobCache.set(me.map, new Map());
+      const cache = mobCache.get(me.map);
+      for (const m of msg.list.slice(0, 400)) if (m && Number.isInteger(m.i)) cache.set(m.i, m);
+      broadcast(me.map, { t: 'mobs', list: msg.list.slice(0, 400) }, ws);
+    } else if (msg.t === 'mob') {
+      const host = hosts.get(me.map);
+      if (['dmg', 'status', 'knock'].includes(msg.op)) {
+        // A player's hit on a monster: the host applies it.
+        if (host && host !== ws && host.readyState === 1) host.send(JSON.stringify(Object.assign({}, msg, { from: me.charId })));
+      } else if (host === ws && ['attack', 'hurt', 'killed'].includes(msg.op)) {
+        // The host's verdicts go to whoever they concern.
+        const target = wsOfChar(Number(msg.to));
+        if (target && target.readyState === 1 && online.get(target).map === me.map) target.send(JSON.stringify(msg));
+      }
+    } else if (msg.t === 'fx') {
+      // Cast bars and spell effects, for everyone else on the map to see.
+      broadcast(me.map, Object.assign({}, msg, { from: me.charId }), ws);
+    } else if (msg.t === 'buff') {
+      // A support skill cast on another player: they apply it.
+      const target = wsOfChar(Number(msg.to));
+      if (target && target.readyState === 1 && online.get(target).map === me.map)
+        target.send(JSON.stringify({ t: 'buff', from: me.charId, fromName: me.name, skill: String(msg.skill || '').slice(0, 40), lv: Math.max(1, Math.min(10, Number(msg.lv) || 1)) }));
     } else if (msg.t === 'action') {
       // Small visual events (attack swing, sit, emote) for others to see.
       const kind = ['attack', 'cast', 'emote'].includes(msg.kind) ? msg.kind : null;
@@ -321,7 +370,11 @@ wss.on('connection', (ws) => {
     }
   });
   ws.on('close', () => {
-    if (me && online.get(ws) === me) { online.delete(ws); broadcast(me.map, { t: 'leave', id: me.charId }); }
+    if (me && online.get(ws) === me) {
+      online.delete(ws); broadcast(me.map, { t: 'leave', id: me.charId });
+      if (hosts.get(me.map) === ws) hosts.delete(me.map);
+      electHost(me.map);
+    }
   });
 });
 setInterval(() => { for (const ws of wss.clients) { if (!ws.isAlive) { ws.terminate(); continue; } ws.isAlive = false; ws.ping(); } }, 30_000);

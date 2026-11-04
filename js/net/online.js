@@ -112,6 +112,12 @@
     constructor(game, p) {
       super(game, RemotePlayer.sheet(p.look), { shadowSize: 1.15, radius: 0.45 });
       this.id = p.id; this.name = p.name; this.look = p.look;
+      // Enough of a "player" for monsters to chase and hit.
+      this.isRemote = true;
+      this.derived = { extra: {}, def: 0, softDef: 0, flee: 0 };
+      this.hidden = false; this.cloaked = false; this.playingDead = false;
+      this.cast = null;
+      this.syncCart();
       this.target = { x: p.x, z: p.z };
       this.position.set(p.x, G.Terrain.surfaceHeight(p.x, p.z), p.z);
       this.facing = this.targetFacing = p.facing || 0;
@@ -122,7 +128,18 @@
       l = l || {};
       return G.SpriteFactory.humanoid(l.appearance || {}, { job: l.job || 'novice', weapon: l.weapon || 'dagger', unarmed: !l.weapon || l.weapon === 'none', head: l.head || {}, mount: l.mount || null, falcon: !!l.falcon });
     }
-    setLook(l) { this.look = l; this.sprite.setSheet(RemotePlayer.sheet(l)); }
+    setLook(l) { this.look = l; this.sprite.setSheet(RemotePlayer.sheet(l)); this.syncCart(); }
+    // A monster on the host hit this player: their own game takes the damage.
+    takeDamage(dmg, mon) { if (mon) Net.send({ t: 'mob', op: 'hurt', id: mon.id, to: this.id, dmg: Math.round(dmg) }); }
+    // Merchant carts, seen by everyone.
+    syncCart() {
+      const want = this.look && Number.isInteger(this.look.cart) ? this.look.cart : null;
+      if (want === this.cartStyle) return;
+      if (this.cartMesh) { this.cartMesh.parent && this.cartMesh.parent.remove(this.cartMesh); this.cartMesh = null; }
+      this.cartStyle = want;
+      if (want != null) { this.cartMesh = G.Cart.mesh(want); this.game.mapRoot.add(this.cartMesh); this.cartMesh.position.copy(this.position); }
+    }
+    dispose() { if (this.cartMesh && this.cartMesh.parent) this.cartMesh.parent.remove(this.cartMesh); super.dispose(); }
     update(dt, camPos) {
       // Glide smoothly toward the last position we heard about.
       const dx = this.target.x - this.position.x, dz = this.target.z - this.position.z, d = Math.hypot(dx, dz);
@@ -130,8 +147,13 @@
       else if (d > 0.02) { const k = Math.min(1, dt * 10); this.position.x += dx * k; this.position.z += dz * k; if (d > 0.15) this.targetFacing = Math.atan2(dx, dz); }
       this.position.y = G.Terrain.surfaceHeight(this.position.x, this.position.z);
       const walking = this.moving || d > 0.15;
+      if (this.cast) { this.cast.t += dt; if (this.cast.t > this.cast.dur + 0.3) this.cast = null; }
       if (this.swingT > 0) this.swingT -= dt;
-      else this.sprite.play(walking ? 'walk' : 'idle');
+      else this.sprite.play(this.cast ? 'cast' : walking ? 'walk' : 'idle');
+      if (this.cartMesh) {
+        if (!this.cartMesh.parent) this.game.mapRoot.add(this.cartMesh);
+        G.Cart.follow(this.cartMesh, this, dt);
+      }
       this.syncVisuals(dt, camPos);
     }
   }
@@ -154,13 +176,18 @@
     myLook() {
       const p = this.game.player;
       return { job: p.job, weapon: p.derived.weaponType || 'none', head: p.headLooks(), appearance: p.appearance,
-        mount: p.riding ? (p.job === 'crusader' ? 'grandpeco' : 'peco') : null, falcon: !!p.skills.level('falconry_mastery') };
+        mount: p.riding ? (p.job === 'crusader' ? 'grandpeco' : 'peco') : null, falcon: !!p.skills.level('falconry_mastery'),
+        cart: p.skills.level('pushcart') ? (p.extra.cartStyle || 0) : null };
     },
     handle(m) {
       const game = this.game;
+      if (m.t === 'host' || m.t === 'mobs' || m.t === 'mob') { G.MobSync.handle(m); return; }
+      if (m.t === 'fx') { this.showFx(m); return; }
+      if (m.t === 'buff') { this.receiveBuff(m); return; }
       if (m.t === 'welcome' || m.t === 'players') {
         this.clear();
         for (const p of m.players) this.add(p);
+        if (m.mobs && m.mobs.length) G.MobSync.applySnapshot(m.mobs);
         if (m.t === 'welcome') game.log.add(`Connected. ${m.online} player${m.online === 1 ? '' : 's'} online.`, 'system');
       } else if (m.t === 'join') { this.add(m.p); game.log.add(`${m.p.name} arrived.`, 'info'); }
       else if (m.t === 'leave') { const r = this.players.get(m.id); if (r) { game.log.add(`${r.name} left.`, 'info'); r.dispose(); this.players.delete(m.id); } }
@@ -177,9 +204,69 @@
     add(p) { if (p.id === this.charId || this.players.has(p.id)) return; this.players.set(p.id, new RemotePlayer(this.game, p)); },
     clear() { for (const r of this.players.values()) r.dispose(); this.players.clear(); },
     send(o) { if (this.ws && this.ws.readyState === 1) this.ws.send(JSON.stringify(o)); },
+
+    /* ---------- skills seen by others ---------- */
+    // Describe the target so other games can find it.
+    skillFx(s, lv, target) {
+      const p = this.game.player;
+      let tg = null;
+      if (target && target.ground) tg = { x: +target.position.x.toFixed(2), z: +target.position.z.toFixed(2) };
+      else if (target && target.isRemote) tg = { p: target.id };
+      else if (target === p) tg = { p: this.charId };
+      else if (target && target.def) tg = { m: target.id };
+      this.send({ t: 'fx', k: 'skill', s: s.id, lv, tg });
+    },
+    showFx(m) {
+      const game = this.game, caster = this.players.get(m.from), s = G.Skills.get(m.s);
+      if (!caster || !s) return;
+      if (m.k === 'cast') {
+        caster.cast = { id: s.id, t: 0, dur: Math.max(0.2, Number(m.dur) || 1) };
+        game.spells.castCircle(caster, s.element);
+        return;
+      }
+      caster.cast = null;
+      const tg = m.tg || {};
+      let target = null;
+      if (tg.m != null) target = game.monsters.list.find((x) => x.id === tg.m);
+      else if (tg.p != null) target = tg.p === this.charId ? game.player : this.players.get(tg.p);
+      else if (tg.x != null) target = { position: new THREE.Vector3(tg.x, G.Terrain.surfaceHeight(tg.x, tg.z), tg.z), def: { height: 1 }, alive: true };
+      const at = caster.position.clone(); at.y += 2.4;
+      game.overlay.addText(at, s.name + '!', 'skill');
+      const color = (s.icon && s.icon.color) || '#ffffff', fx = s.fx || {};
+      const noop = () => {};
+      if (!target || target === caster || s.target === 'self') {
+        if (fx.area) game.spells.ring(caster.position, color, fx.area); else game.spells.aura(caster, color);
+        return;
+      }
+      if (s.target === 'ally') { game.spells.aura(target, color); return; }
+      const hits = Math.min(6, fx.hits ? fx.hits(lv) : 1);
+      for (let i = 0; i < hits; i++) game.after(i * (fx.hitDelay || 0.12), () => {
+        if (s.target === 'ground' || fx.area) game.spells.ring(target.position, color, fx.area || 2.5);
+        if (fx.visual === 'orb') game.spells.orb(caster, target, color, noop);
+        else if (fx.visual === 'arrow') game.spells.arrow(caster, target, noop);
+        else if (fx.visual === 'beam') game.spells.beam(target, color, noop);
+        else if (fx.visual === 'bolt' || fx.visual === 'meteor' || (s.element && s.element !== 'neutral' && !fx.visual)) game.spells.bolt(s.element || 'fire', target, noop);
+        else if (target.def) game.spells.impact(target, color, 1);
+      });
+    },
+
+    /* ---------- buffing other players ---------- */
+    sendBuff(target, s, lv) {
+      this.send({ t: 'buff', to: target.id, skill: s.id, lv });
+      this.game.spells.aura(target, (s.icon && s.icon.color) || '#ffffff');
+      this.game.log.add(`You cast ${s.name} on ${target.name}.`, 'info');
+    },
+    receiveBuff(m) {
+      const game = this.game, p = game.player, s = G.Skills.get(m.skill);
+      if (!s || s.target !== 'ally' || !p.alive) return;
+      const sys = p.skills, run = G.SkillSystem.EFFECTS[s.effect || s.id];
+      if (run) run(sys, m.lv, p, s); else if (s.fx) G.SkillSystem.runFx(sys, s, m.lv, p);
+      game.log.add(`${m.fromName} cast ${s.name} on you.`, 'level');
+    },
     update(dt) {
       const game = this.game, p = game.player;
       if (!p) return;
+      if (game.mapId !== this.mapSeen) { this.mapSeen = game.mapId; G.MobSync.reset(); }
       for (const r of this.players.values()) r.update(dt, game.camera3.position);
       this.sendT -= dt;
       if (this.sendT <= 0) {

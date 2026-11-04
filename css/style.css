@@ -230,7 +230,8 @@ button:focus-visible { outline: 2px solid #ffd76a; outline-offset: 2px; }
   pointer-events: auto; border-radius: 10px; background: rgba(16, 22, 42, 0.55); border: 1px solid rgba(140, 178, 230, 0.35);
   backdrop-filter: blur(4px);
 }
-.log ul { list-style: none; margin: 0; padding: 7px 10px; height: 100%; overflow-y: auto; font-size: 12.5px; line-height: 1.45; color: #e9eefb; text-shadow: 0 1px 1px rgba(0,0,0,0.6); }
+.log { display: flex; flex-direction: column; }
+.log ul { list-style: none; margin: 0; padding: 7px 10px; flex: 1 1 auto; min-height: 0; overflow-y: auto; font-size: 12.5px; line-height: 1.45; color: #e9eefb; text-shadow: 0 1px 1px rgba(0,0,0,0.6); }
 .log li.system { color: #9fd0ff; }
 .log li.loot { color: #f2f2f2; }
 .log li.rare { color: #74e6ff; font-weight: 600; }
@@ -643,8 +644,16 @@ button:focus-visible { outline: 2px solid #ffd76a; outline-offset: 2px; }
   .auth-swap { background: transparent; color: #9db8ff; border-color: #34446e; }
   .auth-swap:hover { background: #1a2442; border-color: #6e9bff; }
 }
-#chat-input { width: 100%; margin-top: 6px; padding: 6px 9px; border-radius: 8px; border: 1px solid var(--cell-edge); background: rgba(255,255,255,0.92); font: 500 12.5px var(--font); color: #1b2b4a; pointer-events: auto; }
+#chat-input { flex: none; box-sizing: border-box; width: calc(100% - 12px); margin: 0 6px 6px; padding: 6px 9px; border-radius: 8px; border: 1px solid var(--cell-edge); background: rgba(255,255,255,0.92); font: 500 12.5px var(--font); color: #1b2b4a; pointer-events: auto; }
 #chat-input:focus { outline: 2px solid var(--accent); }
 .log li.chat { color: #2f7a3a; font-weight: 600; }
 @media (prefers-color-scheme: dark) { .log li.chat { color: #9be08f; } }
 .cs-logout { align-self: center; }
+
+.mbtn.menu-toggle { justify-content: center; font-weight: 700; }
+.menubar.collapsed .mbtn:not(.menu-toggle) { display: none; }
+.tg-status { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.tg-status:empty { display: none; }
+.tg-status .buff { position: relative; width: 26px; height: 26px; }
+.tg-status .buff img { width: 26px; height: 26px; border-radius: 6px; }
+.tg-status .buff span { position: absolute; right: -2px; bottom: -3px; font: 700 9px/1 var(--font); color: #fff; text-shadow: 0 0 2px #000, 0 1px 1px #000; }

@@ -145,6 +145,18 @@
         ctx.fillText(who.bubble.text.length > 34 ? who.bubble.text.slice(0, 33) + '…' : who.bubble.text, q.x, q.y - 14);
       }
 
+      // Other players' cast bars, with the spell name.
+      if (G.Net) for (const r of G.Net.players.values()) {
+        if (!r.cast) continue;
+        const hq = this.project(r.position.x, r.position.y + 2.8, r.position.z);
+        if (!hq) continue;
+        const w = 84, hh = 9, x0 = hq.x - w / 2, y0 = hq.y, k = Math.min(1, r.cast.t / r.cast.dur);
+        ctx.fillStyle = 'rgba(12,16,24,0.85)'; ctx.fillRect(x0 - 2, y0 - 2, w + 4, hh + 4);
+        ctx.fillStyle = '#3fae3a'; ctx.fillRect(x0, y0, w * k, hh);
+        ctx.strokeStyle = '#f2e6b8'; ctx.lineWidth = 1; ctx.strokeRect(x0 - 1.5, y0 - 1.5, w + 3, hh + 3);
+        this.outlined(ctx, G.Skills.get(r.cast.id).name, hq.x, y0 - 10, 12.5, '#f3ffe8', 'rgba(10,20,10,0.9)', 600);
+      }
+
       // NPC names (always shown, classic style) with a title line.
       for (const n of game.npcs.list) {
         if (n.distanceTo(player) > 40) continue;

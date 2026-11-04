@@ -134,7 +134,15 @@
   const after = (sys, s, fn) => sys.game.after(s, fn);
   Object.assign(FX, {
     auto_berserk(sys) { if (sys.buffs.auto_berserk) { delete sys.buffs.auto_berserk; sys.player.recalc(); say(sys.game, 'Auto Berserk off.'); } else sys.addBuff('auto_berserk', 1, 99999); },
-    safety_wall(sys, lv) { const p = sys.player; sys.game.fields.add({ kind: 'safety_wall', x: p.position.x, z: p.position.z, r: 1.2, dur: 5 * lv, color: '#ff9ec2', hits: lv + 1 }); },
+    safety_wall(sys, lv, t) { const c = (t || sys.player).position; sys.game.fields.add({ kind: 'safety_wall', x: c.x, z: c.z, r: 1.2, dur: 5 * lv, color: '#ff9ec2', hits: lv + 1 }); },
+    // Sanctuary: holy ground that heals whoever stands in it.
+    sanctuary_field(sys, lv, t) {
+      const c = t.position, game = sys.game;
+      game.fields.add({ kind: 'sanctuary', x: c.x, z: c.z, r: 2.2, dur: 4 + lv, tick: 1, color: '#bff2c0', onTick: (f) => {
+        const p = game.player;
+        if (Math.hypot(p.position.x - f.x, p.position.z - f.z) <= f.r) { p.heal(20 + 15 * lv); game.spells.aura(p, '#bff2c0'); }
+      } });
+    },
     pneuma(sys, lv, t) {
       const game = sys.game, x = t.position.x, z = t.position.z;
       const f = game.fields.add({ kind: 'pneuma', x, z, r: 1.6, dur: 10, color: '#bfe8ff' });
@@ -183,13 +191,13 @@
       sys.player.sp = Math.min(sys.player.maxSp, sys.player.sp + Math.round(s.sp(c.level) * (10 + 15 * lv) / 100));
     },
     sage_zone(sys, lv, t, s) {
-      const p = sys.player, id = s.zoneId, col = { volcano: '#ff7a3d', deluge: '#6fc3ff', whirlwind: '#ffe066' }[id];
-      sys.game.fields.add({ kind: id, level: lv, x: p.position.x, z: p.position.z, r: 3.5, dur: 60 * lv, color: col, tick: 1, onTick: () => p.recalc() });
+      const p = sys.player, id = s.zoneId, col = { volcano: '#ff7a3d', deluge: '#6fc3ff', whirlwind: '#ffe066' }[id], c = (t || p).position;
+      sys.game.fields.add({ kind: id, level: lv, x: c.x, z: c.z, r: 3.5, dur: 60 * lv, color: col, tick: 1, onTick: () => p.recalc() });
     },
-    land_protector(sys, lv) {
-      const p = sys.player, F = sys.game.fields;
-      for (const f of F.list.slice()) if (Math.hypot(f.x - p.position.x, f.z - p.position.z) < 4) F.remove(f);
-      F.add({ kind: 'land_protector', x: p.position.x, z: p.position.z, r: 4, dur: 100 + 30 * lv, color: '#c9a06b' });
+    land_protector(sys, lv, t) {
+      const c = (t || sys.player).position, F = sys.game.fields;
+      for (const f of F.list.slice()) if (Math.hypot(f.x - c.x, f.z - c.z) < 4) F.remove(f);
+      F.add({ kind: 'land_protector', x: c.x, z: c.z, r: 4, dur: 100 + 30 * lv, color: '#c9a06b' });
     },
     dispell(sys, lv, t) {
       const at = t.position.clone(); at.y += t.def.height;
@@ -218,7 +226,7 @@
       game.spells.aura(p, '#c79bff');
       if (sp.map === game.mapId) p.teleport(sp.x, sp.z); else game.travel(sp.map, sp.x, sp.z);
     },
-    warp_portal(sys, lv) {
+    warp_portal(sys, lv, t) {
       const game = sys.game, p = sys.player, memos = p.extra.memos = p.extra.memos || [];
       game.dialog.open({ name: 'Warp Portal', title: '' }, async (d) => {
         const sp = p.savePoint || { map: 'meadow', x: 0, z: -60 };
@@ -232,8 +240,12 @@
           await d.say('Memorised. (Warp Portal remembers up to 3 places.)'); return;
         }
         const dest = c === 0 ? sp : memos[c - 1];
-        game.spells.ring(p.position, '#6fc3ff', 1.2); game.spells.aura(p, '#6fc3ff');
-        game.after(1.0, () => game.travel(dest.map, dest.x, dest.z));
+        const at = (t && t.ground) ? t.position : p.position;
+        game.fields.add({ kind: 'warp', x: at.x, z: at.z, r: 1.1, dur: 15, tick: 0.2, color: '#6fc3ff', onTick: (f) => {
+          if (Math.hypot(p.position.x - f.x, p.position.z - f.z) <= f.r) { f.t = f.dur; game.travel(dest.map, dest.x, dest.z); }
+        } });
+        game.spells.ring(at, '#6fc3ff', 1.2);
+        game.log.add('A warp portal opens. Step into it to travel.', 'info');
       });
     },
     aqua_benedicta(sys) {
@@ -377,12 +389,13 @@
         if (game.nav.walkable(x, z) && !G.Terrain.isWater(x, z) && game.nav.walkable(x + 1.2, z)) { p.teleport(x, z); t.setPosition(x + 1.2, z); t.home = { x: x + 1.2, z }; return; }
       }
     },
-    scribble(sys) {
+    scribble(sys, lv, t) {
       const p = sys.player, words = ['Mira was here', 'Kilroy', '♥', 'RO forever', ':)', 'Watch out!'];
       const c = document.createElement('canvas'); c.width = 256; c.height = 64;
       const x = c.getContext('2d'); x.font = 'bold 34px sans-serif'; x.fillStyle = ['#ff6b8b', '#6fc3ff', '#ffd84a'][(Math.random() * 3) | 0]; x.textAlign = 'center'; x.fillText(words[(Math.random() * words.length) | 0].replace('Mira', p.name), 128, 44);
       const m = new THREE.Mesh(new THREE.PlaneGeometry(3, 0.75).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c), transparent: true, depthWrite: false }));
-      m.position.set(p.position.x, G.Terrain.surfaceHeight(p.position.x, p.position.z) + 0.05, p.position.z + 1.5);
+      const at = (t || p).position;
+      m.position.set(at.x, G.Terrain.surfaceHeight(at.x, at.z) + 0.05, at.z);
       sys.game.mapRoot.add(m);
     },
     venom_dust(sys, lv, t) {
@@ -510,7 +523,11 @@
     }
     restyle() { if (this.mesh) { this.mesh.parent && this.mesh.parent.remove(this.mesh); this.mesh = null; } }
     build() {
-      const style = this.game.player.extra.cartStyle || 0, cols = [['#8a5a2c', '#c9a06b'], ['#3a5aa8', '#ffd84a'], ['#c0394a', '#f2e6cc'], ['#2f7a3a', '#e6c25a']][style];
+      this.mesh = Cart.mesh(this.game.player.extra.cartStyle || 0);
+      this.game.mapRoot.add(this.mesh);
+    }
+    static mesh(style) {
+      const cols = [['#8a5a2c', '#c9a06b'], ['#3a5aa8', '#ffd84a'], ['#c0394a', '#f2e6cc'], ['#2f7a3a', '#e6c25a']][style];
       const g = new THREE.Group(), wood = new THREE.MeshStandardMaterial({ color: cols[0], roughness: 0.8 }), trim = new THREE.MeshStandardMaterial({ color: cols[1], roughness: 0.6 });
       const box = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.5, 1.1), wood); box.position.y = 0.55;
       const rim = new THREE.Mesh(new THREE.BoxGeometry(0.98, 0.08, 1.18), trim); rim.position.y = 0.82;
@@ -519,7 +536,14 @@
       for (const sx of [-0.5, 0.5]) { const w = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.08, 14), trim); w.rotation.z = Math.PI / 2; w.position.set(sx, 0.3, 0); g.add(w); }
       g.add(box, rim, load, handle);
       g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
-      this.mesh = g; this.game.mapRoot.add(g);
+      return g;
+    }
+    // Trail a cart behind whoever pulls it.
+    static follow(m, who, dt) {
+      const back = 1.5, f = who.facing, tx = who.position.x - Math.sin(f) * back, tz = who.position.z - Math.cos(f) * back, k = Math.min(1, dt * 8);
+      m.position.x += (tx - m.position.x) * k; m.position.z += (tz - m.position.z) * k;
+      m.position.y = G.Terrain.surfaceHeight(m.position.x, m.position.z);
+      m.rotation.y = Math.atan2(who.position.x - m.position.x, who.position.z - m.position.z);
     }
     update(dt) {
       const p = this.game.player;
@@ -527,12 +551,7 @@
       if (this.vend && Math.hypot(p.position.x - this.vend.x, p.position.z - this.vend.z) > 2) { this.vend = null; say(this.game, 'You closed your stall.'); this.render(); }
       if (!this.has) { if (this.mesh) this.restyle(); return; }
       if (!this.mesh || !this.mesh.parent) this.build();
-      // Trail behind the player.
-      const back = 1.5, f = p.facing, tx = p.position.x - Math.sin(f) * back, tz = p.position.z - Math.cos(f) * back;
-      const m = this.mesh, k = Math.min(1, dt * 8);
-      m.position.x += (tx - m.position.x) * k; m.position.z += (tz - m.position.z) * k;
-      m.position.y = G.Terrain.surfaceHeight(m.position.x, m.position.z);
-      m.rotation.y = Math.atan2(p.position.x - m.position.x, p.position.z - m.position.z);
+      Cart.follow(this.mesh, p, dt);
     }
   }
   G.Cart = Cart;

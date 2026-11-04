@@ -69,6 +69,7 @@
     ],
     style: [
       { id: 'ponytail', name: 'Ponytail' }, { id: 'short', name: 'Short' }, { id: 'twintails', name: 'Twin tails' },
+      { id: 'spiky', name: 'Spiky' }, { id: 'swept', name: 'Swept' }, { id: 'messy', name: 'Messy' }, { id: 'slick', name: 'Slick' }, { id: 'buzz', name: 'Buzz cut' },
     ],
   };
   const pick = (list, id) => list.find((o) => o.id === id) || list[0];
@@ -80,8 +81,11 @@
     };
   }
 
+  const SHORTISH = ['short', 'spiky', 'swept', 'messy', 'slick', 'buzz'];
   function isHair(n, style) {
     const [x, y, z] = n;
+    if (style === 'buzz') return y > 0.5 || (z < -0.3 && y > -0.2);
+    if (SHORTISH.includes(style)) style = 'short';
     if (y > 0.42) return true;
     if (z < -0.05 && y > (style === 'short' ? -0.55 : -0.8)) return true;
     if (Math.abs(x) > 0.74 && y > (style === 'short' ? -0.1 : -0.36)) return true;
@@ -348,7 +352,7 @@
         if (anim === 'attack' && t > 0.2 && t < 0.56) P.capsule(pull, pt(0, 14), 0.5, '#e8e0c8', { outline: '#8a7a5a', bias: 0.4 });
       }
 
-      P.sphere([0, headY + 1.6, hz - 3.2], app.style === 'short' ? 19.0 : 19.3, C.hair, { bias: -1.2, outline: C.hairDark });
+      P.sphere([0, headY + 1.6, hz - 3.2], app.style === 'buzz' ? 18.7 : SHORTISH.includes(app.style) ? 19.0 : 19.3, C.hair, { bias: -1.2, outline: C.hairDark });
       P.sphere([0, headY, hz], 18.5, C.skin, { decals: eyesClosed ? headDecalsClosed : headDecalsOpen, outline: '#a8664a' });
       const sway = anim === 'walk' ? -Math.cos(t * TAU) * 1.5 : 0;
       if (app.style === 'ponytail') {
@@ -356,6 +360,23 @@
         P.sphere([sway * 0.6, headY - 4.5, hz - 21.8], 4.3, C.hair, { outline: C.hairDark });
         P.sphere([sway, headY - 9, hz - 22.6], 3.1, C.hair, { outline: C.hairDark });
         P.sphere([0, headY + 2.5, hz - 17.6], 2.4, '#e05a6b', { bias: 0.5 });
+      } else if (app.style === 'spiky') {
+        // Spikes fanning up and back from the crown.
+        for (const [a, up, len] of [[-0.9, 0.5, 9], [-0.45, 0.8, 11], [0, 1, 12], [0.45, 0.8, 11], [0.9, 0.5, 9], [-0.6, 0.3, 9], [0.6, 0.3, 9], [0, 0.45, 10]]) {
+          const bx = Math.sin(a) * 12, bz = hz - 4 + Math.cos(a) * 5 - (up < 0.5 ? 8 : 0);
+          P.capsule([bx, headY + 13, bz], [bx * 1.35, headY + 13 + len * up, bz - len * (1 - up) * 0.9], 3.2, C.hair, { outline: C.hairDark, bias: -0.3 });
+        }
+      } else if (app.style === 'swept') {
+        // A big fringe swept to one side.
+        P.sphere([5, headY + 12, hz + 5], 10, C.hair, { sx: 1.55, sy: 0.62, bias: 0.6, outline: C.hairDark });
+        P.capsule([-8, headY + 13, hz + 9], [12, headY + 8, hz + 13], 3.4, C.hair, { outline: C.hairDark, bias: 0.7 });
+      } else if (app.style === 'messy') {
+        for (const [x, y, z, r] of [[-9, 15, -2, 6], [7, 16, 0, 6.5], [0, 18, -6, 6], [-12, 9, -9, 5], [12, 10, -8, 5], [3, 12, 9, 5], [-5, 13, 8, 4.5]])
+          P.sphere([x, headY + y, hz + z], r, C.hair, { outline: C.hairDark, bias: z > 4 ? 0.5 : -0.2 });
+      } else if (app.style === 'slick') {
+        // Hair combed straight back.
+        P.sphere([0, headY + 6, hz - 9], 17.5, C.hair, { sy: 0.85, bias: -0.8, outline: C.hairDark });
+        P.capsule([-9, headY + 15, hz + 6], [9, headY + 15, hz + 6], 2.6, C.hair, { outline: C.hairDark, bias: 0.4 });
       } else if (app.style === 'twintails') {
         for (const sx of [-1, 1]) {
           P.sphere([sx * 17, headY + 4, hz - 6], 4.6, C.hair, { outline: C.hairDark });
@@ -366,7 +387,6 @@
       }
       // An equipped upper headgear replaces the job's hat.
       const hat = head.top ? null : costume.hat;
-      if (!hat || hat.type === 'headband') P.capsule([0, headY + 18, hz + 1], [3.5, headY + 24, hz - 2], 1.6, C.hair, { outline: C.hairDark, bias: -0.3 });
       if (hat) {
         const hc = hat.color;
         if (hat.type === 'wizard') {

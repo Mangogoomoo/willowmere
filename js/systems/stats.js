@@ -18,9 +18,13 @@
     // Cost to raise a stat from its current value by one (classic curve).
     cost(v) { return Math.floor((v - 1) / 10) + 2; },
     // Points granted on reaching base level lv.
-    pointsForLevel(lv) { return Math.floor(lv / 5) + 3; },
+    // Classic: floor((level - 1) / 5) + 3 on reaching each base level, plus 48 at
+    // creation, which comes to 1,273 points by level 99.
+    START_POINTS: 48,
+    pointsForLevel(lv) { return Math.floor((lv - 1) / 5) + 3; },
     // Total points a character has earned by base level lv (for resets).
-    totalPoints(lv) { let s = 0; for (let l = 2; l <= lv; l++) s += Stats.pointsForLevel(l); return s; },
+    totalPoints(lv) { let s = Stats.START_POINTS; for (let l = 2; l <= lv; l++) s += Stats.pointsForLevel(l); return s; },
+    oldTotalPoints(lv) { let s = 0; for (let l = 2; l <= lv; l++) s += Math.floor(l / 5) + 3; return s; },
 
     sources: [
       // Equipment bonuses.

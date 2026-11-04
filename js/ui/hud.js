@@ -15,7 +15,7 @@
         expFill: $('st-exp-fill'), expText: $('st-exp-text'),
         jexpFill: $('st-jexp-fill'), jexpText: $('st-jexp-text'),
         zeny: $('st-zeny'), weight: $('st-weight'), points: $('st-points'),
-        target: $('target'), tName: $('tg-name'), tLevel: $('tg-level'), tFill: $('tg-hp-fill'), tText: $('tg-hp-text'),
+        target: $('target'), tStatus: $('tg-status'), tName: $('tg-name'), tLevel: $('tg-level'), tFill: $('tg-hp-fill'), tText: $('tg-hp-text'),
         help: $('help'), helpBtn: $('help-close'), helpOpen: $('help-open'),
         toast: $('toast'), zone: $('zone'), death: $('death'),
       };
@@ -96,6 +96,7 @@
       const show = !!(t && (t.alive || !t.corpseGone));
       this.set('tshow', show, (v) => { e.target.hidden = !v; });
       if (show) {
+        this.renderTargetStatus(t);
         this.set('tname', t.id, () => {
           e.tName.textContent = t.name;
           const el = t.def.element || 'neutral';
@@ -108,6 +109,30 @@
       }
     }
   }
+
+  // Effects on the target monster, drawn like the player's buff bar.
+  const STATUS_ICON = { frozen: 'frost_diver', stunned: 'hammer_fall', poisoned: 'envenom', slowed: 'decrease_agi', rooted: 'ankle_snare', stone: 'stone_curse',
+    asleep: 'sandman', blinded: 'flasher', signum: 'signum_crucis', disarmed: 'strip_weapon', strip_helm: 'strip_helm', strip_shield: 'strip_shield',
+    strip_armor: 'strip_armor', lex: 'lex_aeterna', quagmire: 'quagmire' };
+  const STATUS_NAME = { frozen: 'Frozen', stunned: 'Stunned', poisoned: 'Poisoned', slowed: 'Slowed', rooted: 'Snared', stone: 'Stone curse', asleep: 'Asleep',
+    blinded: 'Blinded', signum: 'Signum Crucis', disarmed: 'Disarmed', strip_helm: 'Helm stripped', strip_shield: 'Shield stripped', strip_armor: 'Armour stripped',
+    lex: 'Lex Aeterna', quagmire: 'Quagmire', provoked: 'Provoked' };
+  HUD.prototype.renderTargetStatus = function (t) {
+    const el = this.el.tStatus; if (!el) return;
+    const st = Object.assign({}, t.status || {});
+    if (t.provoke) st.provoked = { until: t.provoke.until || 0 };
+    const key = t.id + ':' + Object.keys(st).sort().join(',');
+    const now = this.game.time;
+    if (key !== this.tsKey) {
+      this.tsKey = key; el.textContent = '';
+      for (const k in st) {
+        const icon = G.Skills.get(STATUS_ICON[k] || 'provoke') ? G.Icons.skillUrl(STATUS_ICON[k] || 'provoke') : null;
+        const b = G.h('div.buff', { 'data-st': k, title: STATUS_NAME[k] || k }, icon ? G.h('img', { src: icon, alt: '' }) : null, G.h('span'));
+        el.append(b);
+      }
+    }
+    el.querySelectorAll('[data-st]').forEach((n) => { const s2 = st[n.dataset.st]; n.lastChild.textContent = s2 && s2.until ? Math.max(0, Math.ceil(s2.until - now)) + 's' : ''; });
+  };
 
   G.HUD = HUD;
 })(window.G = window.G || {});

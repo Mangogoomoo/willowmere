@@ -413,5 +413,15 @@
   for (const id in S) if (!keep.has(id)) delete S[id];
   // Quest skills: Arrow Repel, Back Slide, Cart Revolution, Crazy Uproar, Holy Light are single-level like the classics.
   for (const id of ['arrow_repel', 'back_slide', 'cart_revolution', 'crazy_uproar', 'holy_light']) S[id].max = 1;
+  // Skills placed on the ground, like the classics (click a spot instead of a monster).
+  for (const id of ['thunderstorm', 'fire_wall', 'safety_wall', 'pr_safety_wall', 'storm_gust', 'meteor_storm', 'lord_of_vermilion', 'heavens_drive', 'sg_heavens_drive',
+    'quagmire', 'ice_wall', 'fire_pillar', 'volcano', 'deluge', 'whirlwind', 'land_protector', 'sanctuary', 'magnus_exorcismus', 'venom_dust', 'demonstration',
+    'summon_flora', 'marine_sphere', 'hammer_fall', 'scribble', 'warp_portal', 'skid_trap', 'land_mine', 'ankle_snare', 'shockwave_trap', 'sandman', 'flasher',
+    'freezing_trap', 'blast_mine', 'claymore_trap', 'talkie_box']) {
+    const s = S[id]; if (!s) continue;
+    s.target = 'ground';
+    if (!s.range || s.range === 'weapon') s.range = () => 9;
+  }
+  S.sanctuary.effect = 'sanctuary_field'; delete S.sanctuary.fx;
   G.Skills.TREES = T;
 })(window.G = window.G || {});

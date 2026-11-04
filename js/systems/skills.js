@@ -215,6 +215,12 @@
       if (s.target === 'ally') {
         // Like the classics: pick a character to bless (yourself for now).
         if (target && target === p) { this.begin(s, lv, p); return true; }
+        // Another player: walk into range first if needed.
+        if (target && target.isRemote) {
+          if (p.distanceTo(target) <= this.range(s) + 0.5) this.begin(s, lv, target);
+          else { this.queued = { id, target }; p.approach(target, this.range(s)); }
+          return true;
+        }
         game.input.startTargeting(id, 'ally');
         return false;
       }
@@ -259,6 +265,7 @@
         if (target && target !== p) p.faceTowards(target.position.x, target.position.z);
         this.game.spells.castCircle(p, s.element);
         this.game.sfx('cast');
+        if (G.Net && G.Net.ws) G.Net.send({ t: 'fx', k: 'cast', s: s.id, lv, dur: +dur.toFixed(2) });
         return;
       }
       this.execute(s, lv, target);
@@ -289,6 +296,9 @@
       this.delay = 0.25;
       if (target && target !== p) p.faceTowards(target.position.x, target.position.z);
       if (G.SkillSystem.payExtra) G.SkillSystem.payExtra(this, s, lv);
+      if (G.Net && G.Net.ws) G.Net.skillFx(s, lv, target);
+      // Buffing another player: they apply it on their side.
+      if (target && target.isRemote) { if (G.Net) G.Net.sendBuff(target, s, lv); return; }
       const eff = EFFECTS[s.effect || s.id];
       if (eff) eff(this, lv, target, s);
       else if (s.fx) runFx(this, s, lv, target);

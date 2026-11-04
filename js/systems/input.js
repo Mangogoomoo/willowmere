@@ -126,7 +126,7 @@
       document.body.classList.add('cursor-target');
       this.game.hud.toast(this.targetMode === 'ground' ? `Click the ground to place ${G.Skills.get(skillId).name}. Right-click or Esc cancels.`
         : this.targetMode === 'ally'
-        ? `Click a character (yourself) to cast ${G.Skills.get(skillId).name}. Right-click or Esc cancels.`
+        ? `Click a character (yourself or another player) to cast ${G.Skills.get(skillId).name}. Right-click or Esc cancels.`
         : `Click a monster to use ${G.Skills.get(skillId).name}. Right-click or Esc cancels.`);
     }
     // Is the cursor over the player's own character?
@@ -135,6 +135,17 @@
       const oc = new THREE.Vector3(p.x, p.y + 1.1, p.z).sub(ray.origin);
       const tca = oc.dot(ray.direction);
       return tca > 0 && oc.lengthSq() - tca * tca < 0.95 * 0.95;
+    }
+    // Another player under the cursor (online)?
+    pickRemote(ray) {
+      if (!G.Net || !G.Net.players.size) return null;
+      let best = null, bd = 0.95 * 0.95;
+      for (const r of G.Net.players.values()) {
+        const oc = new THREE.Vector3(r.position.x, r.position.y + 1.1, r.position.z).sub(ray.origin);
+        const tca = oc.dot(ray.direction), d2 = oc.lengthSq() - tca * tca;
+        if (tca > 0 && d2 < bd) { bd = d2; best = r; }
+      }
+      return best;
     }
     cancelTargeting(msg) {
       if (!this.targeting) return;
@@ -156,9 +167,10 @@
           return;
         }
         if (this.targetMode === 'ally') {
-          const self = this.pickSelf(this.ray.ray);
-          this.cancelTargeting(!self);
+          const self = this.pickSelf(this.ray.ray), other = !self && this.pickRemote(this.ray.ray);
+          this.cancelTargeting(!self && !other);
           if (self) player.skills.use(id, player);
+          else if (other) player.skills.use(id, other);
           return;
         }
         this.cancelTargeting(!mon);

@@ -24,10 +24,14 @@
       this.jobExp = data.jobExp || 0;
       this.stats = Object.assign({ str: 1, agi: 1, vit: 1, int: 1, dex: 1, luk: 1 }, data.stats || {});
       this.statPoints = data.statPoints || 0;
+      // New characters start with 48 free points; older saves get the difference once.
+      if (!data.stats) this.statPoints = G.Stats.START_POINTS;
+      else if (!(data.extra && data.extra.statFix)) this.statPoints += Math.max(0, G.Stats.totalPoints(data.baseLevel || 1) - G.Stats.oldTotalPoints(data.baseLevel || 1));
       const legacyPoints = data.skillPoints || 0;
       this.zeny = data.zeny == null ? START_KIT.zeny : data.zeny;
       this.savePoint = Object.assign({ map: 'meadow', x: P.respawn.x, z: P.respawn.z }, data.savePoint || {});
       this.extra = data.extra || {};
+      this.extra.statFix = 1;
       this.storage = (data.storage || []).filter((e) => G.Items.get(e.id)).map((e) => ({ id: e.id, qty: e.qty, cards: e.cards || [], refine: e.refine || 0 }));
       this.equipment = {};
       for (const s of G.Items.EQUIP_SLOTS) this.equipment[s.id] = null;

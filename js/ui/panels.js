@@ -378,6 +378,18 @@
     const loot = h('button.mbtn.toggle', { type: 'button', 'aria-pressed': String(!!game.autoLoot), onclick: () => game.extras.setAutoLoot(!game.autoLoot) }, 'Auto-loot', h('kbd', { text: G.Keybinds.primary('autoloot') }));
     el.prepend(loot);
     el.append(h('button.mbtn', { type: 'button', title: 'Monster and item encyclopedia (opens in a new tab)', onclick: () => window.open(G.Config.DB_URL, '_blank', 'noopener') }, 'Database', h('kbd', { text: '↗' })));
+    // Hide / show the whole button column (remembered).
+    const collapsed = !!G.SaveSystem.prefs().menuHidden;
+    const tog = h('button.mbtn.menu-toggle', { type: 'button', 'aria-expanded': String(!collapsed) }, collapsed ? '▲ Show menu' : '▼ Hide menu');
+    tog.addEventListener('click', () => {
+      const hide = !el.classList.contains('collapsed');
+      el.classList.toggle('collapsed', hide);
+      tog.textContent = hide ? '▲ Show menu' : '▼ Hide menu';
+      tog.setAttribute('aria-expanded', String(!hide));
+      G.SaveSystem.setPrefs({ menuHidden: hide });
+    });
+    el.prepend(tog);
+    el.classList.toggle('collapsed', collapsed);
     el.append(h('button.mbtn', { type: 'button', onclick: () => game.save.save() }, 'Save'));
     return {
       relabel() {
