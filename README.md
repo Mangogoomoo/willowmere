@@ -295,6 +295,11 @@ the database on the same origin.
   move, attack or get knocked back, and take every skill like a monster.
 - Summon Spirit Sphere is refused (no SP spent) when you already hold the
   maximum; Snap is ground-targeted.
+- **Character select with 15 slots:** portraits in each character's job
+  outfit, job badge, a stats panel (map, job, levels, EXP, HP/SP, stats),
+  delete (two clicks) and Game Start; empty slots create a new character.
+  Each slot saves separately; names are unique across slots. Options >
+  Character select returns to it. An older single save becomes slot 1.
 - Skills that depend on systems Willowmere doesn't have yet (parties,
   homunculi, dual wielding, monster skills, ammunition) are in their trees as
   prerequisites and say so in their descriptions.
