@@ -43,8 +43,14 @@
       <div class="eyebrow">Adventurer's archive</div><h2>Field Guide</h2><p>Look up the creatures of Willowmere Meadows, Whisperwood Glade and Mossy Hollow, and discover what they leave behind.</p>
       <div class="stats"><div class="stat"><b id="monster-total">—</b><span>Monster types</span></div><div class="stat"><b id="item-total">—</b><span>Known items</span></div><div class="stat"><b id="drop-total">—</b><span>Drop entries</span></div></div>
     </section>
-    <nav class="tabs" aria-label="Database sections"><button class="tab active" data-tab="monsters">Monsters & Drops</button><button class="tab" data-tab="items">Item Database</button></nav>
-    <section class="give-panel zeny-panel" aria-labelledby="zeny-title">
+    <nav class="tabs" aria-label="Database sections"><button class="tab active" data-tab="monsters">Monsters & Drops</button><button class="tab" data-tab="items">Item Database</button><button class="tab" data-tab="zeny">Give Zeny</button></nav>
+
+    <section id="monster-section">
+      <div class="toolbar"><label class="search"><input id="monster-search" type="search" placeholder="Search monsters or drop items…" autocomplete="off"></label><select id="monster-sort" aria-label="Sort monsters"><option value="level">Sort: Level</option><option value="name">Sort: Name</option><option value="drops">Sort: Most drops</option></select></div>
+      <div class="section-title"><h3>Monster encyclopedia</h3><span class="count" id="monster-count"></span></div><div class="monster-grid" id="monster-grid"></div>
+    </section>
+    <section id="zeny-section" class="hidden">
+      <div class="give-panel zeny-panel" aria-labelledby="zeny-title">
       <h3 id="zeny-title">Debug: give Zeny</h3>
       <div class="give-fields">
         <input id="zeny-player-name" type="text" autocomplete="off" placeholder="Character name" aria-label="Character name">
@@ -57,13 +63,10 @@
       <button id="give-zeny-submit" class="give-submit" type="button">Send Zeny</button>
       <p id="give-zeny-status" class="give-status" role="status" aria-live="polite"></p>
       <p class="zeny-note">The character must be online in another tab of this same website. Up to 1,000,000,000 per send; a character can hold at most 2,147,483,647.</p>
-    </section>
-    <section id="monster-section">
-      <div class="toolbar"><label class="search"><input id="monster-search" type="search" placeholder="Search monsters or drop items…" autocomplete="off"></label><select id="monster-sort" aria-label="Sort monsters"><option value="level">Sort: Level</option><option value="name">Sort: Name</option><option value="drops">Sort: Most drops</option></select></div>
-      <div class="section-title"><h3>Monster encyclopedia</h3><span class="count" id="monster-count"></span></div><div class="monster-grid" id="monster-grid"></div>
+    </div>
     </section>
     <section id="item-section" class="hidden">
-      <div class="toolbar"><label class="search"><input id="item-search" type="search" placeholder="Search items, descriptions or IDs…" autocomplete="off"></label><select id="item-type" aria-label="Filter item type"><option value="all">All item types</option><option value="use">Consumables</option><option value="etc">Loot & materials</option><option value="equip">Equipment</option><option value="card">Cards</option></select><select id="item-rarity" aria-label="Filter rarity"><option value="all">All rarities</option><option value="common">Common</option><option value="uncommon">Uncommon</option><option value="rare">Rare</option><option value="epic">Epic</option><option value="card">Card</option></select><select id="item-slot" aria-label="Filter equipment slot"><option value="all">All equipment slots</option><option value="weapon">Weapon</option><option value="shield">Shield</option><option value="armor">Armor</option><option value="garment">Garment</option><option value="shoes">Shoes</option><option value="headgear">Headgear (all)</option><option value="headTop">Headgear: upper</option><option value="headMid">Headgear: middle</option><option value="headLow">Headgear: lower</option><option value="acc">Accessory</option></select></div>
+      <div class="toolbar"><label class="search"><input id="item-search" type="search" placeholder="Search items, descriptions or IDs…" autocomplete="off"></label><select id="item-type" aria-label="Filter item type"><option value="all">All item types</option><option value="use">Consumables</option><option value="etc">Loot & materials</option><option value="equip">Equipment</option><option value="card">Cards</option></select><select id="item-slot" aria-label="Filter equipment slot"><option value="all">All equipment slots</option><option value="weapon">Weapon</option><option value="shield">Shield</option><option value="armor">Armor</option><option value="garment">Garment</option><option value="shoes">Shoes</option><option value="headgear">Headgear (all)</option><option value="headTop">Headgear: upper</option><option value="headMid">Headgear: middle</option><option value="headLow">Headgear: lower</option><option value="acc">Accessory</option></select><select id="item-rarity" aria-label="Filter rarity"><option value="all">All rarities</option><option value="common">Common</option><option value="uncommon">Uncommon</option><option value="rare">Rare</option><option value="epic">Epic</option><option value="card">Card</option></select></div>
       <div class="section-title"><h3>Item encyclopedia</h3><span class="count" id="item-count"></span></div><div class="item-grid" id="item-grid"></div>
     </section>
     <footer class="footer">Willowmere Field Guide · Drop rates are per-kill independent chances. Item delivery is a debug tool and needs the game open in another tab of this same site.</footer>
@@ -353,6 +356,7 @@
         document.querySelectorAll('.tab').forEach(b => b.classList.toggle('active', b === button));
         $('monster-section').classList.toggle('hidden', button.dataset.tab !== 'monsters');
         $('item-section').classList.toggle('hidden', button.dataset.tab !== 'items');
+        $('zeny-section').classList.toggle('hidden', button.dataset.tab !== 'zeny');
       }));
       $('monster-search').addEventListener('input', renderMonsters); $('monster-sort').addEventListener('change', renderMonsters);
       $('item-search').addEventListener('input', renderItems); $('item-type').addEventListener('change', renderItems); $('item-rarity').addEventListener('change', renderItems); $('item-slot').addEventListener('change', renderItems);

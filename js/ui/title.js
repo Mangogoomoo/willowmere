@@ -5,7 +5,9 @@
   const h = G.h;
   const NAME_RE = /^[A-Za-z0-9][A-Za-z0-9 '\-]{1,15}$/;
 
-  function show(slots) {
+  function show(slots, opts) {
+    opts = opts || {};
+    const online = !!opts.online;
     return new Promise((resolve) => {
       const root = document.getElementById('title');
       root.hidden = false;
@@ -36,6 +38,17 @@
       // Dark letters on pale badges (Priest, Crusader...).
       const light = (hex) => { if (!hex) return false; const n = parseInt(hex.slice(1), 16); return ((n >> 16) * 0.3 + ((n >> 8) & 255) * 0.59 + (n & 255) * 0.11) > 180; };
 
+      // Start the chosen character (online: fetch the full save from the server first).
+      async function startLoad(i) {
+        const d = slots[i];
+        if (!online) { finish({ type: 'load', data: d, slot: i }); return; }
+        try {
+          const full = await G.Online.api(`/api/characters/${d.id}`);
+          if (full.isNew) finish({ type: 'new', name: full.character.name, appearance: full.character.appearance, slot: i, charId: full.id });
+          else finish({ type: 'load', data: full, slot: i, charId: full.id });
+        } catch (e) { alert(e.message); }
+      }
+
       function titleCard() {
         cancelAnimationFrame(raf);
         root.textContent = '';
@@ -50,8 +63,8 @@
           d ? h('span.cs-badge', { text: job.name[0], title: job.name, style: `background:${job.color || '#8a9bc4'};color:${light(job.color) ? '#2a3550' : '#fff'}` }) : null,
           h('div.cs-name', { text: d ? d.character.name : 'NAME' }));
           card.addEventListener('click', () => { if (!d) { creation(i); return; } selected = i; deleteArmed = -1; titleCard(); });
-          card.addEventListener('dblclick', () => { if (d) finish({ type: 'load', data: d, slot: i }); });
-          card.addEventListener('keydown', (e) => { if (e.key === 'Enter') { if (d) finish({ type: 'load', data: d, slot: i }); else creation(i); } });
+          card.addEventListener('dblclick', () => { if (d) startLoad(i); });
+          card.addEventListener('keydown', (e) => { if (e.key === 'Enter') { if (d) startLoad(i); else creation(i); } });
           grid.append(card);
         });
 
@@ -67,10 +80,11 @@
         ] : [];
         const del = h('button.btn.small.ghost.cs-del', { type: 'button', disabled: !d, onclick: () => {
           if (deleteArmed !== selected) { deleteArmed = selected; titleCard(); return; }
-          G.SaveSystem.clearSlot(selected); slots[selected] = null; deleteArmed = -1;
-          selected = Math.max(0, slots.findIndex(Boolean)); titleCard();
+          const drop = () => { slots[selected] = null; deleteArmed = -1; selected = Math.max(0, slots.findIndex(Boolean)); titleCard(); };
+          if (online) G.Online.api(`/api/characters/${d.id}`, 'DELETE').then(drop).catch((e) => { del.textContent = e.message; });
+          else { G.SaveSystem.clearSlot(selected); drop(); }
         } }, deleteArmed === selected && d ? `Really delete ${d.character.name}?` : 'Delete character');
-        const start = h('button.cs-start', { type: 'button', disabled: !d, onclick: () => d && finish({ type: 'load', data: d, slot: selected }) },
+        const start = h('button.cs-start', { type: 'button', disabled: !d, onclick: () => d && startLoad(selected) },
           h('span', { text: 'Game start' }));
 
         root.append(h('div.cs', null,
@@ -80,7 +94,8 @@
             h('table.cs-stats', null, h('tbody', null, ...(d ? rows : [['', 'Pick or create a character']]).map(([k, v]) => h('tr', null, h('th', { text: k }), h('td', { text: v }))))),
             del,
             start,
-            h('div.cs-count', { text: `Characters ${slots.filter(Boolean).length} / ${slots.length}` }))));
+            h('div.cs-count', { text: `Characters ${slots.filter(Boolean).length} / ${slots.length}` }),
+            online ? h('button.btn.small.ghost.cs-logout', { type: 'button', onclick: () => G.Online.logout() }, `Log out (${G.Online.username || ''})`) : null)));
         setTimeout(() => { const s2 = root.querySelector('.cs-card.sel'); if (s2) s2.focus(); }, 30);
       }
 
@@ -138,7 +153,11 @@
             if (!NAME_RE.test(name)) { err.textContent = 'Use 2 to 16 letters or numbers. Spaces, apostrophes and hyphens are fine after the first letter.'; nameIn.focus(); return; }
             // Names are unique across your slots (the database page finds characters by name).
             if (slots.some((x) => x && x.character.name.toLowerCase() === name.toLowerCase())) { err.textContent = `You already have a character called ${name}.`; nameIn.focus(); return; }
-            finish({ type: 'new', name, appearance: Object.assign({}, app), slot });
+            if (!online) { finish({ type: 'new', name, appearance: Object.assign({}, app), slot }); return; }
+            begin.disabled = true;
+            G.Online.api('/api/characters', 'POST', { slot, name, appearance: app })
+              .then((r) => finish({ type: 'new', name, appearance: Object.assign({}, app), slot, charId: r.id }))
+              .catch((e) => { err.textContent = e.message; begin.disabled = false; });
           },
         }, h('span', { text: 'Begin your adventure' }));
         nameIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') begin.click(); e.stopPropagation(); });

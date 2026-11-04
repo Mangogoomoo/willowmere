@@ -30,7 +30,17 @@
       game.renderBackdrop();
       loading.classList.add('done');
       setTimeout(() => loading.remove(), 900);
-      const choice = await G.Title.show(G.SaveSystem.listSlots());
+      let choice;
+      if (await G.Online.detect()) {
+        // Online: log in, then pick a character stored on the server.
+        let slots = null;
+        while (!slots) {
+          if (!G.Online.token) await G.Auth.show();
+          try { const r = await G.Online.api('/api/characters'); G.Online.username = r.username; slots = r.slots; }
+          catch (e) { if (e.status === 401) G.Online.setToken(null); else throw e; }
+        }
+        choice = await G.Title.show(slots, { online: true });
+      } else choice = await G.Title.show(G.SaveSystem.listSlots());
       game.begin(choice);
     } catch (err) {
       console.error(err);

@@ -349,6 +349,7 @@
       this.swingDur = Math.min(dur, delay * 0.92);
       this.sprite.play('attack', { restart: true, speed: dur / this.swingDur });
       this.game.sfx('swing');
+      if (G.Net && G.Net.ws) G.Net.send({ t: 'action', kind: 'attack' });
     }
 
     takeDamage(dmg, source) {

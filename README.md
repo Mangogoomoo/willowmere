@@ -257,6 +257,14 @@ the database on the same origin.
   longer push monsters back (knockback skills still do); dungeon walls are
   half as tall.
 
+## Online multiplayer (Neon)
+
+Run the game through the server in `server/` to play online: register/login,
+characters, items, carts and account storage live in a Neon Postgres
+database, and you see other players move, change gear and chat (press
+Enter). See `server/README.md` for setup. Opened any other way (a file or
+the published page), Willowmere stays single-player with browser saves.
+
 ## Stage 7: full pre-renewal skill trees and class looks
 
 - **Every class has its classic skill tree**, with the original max levels and
@@ -359,6 +367,8 @@ Possible next steps: party play, monster skills, ammunition, more dungeons.
     js/ui/npcui.js             dialog box and shop window
     js/ui/extras.js            debug tools, auto-loot, trial tracker, buffs
     js/ui/minimap.js           minimap and world map
+    js/net/online.js           online mode: API, login/register, other players, chat
+    server/                    Node.js game server (Neon Postgres + WebSockets)
     js/entities/npc.js         NPC entities
     js/game.js                 renderer, lights, world assembly, main loop
     js/main.js                 boot + loading screen

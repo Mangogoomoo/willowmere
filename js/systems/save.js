@@ -25,7 +25,7 @@
       this.dirtyT = -1;
       this.autoT = 0;
       this.enabled = false;
-      const flush = () => { if (this.enabled) this.save(true); };
+      const flush = () => { if (this.enabled) this.save(true, true); };
       document.addEventListener('visibilitychange', () => { if (document.hidden) flush(); });
       window.addEventListener('pagehide', flush);
       window.addEventListener('beforeunload', flush);
@@ -74,8 +74,16 @@
       };
     }
 
-    save(silent) {
+    save(silent, closing) {
       if (!this.enabled || !this.game.player) return false;
+      // Online: the character lives in the server's database.
+      if (G.Online && G.Online.enabled && this.charId) {
+        this.dirtyT = -1; this.autoT = 0;
+        fetch(`/api/characters/${this.charId}`, { method: 'PUT', keepalive: !!closing, headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + G.Online.token }, body: JSON.stringify(this.serialize()) })
+          .then((r) => { if (!silent) this.game.log.add(r.ok ? 'Game saved to the server.' : 'Couldn’t save to the server.', r.ok ? 'system' : 'warn'); })
+          .catch(() => this.game.log.add('Couldn’t reach the server to save. Retrying soon.', 'warn'));
+        return true;
+      }
       const ok = write(slotKey(this.slot || 0), this.serialize());
       this.dirtyT = -1;
       this.autoT = 0;

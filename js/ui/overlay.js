@@ -127,6 +127,24 @@
         }
       }
 
+      // Other players online: name under the feet, chat bubbles above heads.
+      if (G.Net && G.Net.players.size) for (const r of G.Net.players.values()) {
+        if (r.distanceTo(player) > 45) continue;
+        const f = this.project(r.position.x, r.position.y, r.position.z);
+        if (f) this.outlined(ctx, r.name, f.x, f.y + 16, 13, '#d8ffd0', 'rgba(16,40,20,0.9)', 600);
+      }
+      for (const who of [player, ...(G.Net ? G.Net.players.values() : [])]) {
+        if (!who.bubble || game.time > who.bubble.until) continue;
+        const q = this.project(who.position.x, who.position.y + 3.0, who.position.z);
+        if (!q) continue;
+        ctx.font = '600 13px Fredoka, sans-serif';
+        const w = Math.min(260, ctx.measureText(who.bubble.text).width + 18);
+        ctx.fillStyle = 'rgba(255,255,255,0.95)'; ctx.strokeStyle = 'rgba(40,60,110,0.8)'; ctx.lineWidth = 1.5;
+        ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(q.x - w / 2, q.y - 26, w, 24, 8); else ctx.rect(q.x - w / 2, q.y - 26, w, 24); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#1b2b4a'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(who.bubble.text.length > 34 ? who.bubble.text.slice(0, 33) + '…' : who.bubble.text, q.x, q.y - 14);
+      }
+
       // NPC names (always shown, classic style) with a title line.
       for (const n of game.npcs.list) {
         if (n.distanceTo(player) > 40) continue;

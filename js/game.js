@@ -145,6 +145,7 @@
     begin(choice) {
       const data = choice.type === 'load' ? choice.data : { name: choice.name, appearance: choice.appearance };
       this.save.slot = choice.slot || 0;   // which character slot this session writes to
+      this.save.charId = choice.charId || null;
       const startMap = (data.position && G.Maps[data.position.map]) ? data.position.map : 'meadow';
       if (startMap !== this.mapId) this.loadMap(startMap);
       this.player = new G.Player(this, data);
@@ -202,6 +203,7 @@
       this.audio.unlock();
       this.events.emit('mapEntered', this.mapId);
       this.questlog.check();
+      if (G.Online.enabled && choice.charId) { G.Net.connect(this, choice.charId); this.save.save(true); }
       this.start();
     }
 
@@ -390,6 +392,7 @@
       this.extras.update(dt);
       this.hotbar.update(dt);
       this.minimap.update(dt);
+      if (G.Net.ws) G.Net.update(dt);
       this.trackPerformance(dt);
 
       // Keep the shadow frustum centred on the player (snapped to texels to avoid shimmer).
