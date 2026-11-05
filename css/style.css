@@ -669,7 +669,8 @@ button:focus-visible { outline: 2px solid #ffd76a; outline-offset: 2px; }
 .soc-inv { display: flex; gap: 6px; margin: 8px 0; }
 .soc-in { flex: 1; min-width: 0; padding: 6px 9px; border-radius: 8px; border: 1px solid var(--cell-edge); font: 500 13px var(--font); }
 .soc-head { display: flex; gap: 10px; align-items: center; margin-bottom: 8px; }
-.soc-emblem { width: 40px; height: 40px; border-radius: 6px; image-rendering: pixelated; border: 1px solid var(--cell-edge); background: #fff; }
+.soc-emblem { width: 48px; height: 48px; border-radius: 6px; image-rendering: pixelated; border: 1px solid var(--cell-edge);
+  background: repeating-conic-gradient(#d8deea 0% 25%, #f4f6fb 0% 50%) 0 0 / 12px 12px; }
 .soc-emblem.empty { display: grid; place-items: center; color: var(--ink-soft); font-weight: 700; }
 .soc-skill { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; align-items: center; padding: 6px 8px; border-radius: 8px; background: var(--cell-bg); }
 .soc-skill small { grid-column: 1; color: var(--ink-soft); font-size: 11px; }
@@ -690,7 +691,9 @@ button:focus-visible { outline: 2px solid #ffd76a; outline-offset: 2px; }
 .trade-side.locked { border-color: #3fae3a; }
 .trade-head { display: flex; justify-content: space-between; align-items: baseline; font-size: 12px; margin-bottom: 6px; }
 .trade-head span { color: var(--ink-soft); }
-.trade-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; }
+.trade-grid { display: grid; grid-template-columns: repeat(5, 48px); gap: 5px; justify-content: center; }
+.trade-grid .cell { width: 48px; height: 48px; }
+.trade-side { min-width: 0; }
 .trade-zeny { display: flex; gap: 8px; align-items: center; margin-top: 8px; font-size: 12.5px; }
 .trade-zeny input { width: 110px; flex: none; }
 .soc-level { display: grid; gap: 4px; margin-bottom: 8px; font-size: 12.5px; font-weight: 600; }
@@ -700,3 +703,9 @@ button:focus-visible { outline: 2px solid #ffd76a; outline-offset: 2px; }
 .soc-ranks { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 6px; }
 .soc-skills { display: grid; gap: 4px; max-height: 230px; overflow-y: auto; }
 .meter.small { height: 14px; font-size: 10.5px; }
+
+.inspect-who { margin: 0 0 6px; text-align: center; font-weight: 600; }
+.istats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px 10px; margin: 8px 0; padding: 8px 10px; border-radius: 9px; background: var(--cell-bg); font-size: 12.5px; }
+.istat { display: flex; gap: 6px; align-items: baseline; }
+.istat span { width: 30px; color: var(--ink-soft); font-weight: 700; font-size: 11px; }
+.istat small { color: #2f9e57; font-weight: 700; }

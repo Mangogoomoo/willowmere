@@ -750,7 +750,8 @@ const Trade = {
       }
       case 'inspect_res': {
         const o = Social.online(Number(m.to));
-        if (o) o[0].send(JSON.stringify({ t: 'inspect_res', from: me.charId, name: me.name, job: m.job, level: m.level, equip: Array.isArray(m.equip) ? m.equip.slice(0, 12) : [] }));
+        const small = (v) => (v && typeof v === 'object' && JSON.stringify(v).length < 3000 ? v : null);
+        if (o) o[0].send(JSON.stringify({ t: 'inspect_res', from: me.charId, name: me.name, job: m.job, level: m.level, equip: Array.isArray(m.equip) ? m.equip.slice(0, 12) : [], stats: small(m.stats), look: small(m.look) }));
         return;
       }
       case 'trade_request': {

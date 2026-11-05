@@ -88,6 +88,14 @@
     const win = W.create('inventory', 'Inventory', { width: 372, keyHint: 'Alt+E', pos: () => ({ x: window.innerWidth - 392, y: 120 }) });
     const TABS = [['all', 'All'], ['use', 'Items'], ['equip', 'Gear'], ['card', 'Cards'], ['etc', 'Etc']];
 
+    // Right-click moves an item into whatever is open: the trade, storage or the cart.
+    function sendElsewhere(entry) {
+      const W = game.windows;
+      if (W.isOpen('trade') && G.Trade && G.Trade.state) { G.Trade.offerItem(entry, entry.qty); return true; }
+      if (W.isOpen('storage')) { game.storage.deposit(entry.uid, entry.qty); return true; }
+      if (W.isOpen('cart') && game.cart && game.cart.has) { game.cart.put(entry.uid, entry.qty); return true; }
+      return false;
+    }
     function act(entry) {
       const inv = game.player.inventory;
       const item = G.Items.get(entry.id);
@@ -124,13 +132,14 @@
           'data-slot': item.type === 'card' ? G.Items.CARD_SLOTS[item.cardSlot].long : null,
           onclick: () => { selected = e.uid; win.render(); },
           ondblclick: () => { act(e); },
-          oncontextmenu: (ev) => { ev.preventDefault(); act(e); },
+          oncontextmenu: (ev) => { ev.preventDefault(); if (!sendElsewhere(e)) act(e); },
           onkeydown: (ev) => { if (ev.key === 'Enter') act(e); },
           ondragstart: (ev) => { ev.dataTransfer.setData('text/x-item', JSON.stringify({ uid: e.uid, id: e.id })); ev.dataTransfer.effectAllowed = 'copyMove'; G.Tooltip.hide(); },
         }, h('img', { src: G.Icons.url(e.id), alt: '', draggable: 'false' }), e.qty > 1 ? h('span.qty', { text: String(e.qty) }) : null,
           item.type === 'card' ? h('span.cslot', { text: G.Items.CARD_SLOTS[item.cardSlot].tag, title: `Goes into: ${G.Items.CARD_SLOTS[item.cardSlot].long}` }) : null,
           e.refine ? h('span.refbadge', { text: '+' + e.refine }) : null);
-        G.Tooltip.bind(cell, () => G.itemTooltipCompare(e, p, { hint: item.type === 'equip' ? 'Double-click to equip.' : item.type === 'use' ? 'Double-click or right-click to use. Drag to the hotbar.' : item.type === 'card' ? 'Double-click to insert into equipment.' : '' }));
+        G.Tooltip.bind(cell, () => G.itemTooltipCompare(e, p, { hint: (game.windows.isOpen('trade') ? 'Right-click to offer it in the trade. ' : game.windows.isOpen('storage') ? 'Right-click to put it in storage. ' : game.windows.isOpen('cart') ? 'Right-click to put it in the cart. ' : '')
+          + (item.type === 'equip' ? 'Double-click to equip.' : item.type === 'use' ? 'Double-click or right-click to use. Drag to the hotbar.' : item.type === 'card' ? 'Double-click to insert into equipment.' : '') }));
         grid.append(cell);
       }
 

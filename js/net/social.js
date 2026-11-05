@@ -65,13 +65,34 @@
     },
 
     /* ---------- names over heads ---------- */
+    // Magenta (#FF00FF) means "see-through" in a guild emblem, like the classics.
+    // Magenta (#FF00FF) is see-through, like the classic emblems; the looser
+    // test also clears the pinkish fringe left when a bigger picture is shrunk.
+    isMagenta(r, g, b) { return r >= 140 && b >= 140 && r - g >= 90 && b - g >= 90 && Math.abs(r - b) <= 80; },
+    keyMagenta(canvas) {
+      const x = canvas.getContext('2d'), img = x.getImageData(0, 0, canvas.width, canvas.height), d = img.data;
+      for (let i = 0; i < d.length; i += 4) if (this.isMagenta(d[i], d[i + 1], d[i + 2])) d[i + 3] = 0;
+      x.putImageData(img, 0, 0);
+      return canvas;
+    },
     emblemImg(g) {
       if (!g || !g.ev) return null;
       const key = g.id + ':' + g.ev;
-      if (!this.emblems.has(key)) { const img = new Image(); img.src = `/api/guilds/${g.id}/emblem?v=${g.ev}`; this.emblems.set(key, img); }
-      const img = this.emblems.get(key);
-      return img.complete && img.naturalWidth ? img : null;
+      if (!this.emblems.has(key)) {
+        const slot = { ready: null };
+        const img = new Image();
+        img.onload = () => {
+          const c = document.createElement('canvas'); c.width = img.naturalWidth; c.height = img.naturalHeight;
+          c.getContext('2d').drawImage(img, 0, 0);
+          slot.ready = this.keyMagenta(c);
+          slot.url = slot.ready.toDataURL('image/png');
+        };
+        img.src = `/api/guilds/${g.id}/emblem?v=${g.ev}`;
+        this.emblems.set(key, slot);
+      }
+      return this.emblems.get(key).ready;
     },
+    emblemUrl(g) { const s = g && this.emblems.get(g.id + ':' + g.ev); return s && s.url; },
     myTags() {
       const me = this.guild && G.Net && this.guild.members.find((x) => x.id === G.Net.charId);
       return { party: this.party ? this.party.name : null, guild: this.guild ? { id: this.guild.id, name: this.guild.name, ev: this.guild.ev, rank: me ? this.guild.ranks[me.rank] : '' } : null };
@@ -87,7 +108,6 @@
       ctx.font = '600 12px Fredoka, sans-serif'; const w2 = ctx.measureText(low).width;
       const img = this.emblemImg(g), ew = img ? 28 : 0, total = ew + Math.max(w1, w2), left = x - total / 2;
       if (img) {
-        ctx.fillStyle = 'rgba(10,14,28,0.55)'; ctx.fillRect(left - 1, y - 11, 26, 26);
         ctx.imageSmoothingEnabled = false; ctx.drawImage(img, left, y - 10, 24, 24); ctx.imageSmoothingEnabled = true;
       }
       const tx = left + ew;
@@ -161,7 +181,7 @@
         return;
       }
       const master = g.master === me, img = this.emblemImg(g);
-      b.append(h('div.soc-head', null, img ? h('img.soc-emblem', { src: img.src, alt: 'Guild emblem' }) : h('div.soc-emblem.empty', { text: '?' }),
+      b.append(h('div.soc-head', null, img ? h('img.soc-emblem', { src: this.emblemUrl(g), alt: 'Guild emblem' }) : h('div.soc-emblem.empty', { text: '?' }),
         h('div', null, h('div.soc-title', { text: g.name }), h('small', { text: `${g.members.length} member${g.members.length === 1 ? '' : 's'}` }))));
       const meM = g.members.find((x) => x.id === me) || { rank: 3, tax: 0 };
       const officer = meM.rank <= 1;
@@ -202,7 +222,7 @@
         const file = h('input', { type: 'file', accept: 'image/png,image/gif,image/jpeg,image/bmp,image/webp', hidden: true });
         file.addEventListener('change', () => { const f = file.files[0]; if (f) this.uploadEmblem(f); file.value = ''; });
         b.append(file, h('div.opt-btns', null, h('button.btn.small', { type: 'button', onclick: () => file.click() }, 'Upload emblem…')),
-          h('p.hint', { text: 'Any picture works: it is shrunk to a 24×24 emblem, shown beside your guild name.' }));
+          h('p.hint', { text: 'Any picture works: it is shrunk to a 24×24 emblem, shown beside your guild name. Pink (#FF00FF) becomes transparent, like the classics. Pure magenta (#FF00FF) becomes transparent, like the classics.' }));
       }
       if (master || officer) b.append(this.inviteRow('guild'));
       b.append(h('div.opt-btns', null, h('button.btn.small.ghost', { type: 'button', onclick: (e) => {
@@ -213,9 +233,14 @@
     uploadEmblem(file) {
       const img = new Image(), url = URL.createObjectURL(file);
       img.onload = () => {
+        const s = Math.min(img.width, img.height);
+        const full = document.createElement('canvas'); full.width = full.height = s;
+        full.getContext('2d').drawImage(img, (img.width - s) / 2, (img.height - s) / 2, s, s, 0, 0, s, s);
+        this.keyMagenta(full);
         const c = document.createElement('canvas'); c.width = c.height = 24;
         const x = c.getContext('2d'); x.imageSmoothingQuality = 'high';
-        const s = Math.min(img.width, img.height); x.drawImage(img, (img.width - s) / 2, (img.height - s) / 2, s, s, 0, 0, 24, 24);
+        x.drawImage(full, 0, 0, s, s, 0, 0, 24, 24);
+        this.keyMagenta(c);
         URL.revokeObjectURL(url);
         this.send({ t: 'guild_emblem', data: c.toDataURL('image/png') });
       };

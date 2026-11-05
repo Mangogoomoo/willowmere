@@ -9,8 +9,8 @@
       if (this.game) return;
       this.game = game;
       const W = game.windows;
-      this.inspectWin = W.create('inspect', 'Equipment', { width: 300, pos: () => ({ x: window.innerWidth / 2 - 150, y: 120 }) });
-      this.tradeWin = W.create('trade', 'Trade', { width: 460, pos: () => ({ x: window.innerWidth / 2 - 230, y: 110 }) });
+      this.inspectWin = W.create('inspect', 'Equipment', { width: 420, pos: () => ({ x: window.innerWidth / 2 - 210, y: 90 }) });
+      this.tradeWin = W.create('trade', 'Trade', { width: 640, pos: () => ({ x: Math.max(16, Math.min(window.innerWidth / 2 - 320, window.innerWidth - 1090)), y: 100 }) });   // leaves room for the inventory on the right
       this.tradeWin.render = () => this.renderTrade();
       this.menu = h('div.ctx-menu', { hidden: true, role: 'menu' });
       document.body.append(this.menu);
@@ -67,7 +67,10 @@
       if (m.t === 'inspect_req') {
         // Someone inspects us: send what we wear (names, refines, cards).
         const equip = Object.entries(p.equipment).filter(([, e]) => e).map(([slot, e]) => ({ slot, id: e.id, refine: e.refine || 0, cards: e.cards || [], forgedBy: e.forgedBy, element: e.element }));
-        G.Net.send({ t: 'inspect_res', to: m.from, job: p.job, level: p.baseLevel, equip });
+        const D = p.derived;
+        const stats = { base: p.stats, total: D.total, atk: D.statusAtk + D.weaponAtk + D.atkBonus, matk: D.matkMax, def: D.def, mdef: D.mdef, aspd: D.aspd,
+          hit: D.hit, flee: D.flee, crit: D.crit, maxHp: p.maxHp, maxSp: p.maxSp, jobLevel: p.jobLevel };
+        G.Net.send({ t: 'inspect_res', to: m.from, job: p.job, level: p.baseLevel, equip, stats, look: G.Net.myLook() });
       } else if (m.t === 'inspect_res') this.showInspect(m);
       else if (m.t === 'trade_ask') this.ask(m);
       else if (m.t === 'trade_open') { this.state = { mine: { items: [], zeny: 0 }, theirs: { items: [], zeny: 0 } }; this.partner = m.with; game.windows.open('trade'); game.windows.open('inventory'); this.renderTrade(); game.sfx('talk'); }
@@ -82,20 +85,45 @@
       w.render = () => { w.body.textContent = ''; w.body.append(h('p', { text: `${m.from} wants to trade with you.` }), h('div.opt-btns', null, h('button.btn.small', { type: 'button', onclick: () => answer(true) }, 'Trade'), h('button.btn.small.ghost', { type: 'button', onclick: () => answer(false) }, 'Decline'))); };
       W.open('trade_ask'); w.render(); this.game.sfx('talk');
     },
+    // Inspecting another player: the same layout as your own Equipment window,
+    // plus their stats.
     showInspect(m) {
-      const w = this.inspectWin, p = this.game.player;
+      const w = this.inspectWin, me = this.game.player, st = m.stats || {}, job = G.Jobs.get(m.job);
       w.head.firstChild.textContent = `${m.name}’s equipment`;
       w.body.textContent = '';
-      const job = G.Jobs.get(m.job);
-      w.body.append(h('p.hint', { text: `${job ? job.name : m.job}, base level ${m.level}` }));
-      if (!m.equip.length) w.body.append(h('p.hint', { text: 'Wearing nothing special.' }));
-      for (const e of m.equip) {
-        const it = G.Items.get(e.id); if (!it) continue;
-        const row = h('div.shop-row', null, h('img', { src: G.Icons.url(e.id), alt: '' }),
-          h('span.sname2' + (G.Items.isCarded(e) ? '.carded' : ''), null, G.Items.displayName(e)), h('small', { text: (G.Items.EQUIP_SLOTS[e.slot] || { name: e.slot }).name || e.slot }), h('span'));
-        G.Tooltip.bind(row, () => G.itemTooltip(Object.assign({ qty: 1 }, e), p, { equipped: true }));
-        w.body.append(row);
-      }
+      const eq = {}; for (const e of m.equip) eq[e.slot] = Object.assign({ qty: 1 }, e);
+      const SHORT = { headTop: 'Upper head', headMid: 'Middle head', headLow: 'Lower head' };
+      const slotEl = (slotId) => {
+        const e = eq[slotId], def = G.Items.EQUIP_SLOTS.find((s) => s.id === slotId);
+        const el = h('div.eslot' + (e ? '.full' : ''), { tabindex: e ? '0' : null, 'aria-label': e ? `${def.name}: ${G.Items.displayName(e)}` : `${def.name}: empty` },
+          h('div.eicon', null, e ? h('img', { src: G.Icons.url(e.id), alt: '' }) : null),
+          h('div.etext', null, h('small', { text: SHORT[slotId] || def.name }), h('span' + (G.Items.isCarded(e) ? '.carded' : ''), { text: e ? G.Items.displayName(e) : 'Empty' })));
+        if (e) G.Tooltip.bind(el, () => G.itemTooltip(e, me, { equipped: true }));
+        return el;
+      };
+      // Their character, drawn from their look.
+      const portrait = h('canvas.portrait', { width: '120', height: '150', 'aria-hidden': 'true' });
+      const l = m.look || {};
+      const sheet = G.SpriteFactory.humanoid(l.appearance || {}, { job: l.job || m.job, weapon: l.weapon || 'dagger', unarmed: !l.weapon || l.weapon === 'none', head: l.head || {}, mount: l.mount || null, falcon: !!l.falcon });
+      const cell = sheet.anims.idle.start, col = cell % sheet.cols, row = (cell / sheet.cols) | 0;
+      portrait.getContext('2d').drawImage(sheet.canvas, col * sheet.frameW + 10, row * sheet.frameH, sheet.frameW - 20, sheet.frameH, -5, 0, 130, 150);
+      const v = (x) => (x === undefined || x === null ? '?' : String(x));
+      const stat = (k) => { const b = (st.base || {})[k] || 0, t = (st.total || {})[k] || b; return h('div.istat', null, h('span', { text: k.toUpperCase() }), h('b', { text: String(b) }), t !== b ? h('small', { text: `+${t - b}` }) : h('small')); };
+      w.body.append(
+        h('p.hint.inspect-who', { text: `${job ? job.name : m.job}, base level ${m.level}${st.jobLevel ? `, job level ${st.jobLevel}` : ''}` }),
+        h('div.paperdoll', null,
+          h('div.ecol', null, ['headTop', 'headMid', 'headLow', 'armor', 'acc1'].map(slotEl)),
+          h('div.pcenter', null, portrait),
+          h('div.ecol', null, ['weapon', 'shield', 'garment', 'shoes', 'acc2'].map(slotEl))),
+        h('div.esum', null,
+          h('span', null, 'ATK ', h('b', { text: v(st.atk) })), h('span', null, 'DEF ', h('b', { text: v(st.def) })),
+          h('span', null, 'MATK ', h('b', { text: v(st.matk) })), h('span', null, 'MDEF ', h('b', { text: v(st.mdef) })),
+          h('span', null, 'ASPD ', h('b', { text: v(st.aspd) }))),
+        h('div.istats', null, ...['str', 'agi', 'vit', 'int', 'dex', 'luk'].map(stat)),
+        h('div.esum', null,
+          h('span', null, 'HIT ', h('b', { text: v(st.hit) })), h('span', null, 'FLEE ', h('b', { text: v(st.flee) })),
+          h('span', null, 'CRIT ', h('b', { text: v(st.crit) })), h('span', null, 'HP ', h('b', { text: v(st.maxHp) })),
+          h('span', null, 'SP ', h('b', { text: v(st.maxSp) }))));
       this.game.windows.open('inspect');
     },
 
