@@ -165,6 +165,7 @@
     connect(game, charId) {
       this.game = game; this.charId = charId;
       G.FxSync.install(game);
+      G.GroundSync.install(game);
       const ws = this.ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`);
       ws.onopen = () => ws.send(JSON.stringify({ t: 'hello', token: Online.token, charId, map: game.mapId, look: this.myLook(), level: game.player.baseLevel }));
       ws.onmessage = (ev) => { let m; try { m = JSON.parse(ev.data); } catch (e) { return; } this.handle(m); };
@@ -189,12 +190,14 @@
       if (m.t === 'host' || m.t === 'mobs' || m.t === 'mob') { G.MobSync.handle(m); return; }
       if (['party', 'guild', 'guild_created', 'invite', 'notice', 'pinfo', 'gainexp', 'loot_gift', 'guild_summon'].includes(m.t)) { G.Social.handle(m); return; }
       if (/^(trade_|inspect_)/.test(m.t)) { G.Trade.handle(m); return; }
+      if (/^ground_/.test(m.t)) { G.GroundSync.handle(m); return; }
       if (m.t === 'fx') { this.showFx(m); return; }
       if (m.t === 'buff') { this.receiveBuff(m); return; }
       if (m.t === 'welcome' || m.t === 'players') {
         this.clear();
         for (const p of m.players) this.add(p);
         if (m.mobs && m.mobs.length) G.MobSync.applySnapshot(m.mobs, m.map);
+        G.GroundSync.load(m.ground, m.map);
         if (m.t === 'welcome') game.log.add(`Connected. ${m.online} player${m.online === 1 ? '' : 's'} online.`, 'system');
       } else if (m.t === 'join') { this.add(m.p); game.log.add(`${m.p.name} arrived.`, 'info'); }
       else if (m.t === 'leave') { const r = this.players.get(m.id); if (r) { game.log.add(`${r.name} left.`, 'info'); this.remove(r); } }

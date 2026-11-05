@@ -99,7 +99,9 @@
       if (!e) return;
       if (game.windows.isOpen('storage')) { game.log.add('Close your storage before dropping items on the ground.', 'warn'); return; }
       const n = p.inventory.remove(uid, qty);
+      game.loot.nextAttrs = { refine: e.refine || 0, cards: e.cards || [], forgedBy: e.forgedBy, element: e.element };
       game.loot.spawn(e.id, n, p.position.x, p.position.z);
+      game.loot.nextAttrs = null;
       game.log.add(`Dropped ${G.Items.get(e.id).name}${n > 1 ? ' ×' + n : ''}.`, 'info');
       if (!p.inventory.find(uid)) selected = null;
     };

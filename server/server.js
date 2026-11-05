@@ -325,7 +325,7 @@ wss.on('connection', (ws) => {
       if (me.partyId) Social.refreshParty(me.partyId).catch(() => {});
       if (me.guild) Social.refreshGuild(me.guild.id).catch(() => {});
       const ts = Trade.sessions.get(me.charId); if (ts) Trade.close(ts, `${me.name} left.`);
-      ws.send(JSON.stringify({ t: 'welcome', map: me.map, you: me.charId, players: [...online.values()].filter((s) => s !== me && s.map === me.map).map(publicState), online: online.size, mobs: cachedMobs(me.map) }));
+      ws.send(JSON.stringify({ t: 'welcome', map: me.map, you: me.charId, players: [...online.values()].filter((s) => s !== me && s.map === me.map).map(publicState), online: online.size, mobs: cachedMobs(me.map), ground: Ground.list(me.map) }));
       broadcast(me.map, { t: 'join', p: publicState(me) }, ws);
       electHost(me.map);
       return;
@@ -340,7 +340,7 @@ wss.on('connection', (ws) => {
         me.map = map;
         if (hosts.get(old) === ws) hosts.delete(old);
         electHost(old);
-        ws.send(JSON.stringify({ t: 'players', map, players: [...online.values()].filter((s) => s !== me && s.map === map).map(publicState), mobs: cachedMobs(map) }));
+        ws.send(JSON.stringify({ t: 'players', map, players: [...online.values()].filter((s) => s !== me && s.map === map).map(publicState), mobs: cachedMobs(map), ground: Ground.list(map) }));
         Object.assign(me, { x: num(msg.x, 0), z: num(msg.z, 0) });
         broadcast(map, { t: 'join', p: publicState(me) }, ws);
         electHost(map);
@@ -396,6 +396,8 @@ wss.on('connection', (ws) => {
       const target = wsOfChar(Number(msg.to));
       if (target && target.readyState === 1 && online.get(target).map === me.map)
         target.send(JSON.stringify({ t: 'buff', from: me.charId, fromName: me.name, skill: String(msg.skill || '').slice(0, 40), lv: Math.max(1, Math.min(10, Number(msg.lv) || 1)) }));
+    } else if (msg.t === 'drop_spawn' || msg.t === 'pickup') {
+      Ground.handle(ws, me, msg);
     } else if (typeof msg.t === 'string' && (msg.t.startsWith('trade_') || msg.t.startsWith('inspect_'))) {
       Trade.handle(ws, me, msg);
     } else if (typeof msg.t === 'string' && (msg.t.startsWith('party_') || msg.t.startsWith('guild_') || msg.t === 'pexp' || msg.t === 'ploot' || msg.t === 'gexp')) {
@@ -672,6 +674,50 @@ const Social = {
     }
   },
 };
+
+/* ---------------------------------------------------------------- items on the ground
+   Shared by everyone on a map, like the classics: monster drops belong to the
+   killer (and their party) for a few seconds, then anyone may take them;
+   everything vanishes after a minute. The server decides who gets each item. */
+const Ground = {
+  maps: new Map(), next: 1, LIFE: 60000, PRIORITY: 5000,
+  on(map) { if (!this.maps.has(map)) this.maps.set(map, new Map()); return this.maps.get(map); },
+  pub(it, now) { return { gid: it.gid, id: it.id, qty: it.qty, refine: it.refine, cards: it.cards, forgedBy: it.forgedBy, element: it.element, x: it.x, z: it.z, fx: it.fx, fz: it.fz,
+    owner: it.owner, party: it.party, ownerName: it.ownerName, priority: Math.max(0, it.until - now), age: (now - it.born) / 1000, kill: it.kill }; },
+  list(map) { const now = Date.now(); return [...(this.maps.get(map) || new Map()).values()].map((it) => this.pub(it, now)); },
+  handle(ws, me, m) {
+    const num = (v) => Math.max(-500, Math.min(500, Number(v) || 0)), now = Date.now();
+    if (m.t === 'drop_spawn') {
+      if (m.map !== me.map) return;
+      const id = String(m.id || '');
+      if (!(id === 'zeny' || /^[a-z0-9_]{1,40}$/.test(id))) return;
+      const items = this.on(me.map);
+      if (items.size >= 400) return;
+      const it = { gid: this.next++, id, qty: Math.max(1, Math.min(id === 'zeny' ? 1e7 : 30000, Math.floor(Number(m.qty) || 1))),
+        refine: Math.max(0, Math.min(10, Math.floor(Number(m.refine) || 0))), cards: Array.isArray(m.cards) ? m.cards.slice(0, 4).map(String) : [],
+        forgedBy: m.forgedBy ? String(m.forgedBy).slice(0, 24) : undefined, element: m.element ? String(m.element).slice(0, 12) : undefined,
+        x: num(m.x), z: num(m.z), fx: num(m.fx), fz: num(m.fz), born: now,
+        kill: !!m.kill, owner: m.kill ? me.charId : null, ownerName: me.name, party: m.kill ? me.partyId || null : null, until: m.kill ? now + this.PRIORITY : 0 };
+      items.set(it.gid, it);
+      broadcast(me.map, { t: 'ground_add', map: me.map, item: this.pub(it, now) });
+    } else if (m.t === 'pickup') {
+      const items = this.maps.get(me.map), it = items && items.get(Number(m.gid));
+      const deny = (text) => ws.send(JSON.stringify({ t: 'ground_deny', gid: Number(m.gid), text }));
+      if (!it) return deny('Someone else got there first.');
+      const mine = it.owner === me.charId || (it.party && it.party === me.partyId);
+      // Auto-loot flies your own drops to you; otherwise you must be close.
+      if (!(mine && m.auto) && Math.hypot(me.x - it.x, me.z - it.z) > 4.5) return deny('You need to be closer to pick that up.');
+      if (now < it.until && !mine) return deny(`That belongs to ${it.ownerName} for a moment longer.`);
+      items.delete(it.gid);
+      ws.send(JSON.stringify({ t: 'ground_take', gid: it.gid, item: this.pub(it, now) }));
+      broadcast(me.map, { t: 'ground_remove', map: me.map, gid: it.gid }, ws);
+    }
+  },
+};
+setInterval(() => {
+  const now = Date.now();
+  for (const [map, items] of Ground.maps) for (const it of items.values()) if (now - it.born > Ground.LIFE) { items.delete(it.gid); broadcast(map, { t: 'ground_remove', map, gid: it.gid }); }
+}, 3000);
 
 /* ---------------------------------------------------------------- trading & inspecting */
 const Trade = {
