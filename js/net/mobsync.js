@@ -21,7 +21,7 @@
   function stateOf(m) {
     const st = {};
     for (const k in m.status) st[k] = Math.max(0, +(m.status[k].until - m.game.time).toFixed(1));
-    return { i: m.id, x: +m.position.x.toFixed(2), z: +m.position.z.toFixed(2), f: +m.facing.toFixed(2), hp: Math.round(m.hp), a: m.alive ? 1 : 0,
+    return { i: m.id, x: +m.position.x.toFixed(2), z: +m.position.z.toFixed(2), hx: +m.home.x.toFixed(2), hz: +m.home.z.toFixed(2), f: +m.facing.toFixed(2), hp: Math.round(m.hp), a: m.alive ? 1 : 0,
       mv: m.moving ? 1 : 0, sw: m.swingSeq || 0, st, tg: m.aggro ? (m.aggro.isRemote ? m.aggro.id : (net().charId || 0)) : 0 };
   }
   function sendSnapshots(mgr, dt) {
@@ -35,26 +35,28 @@
       const s = stateOf(m), key = JSON.stringify(s);
       if (full || Sync.last.get(m.id) !== key) { Sync.last.set(m.id, key); list.push(s); }
     }
-    if (list.length) net().send({ t: 'mobs', list });
+    if (list.length) net().send({ t: 'mobs', map: mgr.game.mapId, list });
   }
 
   /* ---------------- puppets (everyone else) ---------------- */
-  function applySnapshot(list) {
+  function applySnapshot(list, map) {
     const game = net().game;
     if (!game || !game.monsters) return;
+    if (map && map !== game.mapId) return;   // left over from the map we just left
     const byId = new Map(game.monsters.list.map((m) => [m.id, m]));
     for (const s of list) {
       const m = byId.get(s.i);
       if (!m) continue;
       m.net = s;
       m.hp = s.hp;
+      if (s.hx != null) m.home = { x: s.hx, z: s.hz };   // the host's idea of home is the real one
       // Statuses as the host sees them.
       m.status = {};
       for (const k in s.st || {}) m.status[k] = { until: game.time + s.st[k], tick: 0 };
       m.updateTint();
       if (s.sw && s.sw !== m.swingSeqSeen) { m.swingSeqSeen = s.sw; if (m.alive) { m.sprite.play('attack', { restart: true }); m.swingT2 = 0.5; } }
       if (m.alive && !s.a) puppetDie(m);
-      else if (!m.alive && s.a) { m.spawnAt(s.x, s.z); }
+      else if (!m.alive && s.a) { m.spawnAt(s.x, s.z); if (s.hx != null) m.home = { x: s.hx, z: s.hz }; }
       else if (Math.hypot(m.position.x - s.x, m.position.z - s.z) > 15) m.setPosition(s.x, s.z);
     }
   }
@@ -118,16 +120,16 @@
     this.lastHurtTime = this.game.time;
     this.sprite.setFlash(1);
     if (!this.swingT2) this.sprite.play('hit', { restart: true });
-    net().send({ t: 'mob', op: 'dmg', id: this.id, dmg: Math.round(dmg) });
+    net().send({ t: 'mob', op: 'dmg', map: this.game.mapId, id: this.id, dmg: Math.round(dmg) });
   };
   const origStatus = M.addStatus;
   M.addStatus = function (name, seconds, data) {
     origStatus.call(this, name, seconds, data);
-    if (Sync.puppet()) net().send({ t: 'mob', op: 'status', id: this.id, name, sec: seconds, data: data || null });
+    if (Sync.puppet()) net().send({ t: 'mob', op: 'status', map: this.game.mapId, id: this.id, name, sec: seconds, data: data || null });
   };
   const origKnock = M.knockback;
   M.knockback = function (fx, fz, dist) {
-    if (Sync.puppet()) { net().send({ t: 'mob', op: 'knock', id: this.id, fx, fz, dist }); return; }
+    if (Sync.puppet()) { net().send({ t: 'mob', op: 'knock', map: this.game.mapId, id: this.id, fx, fz, dist }); return; }
     return origKnock.call(this, fx, fz, dist);
   };
   const origDie = M.die;
@@ -138,7 +140,7 @@
       loot.rollDrops = () => {};
       ev.emit = function (n, ...a) { if (n !== 'monsterKilled') return emit.call(this, n, ...a); };
       try { origDie.call(this, null); } finally { loot.rollDrops = roll; ev.emit = emit; }
-      net().send({ t: 'mob', op: 'killed', id: this.id, to: killer.id });
+      net().send({ t: 'mob', op: 'killed', map: this.game.mapId, id: this.id, to: killer.id });
       return;
     }
     return origDie.call(this, killer);
@@ -147,7 +149,7 @@
   // Monster attacks on another player: their own game works out the hit.
   const origAttack = G.Combat.monsterAttack;
   G.Combat.monsterAttack = function (mon, target) {
-    if (target && target.isRemote) { net().send({ t: 'mob', op: 'attack', id: mon.id, to: target.id }); return; }
+    if (target && target.isRemote) { net().send({ t: 'mob', op: 'attack', map: mon.game.mapId, id: mon.id, to: target.id }); return; }
     return origAttack.call(this, mon, target);
   };
 
@@ -161,11 +163,12 @@
       if (Sync.isHost && !was && game.monsters) {
         // Take over from the last snapshot: monsters keep their place and health.
         for (const x of game.monsters.list) { if (x.alive) { x.state = 'idle'; x.path = null; x.aggro = null; } else { x.corpseGone = true; x.respawnT = Math.min(x.respawnT, x.def.respawn); } }
-        Sync.fullT = 0; Sync.last.clear();
+        Sync.fullT = 0; Sync.sentT = 0; Sync.last.clear();   // everyone re-syncs right away
       }
     } else if (m.t === 'mobs') {
-      if (!Sync.isHost) applySnapshot(m.list);
+      if (!Sync.isHost) applySnapshot(m.list, m.map);
     } else if (m.t === 'mob') {
+      if (m.map && m.map !== game.mapId) return;   // meant for another map
       const x = mon(m.id);
       if (!x) return;
       const from = m.from != null ? net().players.get(m.from) : null;

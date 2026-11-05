@@ -131,7 +131,7 @@
     }
     setLook(l) { this.look = l; this.sprite.setSheet(RemotePlayer.sheet(l)); this.syncCart(); }
     // A monster on the host hit this player: their own game takes the damage.
-    takeDamage(dmg, mon) { if (mon) Net.send({ t: 'mob', op: 'hurt', id: mon.id, to: this.id, dmg: Math.round(dmg) }); }
+    takeDamage(dmg, mon) { if (mon) Net.send({ t: 'mob', op: 'hurt', map: mon.game.mapId, id: mon.id, to: this.id, dmg: Math.round(dmg) }); }
     // Merchant carts, seen by everyone.
     syncCart() {
       const want = this.look && Number.isInteger(this.look.cart) ? this.look.cart : null;
@@ -182,6 +182,8 @@
     },
     handle(m) {
       const game = this.game;
+      // Anything tagged with another map is left over from before a map change.
+      if (m.map && m.map !== game.mapId && ['mobs', 'mob', 'state', 'join', 'players', 'welcome', 'action', 'fx', 'look', 'host'].includes(m.t)) return;
       if (m.t === 'host' || m.t === 'mobs' || m.t === 'mob') { G.MobSync.handle(m); return; }
       if (['party', 'guild', 'guild_created', 'invite', 'notice', 'pinfo', 'gainexp', 'loot_gift'].includes(m.t)) { G.Social.handle(m); return; }
       if (m.t === 'fx') { this.showFx(m); return; }
@@ -189,10 +191,10 @@
       if (m.t === 'welcome' || m.t === 'players') {
         this.clear();
         for (const p of m.players) this.add(p);
-        if (m.mobs && m.mobs.length) G.MobSync.applySnapshot(m.mobs);
+        if (m.mobs && m.mobs.length) G.MobSync.applySnapshot(m.mobs, m.map);
         if (m.t === 'welcome') game.log.add(`Connected. ${m.online} player${m.online === 1 ? '' : 's'} online.`, 'system');
       } else if (m.t === 'join') { this.add(m.p); game.log.add(`${m.p.name} arrived.`, 'info'); }
-      else if (m.t === 'leave') { const r = this.players.get(m.id); if (r) { game.log.add(`${r.name} left.`, 'info'); r.dispose(); this.players.delete(m.id); } }
+      else if (m.t === 'leave') { const r = this.players.get(m.id); if (r) { game.log.add(`${r.name} left.`, 'info'); this.remove(r); } }
       else if (m.t === 'state') { const r = this.players.get(m.id); if (r) { r.target.x = m.x; r.target.z = m.z; r.moving = m.moving; if (!m.moving) r.targetFacing = m.facing; } }
       else if (m.t === 'look') { const r = this.players.get(m.id); if (r) r.setLook(m.look); }
       else if (m.t === 'action') { const r = this.players.get(m.id); if (r && m.kind === 'attack') { r.sprite.play('attack', { restart: true }); r.swingT = 0.45; } }
@@ -205,7 +207,13 @@
       else if (m.t === 'error') game.log.add(m.text, 'warn');
     },
     add(p) { if (p.id === this.charId || this.players.has(p.id)) return; this.players.set(p.id, new RemotePlayer(this.game, p)); },
-    clear() { for (const r of this.players.values()) r.dispose(); this.players.clear(); },
+    // Monsters stop chasing a player who is gone.
+    remove(r) {
+      r.alive = false;
+      if (this.game.monsters) for (const mon of this.game.monsters.list) if (mon.aggro === r) mon.loseInterest();
+      r.dispose(); this.players.delete(r.id);
+    },
+    clear() { for (const r of [...this.players.values()]) this.remove(r); },
     send(o) { if (this.ws && this.ws.readyState === 1) this.ws.send(JSON.stringify(o)); },
 
     /* ---------- skills seen by others ---------- */
@@ -269,7 +277,11 @@
     update(dt) {
       const game = this.game, p = game.player;
       if (!p) return;
-      if (game.mapId !== this.mapSeen) { this.mapSeen = game.mapId; G.MobSync.reset(); }
+      if (game.mapId !== this.mapSeen) {
+        // New map: forget the old map's players and tell the server right away.
+        this.mapSeen = game.mapId; G.MobSync.reset(); this.clear();
+        this.sendT = 0; this.last = '';
+      }
       for (const r of this.players.values()) r.update(dt, game.camera3.position);
       this.sendT -= dt;
       if (this.sendT <= 0) {

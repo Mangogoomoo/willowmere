@@ -30,20 +30,28 @@
       this.spawn(true);
     }
 
-    pickSpawnPoint() {
+    /* Spawn points come from a seed made of the map and this monster's number
+       (plus how many times it has spawned), so every player's game agrees on
+       where each monster lives. Only respawns avoid popping up right next to
+       the player; online, respawns are decided by the map's host and shared. */
+    pickSpawnPoint(initial) {
       const s = this.spawnArea, nav = this.game.nav, player = this.game.player;
+      let seed = 2166136261;
+      for (const ch of String(this.game.mapId || '')) seed = Math.imul(seed ^ ch.charCodeAt(0), 16777619);
+      this.spawnCount = (this.spawnCount || 0) + 1;
+      const rng = G.Utils.mulberry32((seed ^ Math.imul(this.id + 1, 7919) ^ Math.imul(this.spawnCount, 104729)) >>> 0);
       for (let i = 0; i < 40; i++) {
-        const a = Math.random() * Math.PI * 2, r = Math.sqrt(Math.random()) * s.r;
+        const a = rng() * Math.PI * 2, r = Math.sqrt(rng()) * s.r;
         const x = s.x + Math.cos(a) * r, z = s.z + Math.sin(a) * r;
         if (!nav.walkable(x, z) || TR.isWater(x, z)) continue;
-        if (player && Math.hypot(player.position.x - x, player.position.z - z) < 7 && i < 30) continue;
+        if (!initial && player && Math.hypot(player.position.x - x, player.position.z - z) < 7 && i < 30) continue;
         return { x, z };
       }
       return { x: s.x, z: s.z };
     }
 
     spawn(initial) {
-      const p = this.pickSpawnPoint();
+      const p = this.pickSpawnPoint(initial);
       this.setPosition(p.x, p.z);
       this.home = { x: p.x, z: p.z };
       this.hp = this.def.hp;

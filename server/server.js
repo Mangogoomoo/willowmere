@@ -324,7 +324,7 @@ wss.on('connection', (ws) => {
       Social.sendPartyTo(me); Social.sendGuildTo(me);
       if (me.partyId) Social.refreshParty(me.partyId).catch(() => {});
       if (me.guild) Social.refreshGuild(me.guild.id).catch(() => {});
-      ws.send(JSON.stringify({ t: 'welcome', you: me.charId, players: [...online.values()].filter((s) => s !== me && s.map === me.map).map(publicState), online: online.size, mobs: cachedMobs(me.map) }));
+      ws.send(JSON.stringify({ t: 'welcome', map: me.map, you: me.charId, players: [...online.values()].filter((s) => s !== me && s.map === me.map).map(publicState), online: online.size, mobs: cachedMobs(me.map) }));
       broadcast(me.map, { t: 'join', p: publicState(me) }, ws);
       electHost(me.map);
       return;
@@ -346,10 +346,10 @@ wss.on('connection', (ws) => {
       }
       Object.assign(me, { x: num(msg.x, me.x), z: num(msg.z, me.z), facing: num(msg.facing, me.facing), moving: !!msg.moving });
       if (Number.isInteger(msg.level)) me.level = Math.max(1, Math.min(999, msg.level));
-      broadcast(me.map, { t: 'state', id: me.charId, x: me.x, z: me.z, facing: me.facing, moving: me.moving }, ws);
+      broadcast(me.map, { t: 'state', map: me.map, id: me.charId, x: me.x, z: me.z, facing: me.facing, moving: me.moving }, ws);
     } else if (msg.t === 'look') {
       me.look = cleanLook(msg.look);
-      broadcast(me.map, { t: 'look', id: me.charId, look: me.look }, ws);
+      broadcast(me.map, { t: 'look', map: me.map, id: me.charId, look: me.look }, ws);
     } else if (msg.t === 'chat') {
       const now = Date.now();
       if (now - me.chatT < 400) return;   // a little flood protection
@@ -360,13 +360,14 @@ wss.on('connection', (ws) => {
       else if (text.startsWith('$') && me.guild) Social.toGuild(me.guild.id, { t: 'chat', id: me.charId, from: me.name, text: text.slice(1).trim(), channel: 'guild' });
       else if (text) broadcast(me.map, { t: 'chat', id: me.charId, from: me.name, text });
     } else if (msg.t === 'mobs') {
-      // Snapshot from the map's host.
-      if (hosts.get(me.map) !== ws || !Array.isArray(msg.list)) return;
+      // Snapshot from the map's host (and only for the map it is hosting).
+      if (hosts.get(me.map) !== ws || !Array.isArray(msg.list) || msg.map !== me.map) return;
       if (!mobCache.has(me.map)) mobCache.set(me.map, new Map());
       const cache = mobCache.get(me.map);
       for (const m of msg.list.slice(0, 400)) if (m && Number.isInteger(m.i)) cache.set(m.i, m);
-      broadcast(me.map, { t: 'mobs', list: msg.list.slice(0, 400) }, ws);
+      broadcast(me.map, { t: 'mobs', map: me.map, list: msg.list.slice(0, 400) }, ws);
     } else if (msg.t === 'mob') {
+      if (msg.map !== me.map) return;   // sent just before a map change: drop it
       const host = hosts.get(me.map);
       if (['dmg', 'status', 'knock'].includes(msg.op)) {
         // A player's hit on a monster: the host applies it.
@@ -378,7 +379,7 @@ wss.on('connection', (ws) => {
       }
     } else if (msg.t === 'fx') {
       // Cast bars and spell effects, for everyone else on the map to see.
-      broadcast(me.map, Object.assign({}, msg, { from: me.charId }), ws);
+      broadcast(me.map, Object.assign({}, msg, { from: me.charId, map: me.map }), ws);
     } else if (msg.t === 'buff') {
       // A support skill cast on another player: they apply it.
       const target = wsOfChar(Number(msg.to));
@@ -389,7 +390,7 @@ wss.on('connection', (ws) => {
     } else if (msg.t === 'action') {
       // Small visual events (attack swing, sit, emote) for others to see.
       const kind = ['attack', 'cast', 'emote'].includes(msg.kind) ? msg.kind : null;
-      if (kind) broadcast(me.map, { t: 'action', id: me.charId, kind, data: typeof msg.data === 'string' ? msg.data.slice(0, 24) : null }, ws);
+      if (kind) broadcast(me.map, { t: 'action', map: me.map, id: me.charId, kind, data: typeof msg.data === 'string' ? msg.data.slice(0, 24) : null }, ws);
     }
   });
   ws.on('close', () => {
