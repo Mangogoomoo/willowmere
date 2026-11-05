@@ -142,36 +142,36 @@
   mon('zenorc', { name: 'Zenorc', level: 31, hp: 2585, atk: [188, 246], def: 0, element: 'shadow', aggressive: true, speed: 2.6, chaseSpeed: 4.2,
     sprite: { humanoid: { costume: 'zenorc', weapon: 'knuckle', skin: '#5a8a3a', hair: 'raven', style: 'spiky' } },
     drops: [{ id: 'card_zenorc', chance: 0.002 }, { id: 'emperium', chance: 0.002 }, { id: 'tooth_of_bat', chance: 0.4 }, { id: 'orcish_voucher', chance: 0.3 }, { id: 'yellow_gemstone', chance: 0.05 }] });
-  mon('orc_lord', { name: 'Orc Lord', level: 55, mvp: true, hp: 60000, atk: [520, 680], def: 40, mdef: 25, element: 'earth', aggressive: true, scale: 1.8, hitRadius: 1.4, height: 3.2,
-    boss: { slamEvery: 7, slamRadius: 3.6, slamDamage: [700, 1000] }, chaseSpeed: 3.4,
+  mon('orc_lord', { name: 'Orc Lord', level: 55, mvp: true, hp: 60000, atk: [380, 480], def: 40, mdef: 25, element: 'earth', aggressive: true, scale: 1.8, hitRadius: 1.4, height: 3.2,
+    boss: { slamEvery: 7, slamRadius: 3.6, slamDamage: [500, 700] }, chaseSpeed: 3.4,
     sprite: { humanoid: { costume: 'orc_lord', weapon: 'axe', skin: '#5a8a3a', hair: 'raven', style: 'buzz' } },
     drops: [{ id: 'card_orc_lord', chance: 0.05 }, { id: 'emperium', chance: 0.3 }, { id: 'orcish_axe', chance: 0.25 }, { id: 'orc_helm', chance: 0.3 }, { id: 'yggdrasil_berry', chance: 0.5 }, { id: 'oridecon', chance: 0.5, qty: 2 }] });
   // Ember Ruins (levels 50-94).
-  mon('wind_ghost', { name: 'Wind Ghost', level: 51, hp: 4820, atk: [489, 639], def: 0, mdef: 45, element: 'wind', aggressive: true, flying: true, flee: 70,
+  mon('wind_ghost', { name: 'Wind Ghost', level: 51, hp: 4820, atk: [250, 330], def: 0, mdef: 45, element: 'wind', aggressive: true, flying: true, flee: 70,
     sprite: { base: 'whisper', hue: -140, sat: 2.2, light: 0.95 }, drops: [{ id: 'card_wind_ghost', chance: 0.002 }, { id: 'rough_wind', chance: 0.05 }, { id: 'old_magic_book', chance: 0.1 }] });
-  mon('raydric', { name: 'Raydric', level: 52, hp: 8613, atk: [830, 930], def: 40, mdef: 15, element: 'shadow', aggressive: true,
+  mon('raydric', { name: 'Raydric', level: 52, hp: 8613, atk: [370, 430], def: 40, mdef: 15, element: 'shadow', aggressive: true,
     sprite: { humanoid: { costume: 'raydric', weapon: 'twohand', skin: '#3a3a4a', hair: 'raven', style: 'buzz' } },
     drops: [{ id: 'card_raydric', chance: 0.002 }, { id: 'brigan', chance: 0.5 }, { id: 'white_potion', chance: 0.1 }, { id: 'elunium', chance: 0.05 }] });
-  mon('wraith', { name: 'Wraith', level: 53, hp: 10999, atk: [580, 760], def: 5, mdef: 30, element: 'undead', aggressive: true, flying: true,
+  mon('wraith', { name: 'Wraith', level: 53, hp: 10999, atk: [290, 380], def: 5, mdef: 30, element: 'undead', aggressive: true, flying: true,
     sprite: { base: 'whisper', hue: 45, sat: 0.7, light: 0.5 }, drops: [{ id: 'card_wraith', chance: 0.002 }, { id: 'ectoplasm', chance: 0.6 }, { id: 'white_potion', chance: 0.15 }] });
-  mon('evil_druid', { name: 'Evil Druid', level: 58, hp: 16506, atk: [420, 670], def: 5, mdef: 60, element: 'undead', aggressive: true,
+  mon('evil_druid', { name: 'Evil Druid', level: 58, hp: 16506, atk: [250, 370], def: 5, mdef: 60, element: 'undead', aggressive: true,
     sprite: { humanoid: { costume: 'evil_druid', weapon: 'rod', skin: '#b8c8a8', hair: 'snow', style: 'slick' } },
     drops: [{ id: 'card_evil_druid', chance: 0.002 }, { id: 'old_magic_book', chance: 0.3 }, { id: 'blue_gemstone', chance: 0.2 }] });
-  mon('khalitzburg', { name: 'Khalitzburg', level: 63, hp: 19276, atk: [875, 1025], def: 45, mdef: 10, element: 'undead', aggressive: true,
+  mon('khalitzburg', { name: 'Khalitzburg', level: 63, hp: 19276, atk: [410, 490], def: 45, mdef: 10, element: 'undead', aggressive: true,
     sprite: { humanoid: { costume: 'khalitzburg', weapon: 'twohand', skin: '#efe6d2', hair: 'snow', style: 'buzz' } },
     drops: [{ id: 'card_khalitzburg', chance: 0.002 }, { id: 'skel_bone', chance: 0.6 }, { id: 'oridecon', chance: 0.05 }] });
-  mon('abysmal_knight', { name: 'Abysmal Knight', level: 79, hp: 36140, atk: [1600, 2400], def: 55, mdef: 25, element: 'shadow', aggressive: true, scale: 1.35,
+  mon('abysmal_knight', { name: 'Abysmal Knight', level: 79, hp: 36140, atk: [640, 880], def: 55, mdef: 25, element: 'shadow', aggressive: true, scale: 1.35,
     sprite: { humanoid: { costume: 'abysmal_knight', weapon: 'spear', skin: '#2a2a3a', hair: 'raven', style: 'buzz' } },
     drops: [{ id: 'card_abysmal_knight', chance: 0.002 }, { id: 'evil_horn', chance: 0.3 }, { id: 'elunium', chance: 0.1 }, { id: 'bloody_edge', chance: 0.002 }] });
-  mon('bloody_knight', { name: 'Bloody Knight', level: 82, hp: 57870, atk: [2150, 3030], def: 60, mdef: 45, element: 'shadow', aggressive: true, scale: 1.4,
+  mon('bloody_knight', { name: 'Bloody Knight', level: 82, hp: 57870, atk: [800, 1080], def: 60, mdef: 45, element: 'shadow', aggressive: true, scale: 1.4,
     sprite: { humanoid: { costume: 'bloody_knight', weapon: 'twohand', skin: '#5a1a2a', hair: 'raven', style: 'buzz' } },
     drops: [{ id: 'card_bloody_knight', chance: 0.002 }, { id: 'burning_heart', chance: 0.3 }, { id: 'bloody_edge', chance: 0.005 }, { id: 'yggdrasil_berry', chance: 0.02 }] });
-  mon('dark_lord', { name: 'Dark Lord', level: 80, mvp: true, hp: 160000, atk: [2800, 3320], def: 30, mdef: 70, element: 'undead', aggressive: true, scale: 1.9, hitRadius: 1.4, height: 3.4,
-    boss: { slamEvery: 6, slamRadius: 4, slamDamage: [2000, 2800] },
+  mon('dark_lord', { name: 'Dark Lord', level: 80, mvp: true, hp: 160000, atk: [1050, 1300], def: 30, mdef: 70, element: 'undead', aggressive: true, scale: 1.9, hitRadius: 1.4, height: 3.4,
+    boss: { slamEvery: 6, slamRadius: 4, slamDamage: [900, 1250] },
     sprite: { humanoid: { costume: 'dark_lord', weapon: 'rod', skin: '#d8d0e8', hair: 'raven', style: 'slick' } },
     drops: [{ id: 'card_dark_lord', chance: 0.05 }, { id: 'old_magic_book', chance: 1, qty: 3 }, { id: 'yggdrasil_berry', chance: 0.6 }, { id: 'evil_horn', chance: 0.5 }] });
-  mon('lord_of_death', { name: 'Lord of Death', level: 94, mvp: true, hp: 300000, atk: [3430, 4232], def: 70, mdef: 73, element: 'shadow', aggressive: true, scale: 2.1, hitRadius: 1.5, height: 3.8,
-    boss: { slamEvery: 5, slamRadius: 4.5, slamDamage: [3000, 4000] },
+  mon('lord_of_death', { name: 'Lord of Death', level: 94, mvp: true, hp: 300000, atk: [1250, 1550], def: 70, mdef: 73, element: 'shadow', aggressive: true, scale: 2.1, hitRadius: 1.5, height: 3.8,
+    boss: { slamEvery: 5, slamRadius: 4.5, slamDamage: [1150, 1550] },
     sprite: { humanoid: { costume: 'lord_of_death', weapon: 'spear', skin: '#1a1a24', hair: 'raven', style: 'buzz' } },
     drops: [{ id: 'card_lord_of_death', chance: 0.05 }, { id: 'yggdrasil_berry', chance: 1, qty: 2 }, { id: 'bloody_edge', chance: 0.2 }, { id: 'evil_horn', chance: 1 }] });
 

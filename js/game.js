@@ -172,6 +172,7 @@
       this.crafting = new G.Crafting(this);
       G.bindInventoryDrops(this);
       G.Social.init(this);
+      G.Trade.init(this);
       this.questlog = new G.QuestLog(this);
       this.questsWin = G.Panels.questsWindow(this);
       this.extras = new G.Extras(this);

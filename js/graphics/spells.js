@@ -207,8 +207,11 @@
     }
 
     /* Glowing magic circle under the caster while a spell charges. */
-    castCircle(ent, element) {
-      this.endCastCircle();
+    // A rune circle under a caster. Any number can be active (one per caster);
+    // other players' circles also expire on their own.
+    castCircle(ent, element, maxSeconds) {
+      ent = ent || this.game.player;
+      this.endCastCircle(ent);
       const color = HEX[element || 'neutral'] || '#ffffff';
       if (!this.runeTex[color]) this.runeTex[color] = runeTexture(color);
       const mat = new THREE.MeshBasicMaterial({ map: this.runeTex[color], transparent: true, depthWrite: false, depthTest: false, blending: THREE.AdditiveBlending, toneMapped: false, fog: false });
@@ -216,11 +219,13 @@
       m.renderOrder = 1;
       m.scale.set(2.6, 1, 2.6);
       this.scene.add(m);
-      this.castMesh = m;
-      this.castEnt = ent;
+      if (!this.circles) this.circles = new Map();
+      this.circles.set(ent, { mesh: m, until: maxSeconds ? this.game.time + maxSeconds : Infinity, map: this.game.mapId });
     }
-    endCastCircle() {
-      if (this.castMesh) { this.remove(this.castMesh); this.castMesh = null; }
+    endCastCircle(ent) {
+      ent = ent || this.game.player;
+      const c = this.circles && this.circles.get(ent);
+      if (c) { this.remove(c.mesh); this.circles.delete(ent); }
     }
 
     update(dt, time) {
@@ -228,11 +233,12 @@
         const fx = this.active[i];
         if (fx.update(dt, fx)) this.active.splice(i, 1);
       }
-      if (this.castMesh) {
-        const p = this.castEnt.position;
-        this.castMesh.position.set(p.x, p.y + 0.08, p.z);
-        this.castMesh.rotation.y = time * 1.5;
-        this.castMesh.material.opacity = 0.75 + Math.sin(time * 8) * 0.2;
+      if (this.circles) for (const [ent, c] of this.circles) {
+        // Gone, expired, or left behind on another map: remove it.
+        if (!ent.position || ent.disposed || this.game.time > c.until || c.map !== this.game.mapId || (ent.isRemote && !ent.alive)) { this.remove(c.mesh); this.circles.delete(ent); continue; }
+        const p = ent.position;
+        c.mesh.position.set(p.x, p.y + 0.06, p.z);
+        c.mesh.rotation.y += dt * 1.2;
       }
     }
   }

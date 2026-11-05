@@ -324,6 +324,7 @@ wss.on('connection', (ws) => {
       Social.sendPartyTo(me); Social.sendGuildTo(me);
       if (me.partyId) Social.refreshParty(me.partyId).catch(() => {});
       if (me.guild) Social.refreshGuild(me.guild.id).catch(() => {});
+      const ts = Trade.sessions.get(me.charId); if (ts) Trade.close(ts, `${me.name} left.`);
       ws.send(JSON.stringify({ t: 'welcome', map: me.map, you: me.charId, players: [...online.values()].filter((s) => s !== me && s.map === me.map).map(publicState), online: online.size, mobs: cachedMobs(me.map) }));
       broadcast(me.map, { t: 'join', p: publicState(me) }, ws);
       electHost(me.map);
@@ -334,6 +335,7 @@ wss.on('connection', (ws) => {
       const num = (v, d) => (Number.isFinite(Number(v)) ? Math.max(-500, Math.min(500, Number(v))) : d);
       if (map !== me.map) {
         const old = me.map;
+        const ts = Trade.sessions.get(me.charId); if (ts) Trade.close(ts, 'The trade ended: a player left the map.');
         broadcast(old, { t: 'leave', id: me.charId }, ws);
         me.map = map;
         if (hosts.get(old) === ws) hosts.delete(old);
@@ -394,7 +396,9 @@ wss.on('connection', (ws) => {
       const target = wsOfChar(Number(msg.to));
       if (target && target.readyState === 1 && online.get(target).map === me.map)
         target.send(JSON.stringify({ t: 'buff', from: me.charId, fromName: me.name, skill: String(msg.skill || '').slice(0, 40), lv: Math.max(1, Math.min(10, Number(msg.lv) || 1)) }));
-    } else if (typeof msg.t === 'string' && (msg.t.startsWith('party_') || msg.t.startsWith('guild_') || msg.t === 'pexp' || msg.t === 'ploot')) {
+    } else if (typeof msg.t === 'string' && (msg.t.startsWith('trade_') || msg.t.startsWith('inspect_'))) {
+      Trade.handle(ws, me, msg);
+    } else if (typeof msg.t === 'string' && (msg.t.startsWith('party_') || msg.t.startsWith('guild_') || msg.t === 'pexp' || msg.t === 'ploot' || msg.t === 'gexp')) {
       await Social.handle(ws, me, msg).catch((e) => { console.error(e); ws.send(JSON.stringify({ t: 'notice', text: 'That didn’t work. Try again.' })); });
     } else if (msg.t === 'action') {
       // Small visual events (attack swing, sit, emote) for others to see.
@@ -421,8 +425,8 @@ const Social = {
   async load(me) {
     const p = (await pool.query('SELECT p.id, p.name FROM party_members m JOIN parties p ON p.id = m.party_id WHERE m.character_id = $1', [me.charId])).rows[0];
     me.partyId = p ? Number(p.id) : null; me.partyName = p ? p.name : null;
-    const g = (await pool.query('SELECT g.id, g.name, g.emblem_ver FROM guild_members m JOIN guilds g ON g.id = m.guild_id WHERE m.character_id = $1', [me.charId])).rows[0];
-    me.guild = g ? { id: Number(g.id), name: g.name, ev: g.emblem_ver } : null;
+    const g = (await pool.query('SELECT g.id, g.name, g.emblem_ver, g.ranks, m.rank FROM guild_members m JOIN guilds g ON g.id = m.guild_id WHERE m.character_id = $1', [me.charId])).rows[0];
+    me.guild = g ? { id: Number(g.id), name: g.name, ev: g.emblem_ver, rank: (g.ranks || [])[g.rank] || '', rankNo: g.rank } : null;
   },
   async partyState(id) {
     const p = (await pool.query('SELECT * FROM parties WHERE id = $1', [id])).rows[0];
@@ -432,11 +436,12 @@ const Social = {
       members: mem.map((c) => { const o = Social.online(Number(c.id)); return { id: Number(c.id), name: c.name, job: c.job, level: o ? o[1].level : c.base_level, online: !!o, map: o ? o[1].map : null }; }) };
   },
   async guildState(id) {
-    const g = (await pool.query('SELECT id, name, master_id, emblem_ver, skill_points, skills FROM guilds WHERE id = $1', [id])).rows[0];
+    const g = (await pool.query('SELECT id, name, master_id, emblem_ver, skill_points, skills, ranks, level, exp FROM guilds WHERE id = $1', [id])).rows[0];
     if (!g) return null;
-    const mem = (await pool.query('SELECT c.id, c.name, c.job, c.base_level FROM guild_members m JOIN characters c ON c.id = m.character_id WHERE m.guild_id = $1 ORDER BY c.name', [id])).rows;
-    return { id: Number(g.id), name: g.name, master: Number(g.master_id), ev: g.emblem_ver, skillPoints: g.skill_points, skills: g.skills,
-      members: mem.map((c) => { const o = Social.online(Number(c.id)); return { id: Number(c.id), name: c.name, job: c.job, level: o ? o[1].level : c.base_level, online: !!o, map: o ? o[1].map : null }; }) };
+    const mem = (await pool.query('SELECT c.id, c.name, c.job, c.base_level, m.rank, m.tax FROM guild_members m JOIN characters c ON c.id = m.character_id WHERE m.guild_id = $1 ORDER BY m.rank, c.name', [id])).rows;
+    return { id: Number(g.id), name: g.name, master: Number(g.master_id), ev: g.emblem_ver, skillPoints: g.skill_points, skills: g.skills, ranks: g.ranks,
+      level: g.level, exp: Number(g.exp), next: Social.guildNext(g.level), maxMembers: Social.maxMembers(g.skills),
+      members: mem.map((c) => { const o = Social.online(Number(c.id)); return { id: Number(c.id), name: c.name, job: c.job, level: o ? o[1].level : c.base_level, online: !!o, map: o ? o[1].map : null, rank: c.rank, tax: c.tax }; }) };
   },
   sendTo(me, msg) { const o = Social.online(me.charId); if (o && o[0].readyState === 1) o[0].send(JSON.stringify(msg)); },
   async sendPartyTo(me) { Social.sendTo(me, { t: 'party', party: me.partyId ? await Social.partyState(me.partyId) : null }); },
@@ -450,6 +455,15 @@ const Social = {
   notice(me, text) { Social.sendTo(me, { t: 'notice', text }); },
   findByName(name) { const n = String(name || '').trim().toLowerCase(); for (const [ws, s] of online) if (s.name.toLowerCase() === n) return [ws, s]; return null; },
   NAME: /^[A-Za-z0-9][A-Za-z0-9 '\-]{1,23}$/,
+  // Guild skills (classic set) and their max levels.
+  GSKILLS: { emblem: 1, extension: 10, leadership: 5, wounds: 5, coldheart: 5, sharpgaze: 5, regen: 3, call: 1 },
+  guildNext: (lv) => 1500 * lv,
+  maxMembers: (sk) => 16 + 4 * ((sk && sk.extension) || 0),
+  // Re-read a member's guild tag (rank names may have changed) and tell their map.
+  async retag(gid) {
+    for (const [, s] of online) if (s.guild && s.guild.id === gid) { await Social.load(s); Social.pinfo(s); }
+  },
+  async rankOf(gid, charId) { const r = (await pool.query('SELECT rank FROM guild_members WHERE guild_id = $1 AND character_id = $2', [gid, charId])).rows[0]; return r ? r.rank : 9; },
 
   async handle(ws, me, m) {
     switch (m.t) {
@@ -493,9 +507,8 @@ const Social = {
           Social.toParty(inv.id, { t: 'notice', text: `${me.name} joined the party.` });
         } else {
           if (me.guild) return Social.notice(me, 'You are already in a guild.');
-          await pool.query('INSERT INTO guild_members (guild_id, character_id) VALUES ($1, $2)', [inv.id, me.charId]);
-          const g = (await pool.query('SELECT name, emblem_ver FROM guilds WHERE id = $1', [inv.id])).rows[0];
-          me.guild = { id: inv.id, name: g.name, ev: g.emblem_ver };
+          await pool.query('INSERT INTO guild_members (guild_id, character_id, rank) VALUES ($1, $2, 3)', [inv.id, me.charId]);
+          await Social.load(me);
           await Social.refreshGuild(inv.id); Social.pinfo(me);
           Social.toGuild(inv.id, { t: 'notice', text: `${me.name} joined the guild.` });
         }
@@ -553,8 +566,8 @@ const Social = {
         if (!Social.NAME.test(name)) return Social.notice(me, 'Guild names are 2 to 24 letters or numbers.');
         try {
           const r = await pool.query('INSERT INTO guilds (name, master_id) VALUES ($1, $2) RETURNING id', [name, me.charId]);
-          await pool.query('INSERT INTO guild_members (guild_id, character_id) VALUES ($1, $2)', [r.rows[0].id, me.charId]);
-          me.guild = { id: Number(r.rows[0].id), name, ev: 0 };
+          await pool.query('INSERT INTO guild_members (guild_id, character_id, rank) VALUES ($1, $2, 0)', [r.rows[0].id, me.charId]);
+          await Social.load(me);
         } catch (e) { if (e.code === '23505') return Social.notice(me, 'That guild name is taken.'); throw e; }
         Social.sendTo(me, { t: 'guild_created', name });
         await Social.refreshGuild(me.guild.id); Social.pinfo(me); return;
@@ -562,8 +575,8 @@ const Social = {
       case 'guild_invite': {
         const st = me.guild && await Social.guildState(me.guild.id);
         if (!st) return Social.notice(me, 'You are not in a guild.');
-        if (st.master !== me.charId) return Social.notice(me, 'Only the guild master can invite.');
-        if (st.members.length >= 16) return Social.notice(me, 'The guild is full (16 members).');
+        if ((await Social.rankOf(st.id, me.charId)) > 1) return Social.notice(me, 'Only the Guild Leader and Officers can invite.');
+        if (st.members.length >= st.maxMembers) return Social.notice(me, `The guild is full (${st.maxMembers} members). Guild Extension raises the limit.`);
         const t = Social.findByName(m.name);
         if (!t) return Social.notice(me, `${m.name} isn't online.`);
         if (t[1].guild) return Social.notice(me, `${t[1].name} is already in a guild.`);
@@ -581,7 +594,8 @@ const Social = {
           return;
         }
         const who = m.t === 'guild_leave' ? me.charId : Number(m.id);
-        if (m.t === 'guild_expel' && st.master !== me.charId) return Social.notice(me, 'Only the guild master can expel.');
+        if (m.t === 'guild_expel' && ((await Social.rankOf(gid, me.charId)) > 1 || (await Social.rankOf(gid, who)) <= 1 && st.master !== me.charId))
+          return Social.notice(me, 'Only the Guild Leader (or an Officer, for Members and Newbies) can expel.');
         if (who === st.master) return;
         await pool.query('DELETE FROM guild_members WHERE guild_id = $1 AND character_id = $2', [gid, who]);
         const o = Social.online(who);
@@ -591,10 +605,57 @@ const Social = {
       case 'guild_skill': {
         const st = me.guild && await Social.guildState(me.guild.id);
         if (!st || st.master !== me.charId) return Social.notice(me, 'Only the guild master can learn guild skills.');
-        if (m.skill !== 'emblem' || (st.skills && st.skills.emblem)) return;
-        if (st.skillPoints < 1) return Social.notice(me, 'No guild skill points left.');
-        await pool.query("UPDATE guilds SET skill_points = skill_points - 1, skills = skills || '{\"emblem\":1}'::jsonb WHERE id = $1", [st.id]);
+        const max = Social.GSKILLS[m.skill], cur = (st.skills && st.skills[m.skill]) || 0;
+        if (!max || cur >= max) return;
+        if (st.skillPoints < 1) return Social.notice(me, 'No guild skill points left. The guild earns one each level.');
+        await pool.query('UPDATE guilds SET skill_points = skill_points - 1, skills = skills || jsonb_build_object($2::text, $3::int) WHERE id = $1', [st.id, m.skill, cur + 1]);
         await Social.refreshGuild(st.id); return;
+      }
+      case 'guild_rank_name': {
+        const st = me.guild && await Social.guildState(me.guild.id);
+        if (!st || st.master !== me.charId) return Social.notice(me, 'Only the Guild Leader can rename ranks.');
+        const i = Number(m.index), name = String(m.name || '').trim().slice(0, 20);
+        if (!(i >= 0 && i <= 3) || !/^[A-Za-z0-9][A-Za-z0-9 '\-]{0,19}$/.test(name)) return Social.notice(me, 'Rank names are 1 to 20 letters or numbers.');
+        const ranks = st.ranks.slice(); ranks[i] = name;
+        await pool.query('UPDATE guilds SET ranks = $2 WHERE id = $1', [st.id, JSON.stringify(ranks)]);
+        await Social.retag(st.id); await Social.refreshGuild(st.id); return;
+      }
+      case 'guild_set_rank': {
+        const st = me.guild && await Social.guildState(me.guild.id);
+        if (!st || st.master !== me.charId) return Social.notice(me, 'Only the Guild Leader can change ranks.');
+        const who = Number(m.id), rank = Number(m.rank);
+        if (who === st.master || !(rank >= 1 && rank <= 3)) return;
+        await pool.query('UPDATE guild_members SET rank = $3 WHERE guild_id = $1 AND character_id = $2', [st.id, who, rank]);
+        await Social.retag(st.id); await Social.refreshGuild(st.id); return;
+      }
+      case 'guild_tax': {
+        if (!me.guild) return;
+        const tax = Math.max(0, Math.min(50, Math.floor(Number(m.tax) || 0)));
+        await pool.query('UPDATE guild_members SET tax = $3 WHERE guild_id = $1 AND character_id = $2', [me.guild.id, me.charId, tax]);
+        await Social.refreshGuild(me.guild.id); return;
+      }
+      case 'gexp': {
+        // EXP a member pays into the guild; the guild levels up and earns skill points.
+        if (!me.guild) return;
+        const amt = Math.max(0, Math.min(1e7, Math.floor(Number(m.amount) || 0)));
+        if (!amt) return;
+        const g = (await pool.query('UPDATE guilds SET exp = exp + $2 WHERE id = $1 RETURNING level, exp', [me.guild.id, amt])).rows[0];
+        let { level } = g, exp = Number(g.exp), ups = 0;
+        while (level < 50 && exp >= Social.guildNext(level)) { exp -= Social.guildNext(level); level++; ups++; }
+        if (ups) {
+          await pool.query('UPDATE guilds SET level = $2, exp = $3, skill_points = skill_points + $4 WHERE id = $1', [me.guild.id, level, exp, ups]);
+          Social.toGuild(me.guild.id, { t: 'notice', text: `Your guild reached level ${level}! (+${ups} guild skill point${ups > 1 ? 's' : ''})` });
+          await Social.refreshGuild(me.guild.id);
+        }
+        return;
+      }
+      case 'guild_call': {
+        // Emergency Call: the Guild Leader summons every online member.
+        const st = me.guild && await Social.guildState(me.guild.id);
+        if (!st || st.master !== me.charId || !(st.skills && st.skills.call)) return;
+        for (const [ws2, s] of online) if (s.guild && s.guild.id === st.id && s !== me && ws2.readyState === 1)
+          ws2.send(JSON.stringify({ t: 'guild_summon', map: me.map, x: me.x, z: me.z, from: me.name }));
+        return Social.notice(me, 'Emergency Call: your guild is on its way.');
       }
       case 'guild_emblem': {
         const st = me.guild && await Social.guildState(me.guild.id);
@@ -608,6 +669,92 @@ const Social = {
         for (const [, s] of online) if (s.guild && s.guild.id === st.id) { s.guild.ev = r.rows[0].emblem_ver; Social.pinfo(s); }
         await Social.refreshGuild(st.id); return;
       }
+    }
+  },
+};
+
+/* ---------------------------------------------------------------- trading & inspecting */
+const Trade = {
+  sessions: new Map(),   // charId -> session
+  asks: new Map(),       // target charId -> asking charId
+  other(sess, id) { return sess.a === id ? sess.b : sess.a; },
+  push(sess) {
+    for (const id of [sess.a, sess.b]) {
+      const o = Social.online(id); if (!o) continue;
+      const mine = sess.off[id], theirs = sess.off[Trade.other(sess, id)];
+      o[0].send(JSON.stringify({ t: 'trade_state', mine, theirs }));
+    }
+  },
+  close(sess, text) {
+    for (const id of [sess.a, sess.b]) { Trade.sessions.delete(id); const o = Social.online(id); if (o) o[0].send(JSON.stringify({ t: 'trade_closed', text })); }
+  },
+  cleanItem(it) {
+    if (!it || !/^[a-z0-9_]{1,40}$/.test(String(it.id))) return null;
+    return { uid: Number(it.uid) || 0, id: String(it.id), qty: Math.max(1, Math.min(30000, Math.floor(Number(it.qty) || 1))),
+      refine: Math.max(0, Math.min(10, Math.floor(Number(it.refine) || 0))), cards: Array.isArray(it.cards) ? it.cards.slice(0, 4).map(String) : [],
+      forgedBy: it.forgedBy ? String(it.forgedBy).slice(0, 24) : undefined, element: it.element ? String(it.element).slice(0, 12) : undefined };
+  },
+  handle(ws, me, m) {
+    const sess = Trade.sessions.get(me.charId);
+    switch (m.t) {
+      case 'inspect_req': {
+        const o = Social.online(Number(m.to));
+        if (o && o[1].map === me.map) o[0].send(JSON.stringify({ t: 'inspect_req', from: me.charId }));
+        return;
+      }
+      case 'inspect_res': {
+        const o = Social.online(Number(m.to));
+        if (o) o[0].send(JSON.stringify({ t: 'inspect_res', from: me.charId, name: me.name, job: m.job, level: m.level, equip: Array.isArray(m.equip) ? m.equip.slice(0, 12) : [] }));
+        return;
+      }
+      case 'trade_request': {
+        const o = Social.online(Number(m.to));
+        if (!o || o[1].map !== me.map) return Social.notice(me, 'That player is too far away.');
+        if (sess || Trade.sessions.has(o[1].charId)) return Social.notice(me, `${o[1].name} is busy trading.`);
+        Trade.asks.set(o[1].charId, me.charId);
+        o[0].send(JSON.stringify({ t: 'trade_ask', from: me.name }));
+        return Social.notice(me, `Asked ${o[1].name} to trade.`);
+      }
+      case 'trade_reply': {
+        const askId = Trade.asks.get(me.charId); Trade.asks.delete(me.charId);
+        const o = askId && Social.online(askId);
+        if (!o) return;
+        if (!m.accept) return Social.notice(o[1], `${me.name} declined to trade.`);
+        if (Trade.sessions.has(askId) || sess) return;
+        const blank = () => ({ items: [], zeny: 0, locked: false, ok: false });
+        const s2 = { a: askId, b: me.charId, off: { [askId]: blank(), [me.charId]: blank() } };
+        Trade.sessions.set(askId, s2); Trade.sessions.set(me.charId, s2);
+        o[0].send(JSON.stringify({ t: 'trade_open', with: me.name }));
+        ws.send(JSON.stringify({ t: 'trade_open', with: o[1].name }));
+        return Trade.push(s2);
+      }
+      case 'trade_add': case 'trade_zeny': case 'trade_lock': {
+        if (!sess) return;
+        const off = sess.off[me.charId];
+        if (off.locked) return;
+        if (m.t === 'trade_add') {
+          const it = Trade.cleanItem(m.item);
+          if (!it || off.items.length >= 10 || off.items.some((x) => x.uid === it.uid)) return;
+          off.items.push(it);
+        } else if (m.t === 'trade_zeny') off.zeny = Math.max(0, Math.min(2147483647, Math.floor(Number(m.amount) || 0)));
+        else off.locked = true;
+        return Trade.push(sess);
+      }
+      case 'trade_ok': {
+        if (!sess) return;
+        const mine = sess.off[me.charId], theirs = sess.off[Trade.other(sess, me.charId)];
+        if (!mine.locked || !theirs.locked) return;
+        mine.ok = true;
+        if (!theirs.ok) return Trade.push(sess);
+        // Both sides pressed Trade: each game swaps the goods.
+        for (const id of [sess.a, sess.b]) {
+          Trade.sessions.delete(id);
+          const o = Social.online(id); if (!o) continue;
+          o[0].send(JSON.stringify({ t: 'trade_done', give: sess.off[id], get: sess.off[Trade.other(sess, id)] }));
+        }
+        return;
+      }
+      case 'trade_cancel': if (sess) Trade.close(sess, `${me.name} cancelled the trade.`); return;
     }
   },
 };

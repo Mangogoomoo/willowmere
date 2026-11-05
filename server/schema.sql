@@ -130,3 +130,11 @@ CREATE TABLE IF NOT EXISTS guild_members (
   guild_id     BIGINT NOT NULL REFERENCES guilds(id) ON DELETE CASCADE,
   character_id BIGINT NOT NULL UNIQUE REFERENCES characters(id) ON DELETE CASCADE
 );
+
+-- Guild ranks, levels and EXP tax.
+ALTER TABLE guilds ADD COLUMN IF NOT EXISTS ranks JSONB NOT NULL DEFAULT '["Guild Leader", "Officer", "Member", "Newbie"]';
+ALTER TABLE guilds ADD COLUMN IF NOT EXISTS level INT NOT NULL DEFAULT 1;
+ALTER TABLE guilds ADD COLUMN IF NOT EXISTS exp BIGINT NOT NULL DEFAULT 0;
+ALTER TABLE guild_members ADD COLUMN IF NOT EXISTS rank SMALLINT NOT NULL DEFAULT 3;
+ALTER TABLE guild_members ADD COLUMN IF NOT EXISTS tax SMALLINT NOT NULL DEFAULT 0;
+UPDATE guild_members m SET rank = 0 FROM guilds g WHERE g.id = m.guild_id AND g.master_id = m.character_id AND m.rank <> 0;

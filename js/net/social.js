@@ -31,6 +31,9 @@
     },
     // EXP from a kill: shared over the server with Even Share, or kept.
     awardKill(p, base, job) {
+      // Guild EXP tax: part of each kill's base EXP goes to the guild.
+      const meM = this.guild && G.Net && this.guild.members.find((x) => x.id === G.Net.charId);
+      if (meM && meM.tax > 0 && this.online()) { const cut = Math.floor(base * meM.tax / 100); if (cut > 0) { this.send({ t: 'gexp', amount: cut }); base -= cut; } }
       if (this.party && this.party.expShare === 'even' && this.online()) this.send({ t: 'pexp', base, job });
       else p.gainExp(base, job);
     },
@@ -49,6 +52,9 @@
       else if (m.t === 'pinfo') {
         const who = G.Net.players.get(m.id);
         if (who) { who.party = m.party; who.guild = m.guild; }
+      } else if (m.t === 'guild_summon') {
+        game.log.add(`Emergency Call! ${m.from} summons the guild.`, 'level'); game.hud.toast(`${m.from} summons you!`);
+        if (m.map === game.mapId) game.player.teleport(m.x + 1, m.z); else game.travel(m.map, m.x + 1, m.z);
       } else if (m.t === 'gainexp') {
         game.player.gainExp(m.base, m.job);
         if (m.shared) game.log.add(`Party EXP: +${m.base} base, +${m.job} job (shared by ${m.from}).`, 'info');
@@ -67,18 +73,26 @@
       return img.complete && img.naturalWidth ? img : null;
     },
     myTags() {
-      return { party: this.party ? this.party.name : null, guild: this.guild ? { id: this.guild.id, name: this.guild.name, ev: this.guild.ev } : null };
+      const me = this.guild && G.Net && this.guild.members.find((x) => x.id === G.Net.charId);
+      return { party: this.party ? this.party.name : null, guild: this.guild ? { id: this.guild.id, name: this.guild.name, ev: this.guild.ev, rank: me ? this.guild.ranks[me.rank] : '' } : null };
     },
-    // Draw "Name [Party]" and, below it, the emblem and guild name.
+    // Name tag: the guild emblem (24x24) on the left, "Name [Party]" on top
+    // and "Guild [Rank]" underneath, like the classics.
     drawName(ov, ctx, name, tags, x, y, color, outline) {
-      ov.outlined(ctx, tags && tags.party ? `${name} [${tags.party}]` : name, x, y, 13, color, outline, 600);
+      const top = tags && tags.party ? `${name} [${tags.party}]` : name;
       const g = tags && tags.guild;
-      if (!g) return;
-      ctx.font = '600 12px Fredoka, sans-serif';
-      const w = ctx.measureText(g.name).width, img = this.emblemImg(g), ew = img ? 16 : 0;
-      const left = x - (w + ew + (img ? 4 : 0)) / 2;
-      if (img) { ctx.imageSmoothingEnabled = false; ctx.drawImage(img, left, y + 6, 16, 16); ctx.imageSmoothingEnabled = true; }
-      ov.outlined(ctx, g.name, left + ew + (img ? 4 : 0) + w / 2, y + 15, 12, '#ffe7a3', outline, 600);
+      if (!g) { ov.outlined(ctx, top, x, y, 13, color, outline, 600); return; }
+      const low = g.rank ? `${g.name} [${g.rank}]` : g.name;
+      ctx.font = '600 13px Fredoka, sans-serif'; const w1 = ctx.measureText(top).width;
+      ctx.font = '600 12px Fredoka, sans-serif'; const w2 = ctx.measureText(low).width;
+      const img = this.emblemImg(g), ew = img ? 28 : 0, total = ew + Math.max(w1, w2), left = x - total / 2;
+      if (img) {
+        ctx.fillStyle = 'rgba(10,14,28,0.55)'; ctx.fillRect(left - 1, y - 11, 26, 26);
+        ctx.imageSmoothingEnabled = false; ctx.drawImage(img, left, y - 10, 24, 24); ctx.imageSmoothingEnabled = true;
+      }
+      const tx = left + ew;
+      ov.outlined(ctx, top, tx + w1 / 2, y, 13, color, outline, 600);
+      ov.outlined(ctx, low, tx + w2 / 2, y + 14, 12, '#ffe7a3', outline, 600);
     },
 
     /* ---------- invites ---------- */
@@ -149,18 +163,48 @@
       const master = g.master === me, img = this.emblemImg(g);
       b.append(h('div.soc-head', null, img ? h('img.soc-emblem', { src: img.src, alt: 'Guild emblem' }) : h('div.soc-emblem.empty', { text: '?' }),
         h('div', null, h('div.soc-title', { text: g.name }), h('small', { text: `${g.members.length} member${g.members.length === 1 ? '' : 's'}` }))));
-      b.append(h('div.soc-list', null, ...g.members.map((x) => this.memberRow(x, x.id === g.master, master && x.id !== me ? { kick: () => this.send({ t: 'guild_expel', id: x.id }) } : null))));
-      // Guild skills: one point to start, for the Guild Emblem skill.
-      b.append(h('h3', { text: `Guild skills (${g.skillPoints} point${g.skillPoints === 1 ? '' : 's'})` }),
-        h('div.soc-skill', null, h('span', { text: 'Guild Emblem' }), h('small', { text: g.skills && g.skills.emblem ? 'Learned' : 'Lets the master set an emblem.' }),
-          master && !(g.skills && g.skills.emblem) ? h('button.btn.small', { type: 'button', disabled: g.skillPoints < 1, onclick: () => this.send({ t: 'guild_skill', skill: 'emblem' }) }, 'Learn') : h('span')));
+      const meM = g.members.find((x) => x.id === me) || { rank: 3, tax: 0 };
+      const officer = meM.rank <= 1;
+      // Level and guild EXP.
+      b.append(h('div.soc-level', null, h('span', { text: `Guild level ${g.level}` }), h('div.meter.small', null, h('i', { style: `width:${Math.min(100, g.exp / g.next * 100)}%` }), h('b', { text: `${g.exp} / ${g.next}` }))));
+      // Members with their ranks (the Guild Leader can change them).
+      b.append(h('div.soc-list', null, ...g.members.map((x) => {
+        const row = this.memberRow(x, x.id === g.master, (master || (officer && x.rank > 1)) && x.id !== me && x.id !== g.master ? { kick: () => this.send({ t: 'guild_expel', id: x.id }) } : null);
+        const rk = master && x.id !== g.master
+          ? h('select.soc-rank', { 'aria-label': `Rank of ${x.name}`, onchange: (e) => this.send({ t: 'guild_set_rank', id: x.id, rank: Number(e.target.value) }) }, ...[1, 2, 3].map((i) => h('option', { value: String(i), text: g.ranks[i], selected: x.rank === i })))
+          : h('small.soc-rankname', { text: g.ranks[x.rank] || '' });
+        row.insertBefore(rk, row.children[2]);
+        return row;
+      })), h('small.hint', { text: `${g.members.length} / ${g.maxMembers} members` }));
+      // Rank names (Guild Leader only).
+      if (master) {
+        b.append(h('h3', { text: 'Rank names' }), h('div.soc-ranks', null, ...g.ranks.map((r, i) => {
+          const inp = h('input.soc-in', { type: 'text', maxlength: '20', value: r, 'aria-label': `Rank ${i + 1} name` });
+          inp.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') inp.blur(); });
+          inp.addEventListener('change', () => this.send({ t: 'guild_rank_name', index: i, name: inp.value.trim() }));
+          return inp;
+        })));
+      }
+      // Your EXP tax for the guild.
+      const tax = h('input.soc-in', { type: 'number', min: '0', max: '50', value: String(meM.tax || 0), 'aria-label': 'Guild EXP tax percent', onkeydown: (e) => e.stopPropagation(), onchange: (e) => this.send({ t: 'guild_tax', tax: Number(e.target.value) || 0 }) });
+      b.append(h('label.opt', null, h('span', { text: 'EXP tax to the guild (%)' }), tax));
+      // Guild skills.
+      b.append(h('h3', { text: `Guild skills (${g.skillPoints} point${g.skillPoints === 1 ? '' : 's'})` }), h('div.soc-skills', null, ...GSK.map(([id, name, max, desc]) => {
+        const lv = (g.skills && g.skills[id]) || 0;
+        return h('div.soc-skill', null, h('span', { text: `${name} ${lv}/${max}` }), h('small', { text: desc }),
+          master && lv < max ? h('button.btn.small', { type: 'button', disabled: g.skillPoints < 1, onclick: () => this.send({ t: 'guild_skill', skill: id }) }, 'Learn') : h('span'));
+      })));
+      if (master && g.skills && g.skills.call) {
+        const left = Math.max(0, Math.ceil(((this.callT || 0) - Date.now()) / 1000));
+        b.append(h('div.opt-btns', null, h('button.btn.small', { type: 'button', disabled: left > 0, onclick: () => { this.send({ t: 'guild_call' }); this.callT = Date.now() + 300000; this.renderGuild(); } }, left > 0 ? `Emergency Call (${left}s)` : 'Emergency Call')));
+      }
       if (master && g.skills && g.skills.emblem) {
         const file = h('input', { type: 'file', accept: 'image/png,image/gif,image/jpeg,image/bmp,image/webp', hidden: true });
         file.addEventListener('change', () => { const f = file.files[0]; if (f) this.uploadEmblem(f); file.value = ''; });
         b.append(file, h('div.opt-btns', null, h('button.btn.small', { type: 'button', onclick: () => file.click() }, 'Upload emblem…')),
           h('p.hint', { text: 'Any picture works: it is shrunk to a 24×24 emblem, shown beside your guild name.' }));
       }
-      if (master) b.append(this.inviteRow('guild'));
+      if (master || officer) b.append(this.inviteRow('guild'));
       b.append(h('div.opt-btns', null, h('button.btn.small.ghost', { type: 'button', onclick: (e) => {
         if (master && !e.target.dataset.armed) { e.target.dataset.armed = '1'; e.target.textContent = 'Click again to disband the guild'; return; }
         this.send({ t: 'guild_leave' });
@@ -179,5 +223,43 @@
       img.src = url;
     },
   };
+  /* ---------- guild skills (classic set) ---------- */
+  const GSK = [
+    ['emblem', 'Guild’s Glory', 1, 'Lets the Guild Leader set a guild emblem.'],
+    ['extension', 'Guild Extension', 10, 'Room for 4 more members per level (16 at the start).'],
+    ['leadership', 'Great Leadership', 5, 'Members near the Guild Leader get +1 STR per level.'],
+    ['wounds', 'Glorious Wounds', 5, 'Members near the Guild Leader get +1 VIT per level.'],
+    ['coldheart', 'Cold Heart', 5, 'Members near the Guild Leader get +1 AGI per level.'],
+    ['sharpgaze', 'Sharp Gaze', 5, 'Members near the Guild Leader get +1 DEX per level.'],
+    ['regen', 'Regeneration', 3, 'Members near the Guild Leader recover extra HP and SP.'],
+    ['call', 'Emergency Call', 1, 'The Guild Leader summons every online member (5 minute cooldown).'],
+  ];
+  Social.GSK = GSK;
+  // Is our Guild Leader on this map and close by (or are we the leader)?
+  Social.nearLeader = function () {
+    const g = this.guild, game = this.game;
+    if (!g || !G.Net) return false;
+    if (g.master === G.Net.charId) return true;
+    const r = G.Net.players.get(g.master);
+    return !!r && Math.hypot(r.position.x - game.player.position.x, r.position.z - game.player.position.z) < 15;
+  };
+  G.Stats.sources.push((p, out) => {
+    const S = G.Social, sk = S.guild && S.guild.skills;
+    if (!sk || !S.game || p !== S.game.player || !S.nearLeader()) return;
+    for (const [k, st] of [['leadership', 'str'], ['wounds', 'vit'], ['coldheart', 'agi'], ['sharpgaze', 'dex']]) if (sk[k]) out[st] = (out[st] || 0) + sk[k];
+  });
+  // Re-check the leader's aura and regeneration once a second.
+  setInterval(() => {
+    const S = Social, game = S.game;
+    if (!game || !game.player || !S.guild) return;
+    const near = S.nearLeader();
+    if (near !== S.wasNear) { S.wasNear = near; game.player.recalc(); }
+    const rg = S.guild.skills && S.guild.skills.regen;
+    if (near && rg && game.player.alive && (S.regenT = (S.regenT || 0) + 1) >= 6) {
+      S.regenT = 0; const p = game.player;
+      p.hp = Math.min(p.maxHp, p.hp + Math.ceil(p.maxHp * 0.01 * rg)); p.sp = Math.min(p.maxSp, p.sp + Math.ceil(p.maxSp * 0.01 * rg));
+    }
+  }, 1000);
+
   G.Social = Social;
 })(window.G = window.G || {});

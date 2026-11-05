@@ -677,3 +677,26 @@ button:focus-visible { outline: 2px solid #ffd76a; outline-offset: 2px; }
 .log li.party { color: #8fd0ff; font-weight: 600; }
 .log li.guild { color: #ffd77a; font-weight: 600; }
 .ext-grid { max-height: 300px; overflow-y: auto; }
+
+/* ---------- right-click menu, trade, guild extras ---------- */
+.ctx-menu { position: fixed; z-index: 60; min-width: 170px; padding: 6px; border-radius: 10px; background: var(--panel-bg); border: 1px solid var(--panel-edge); box-shadow: var(--shadow); display: grid; gap: 2px; }
+.ctx-menu[hidden] { display: none; }
+.ctx-title { padding: 4px 8px 6px; font: 700 13px var(--font); border-bottom: 1px solid var(--cell-edge); margin-bottom: 2px; }
+.ctx-item { text-align: left; padding: 7px 10px; border: 0; border-radius: 7px; background: transparent; color: var(--ink); font: 600 13px var(--font); cursor: pointer; }
+.ctx-item:hover:not(:disabled), .ctx-item:focus-visible { background: var(--cell-bg); outline: none; }
+.ctx-item:disabled { opacity: 0.45; cursor: default; }
+.trade-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.trade-side { padding: 8px; border-radius: 10px; background: var(--cell-bg); border: 2px solid transparent; }
+.trade-side.locked { border-color: #3fae3a; }
+.trade-head { display: flex; justify-content: space-between; align-items: baseline; font-size: 12px; margin-bottom: 6px; }
+.trade-head span { color: var(--ink-soft); }
+.trade-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; }
+.trade-zeny { display: flex; gap: 8px; align-items: center; margin-top: 8px; font-size: 12.5px; }
+.trade-zeny input { width: 110px; flex: none; }
+.soc-level { display: grid; gap: 4px; margin-bottom: 8px; font-size: 12.5px; font-weight: 600; }
+.soc-row { grid-template-columns: 10px 1fr auto auto auto; }
+.soc-rank { font: 500 11.5px var(--font); padding: 2px 4px; border-radius: 6px; }
+.soc-rankname { color: #c88a12; font-weight: 600; font-size: 11px; }
+.soc-ranks { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 6px; }
+.soc-skills { display: grid; gap: 4px; max-height: 230px; overflow-y: auto; }
+.meter.small { height: 14px; font-size: 10.5px; }

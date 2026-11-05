@@ -164,6 +164,7 @@
     ws: null, players: new Map(), sendT: 0, last: '',
     connect(game, charId) {
       this.game = game; this.charId = charId;
+      G.FxSync.install(game);
       const ws = this.ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`);
       ws.onopen = () => ws.send(JSON.stringify({ t: 'hello', token: Online.token, charId, map: game.mapId, look: this.myLook(), level: game.player.baseLevel }));
       ws.onmessage = (ev) => { let m; try { m = JSON.parse(ev.data); } catch (e) { return; } this.handle(m); };
@@ -186,7 +187,8 @@
       // Anything tagged with another map is left over from before a map change.
       if (m.map && m.map !== game.mapId && ['mobs', 'mob', 'state', 'join', 'players', 'welcome', 'action', 'fx', 'look', 'host'].includes(m.t)) return;
       if (m.t === 'host' || m.t === 'mobs' || m.t === 'mob') { G.MobSync.handle(m); return; }
-      if (['party', 'guild', 'guild_created', 'invite', 'notice', 'pinfo', 'gainexp', 'loot_gift'].includes(m.t)) { G.Social.handle(m); return; }
+      if (['party', 'guild', 'guild_created', 'invite', 'notice', 'pinfo', 'gainexp', 'loot_gift', 'guild_summon'].includes(m.t)) { G.Social.handle(m); return; }
+      if (/^(trade_|inspect_)/.test(m.t)) { G.Trade.handle(m); return; }
       if (m.t === 'fx') { this.showFx(m); return; }
       if (m.t === 'buff') { this.receiveBuff(m); return; }
       if (m.t === 'welcome' || m.t === 'players') {
@@ -236,43 +238,23 @@
       this.send({ t: 'fx', k: 'skill', s: s.id, lv, tg });
     },
     showFx(m) {
-      const game = this.game, caster = this.players.get(m.from), s = G.Skills.get(m.s);
+      const game = this.game;
+      if (m.k === 'v') { G.FxSync.replay(m); return; }
+      const caster = this.players.get(m.from), s = G.Skills.get(m.s);
       if (!caster || !s) return;
       if (m.k === 'cast') {
+        // The circle itself arrives as a mirrored visual; this is the cast bar.
         caster.cast = { id: s.id, t: 0, dur: Math.max(0.2, Number(m.dur) || 1) };
-        game.spells.castCircle(caster, s.element);
         return;
       }
       caster.cast = null;
-      const tg = m.tg || {};
-      let target = null;
-      if (tg.m != null) target = game.monsters.list.find((x) => x.id === tg.m);
-      else if (tg.p != null) target = tg.p === this.charId ? game.player : this.players.get(tg.p);
-      else if (tg.x != null) target = { position: new THREE.Vector3(tg.x, G.Terrain.surfaceHeight(tg.x, tg.z), tg.z), def: { height: 1 }, alive: true };
       const at = caster.position.clone(); at.y += 2.4;
       game.overlay.addText(at, s.name + '!', 'skill');
-      const color = (s.icon && s.icon.color) || '#ffffff', fx = s.fx || {};
-      const noop = () => {};
-      if (!target || target === caster || s.target === 'self') {
-        if (fx.area) game.spells.ring(caster.position, color, fx.area); else game.spells.aura(caster, color);
-        return;
-      }
-      if (s.target === 'ally') { game.spells.aura(target, color); return; }
-      const hits = Math.min(6, fx.hits ? fx.hits(lv) : 1);
-      for (let i = 0; i < hits; i++) game.after(i * (fx.hitDelay || 0.12), () => {
-        if (s.target === 'ground' || fx.area) game.spells.ring(target.position, color, fx.area || 2.5);
-        if (fx.visual === 'orb') game.spells.orb(caster, target, color, noop);
-        else if (fx.visual === 'arrow') game.spells.arrow(caster, target, noop);
-        else if (fx.visual === 'beam') game.spells.beam(target, color, noop);
-        else if (fx.visual === 'bolt' || fx.visual === 'meteor' || (s.element && s.element !== 'neutral' && !fx.visual)) game.spells.bolt(s.element || 'fire', target, noop);
-        else if (target.def) game.spells.impact(target, color, 1);
-      });
     },
 
     /* ---------- buffing other players ---------- */
     sendBuff(target, s, lv) {
-      this.send({ t: 'buff', to: target.id, skill: s.id, lv });
-      this.game.spells.aura(target, (s.icon && s.icon.color) || '#ffffff');
+      this.send({ t: 'buff', to: target.id, skill: s.id, lv });   // their own effect plays the visuals
       this.game.log.add(`You cast ${s.name} on ${target.name}.`, 'info');
     },
     receiveBuff(m) {
