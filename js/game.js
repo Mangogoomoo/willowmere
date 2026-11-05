@@ -17,7 +17,6 @@
       this.time = 0;
       this.frame = 0;
       this.zoneName = null;
-      if (this.player) this.events.emit('mapEntered', id);
     }
 
     // Build the world in steps so the loading screen can report progress.
@@ -78,6 +77,8 @@
       this.npcs = new G.NPCManager(this, map.npcs || []);
       this.portals = new G.Portals(this, map.portals || []);
       this.zoneName = null;
+      // Quests like "Visit Mossy Hollow" remember the visit.
+      if (this.player) this.events.emit('mapEntered', id);
     }
 
     // Fog, light and sky per map (caves are dim and close).
