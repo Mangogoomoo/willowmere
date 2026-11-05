@@ -118,6 +118,7 @@
       this.hidden = false; this.cloaked = false; this.playingDead = false;
       this.cast = null;
       this.party = p.party || null; this.guild = p.guild || null;
+      this.hp = p.hp != null ? p.hp : null; this.maxHp = p.maxHp || null; this.sp = null; this.maxSp = null;
       this.syncCart();
       this.target = { x: p.x, z: p.z };
       this.position.set(p.x, G.Terrain.surfaceHeight(p.x, p.z), p.z);
@@ -195,7 +196,14 @@
         if (m.t === 'welcome') game.log.add(`Connected. ${m.online} player${m.online === 1 ? '' : 's'} online.`, 'system');
       } else if (m.t === 'join') { this.add(m.p); game.log.add(`${m.p.name} arrived.`, 'info'); }
       else if (m.t === 'leave') { const r = this.players.get(m.id); if (r) { game.log.add(`${r.name} left.`, 'info'); this.remove(r); } }
-      else if (m.t === 'state') { const r = this.players.get(m.id); if (r) { r.target.x = m.x; r.target.z = m.z; r.moving = m.moving; if (!m.moving) r.targetFacing = m.facing; } }
+      else if (m.t === 'state') {
+        const r = this.players.get(m.id);
+        if (r) {
+          r.target.x = m.x; r.target.z = m.z; r.moving = m.moving; if (!m.moving) r.targetFacing = m.facing;
+          if (m.hp != null) { r.hp = m.hp; r.maxHp = m.maxHp; }
+          r.sp = m.sp != null ? m.sp : null; r.maxSp = m.maxSp != null ? m.maxSp : null;
+        }
+      }
       else if (m.t === 'look') { const r = this.players.get(m.id); if (r) r.setLook(m.look); }
       else if (m.t === 'action') { const r = this.players.get(m.id); if (r && m.kind === 'attack') { r.sprite.play('attack', { restart: true }); r.swingT = 0.45; } }
       else if (m.t === 'chat') {
@@ -286,7 +294,13 @@
       this.sendT -= dt;
       if (this.sendT <= 0) {
         this.sendT = 0.12;   // about 8 updates a second
-        const s = { t: 'state', map: game.mapId, x: +p.position.x.toFixed(2), z: +p.position.z.toFixed(2), facing: +p.facing.toFixed(2), moving: !!p.moving, level: p.baseLevel };
+        const s = { t: 'state', map: game.mapId, x: +p.position.x.toFixed(2), z: +p.position.z.toFixed(2), facing: +p.facing.toFixed(2), moving: !!p.moving, level: p.baseLevel,
+          hp: Math.round(p.hp), maxHp: Math.round(p.maxHp) };
+        // SP only matters to your party; the server passes it on to party members only.
+        if (G.Social && G.Social.party) { s.sp = Math.round(p.sp); s.maxSp = Math.round(p.maxSp); }
+        // Re-send now and then so newcomers and new party members get our bars.
+        this.resendT = (this.resendT || 0) + 0.12;
+        if (this.resendT > 2) { this.resendT = 0; this.last = ''; }
         const key = JSON.stringify(s);
         if (key !== this.last) { this.last = key; this.send(s); }
         const look = JSON.stringify(this.myLook());

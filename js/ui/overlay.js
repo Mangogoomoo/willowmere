@@ -132,7 +132,16 @@
       if (G.Net && G.Net.players.size) for (const r of G.Net.players.values()) {
         if (r.distanceTo(player) > 45) continue;
         const f = this.project(r.position.x, r.position.y, r.position.z);
-        if (f) G.Social.drawName(this, ctx, r.name, { party: r.party, guild: r.guild }, f.x, f.y + 16, '#d8ffd0', 'rgba(16,40,20,0.9)');
+        if (!f) continue;
+        // Everyone's HP is visible; SP only for your party members.
+        let ny = f.y + 16;
+        if (r.hp != null && r.maxHp) {
+          const frac = Math.max(0, Math.min(1, r.hp / r.maxHp));
+          this.bar(ctx, f.x, f.y + 10, 52, 5, frac, frac < 0.3 ? '#ff5a5a' : '#5fd66e');
+          ny = f.y + 32;
+          if (r.sp != null && r.maxSp) this.bar(ctx, f.x, f.y + 17, 52, 3, Math.max(0, Math.min(1, r.sp / r.maxSp)), '#5f9cff');
+        }
+        G.Social.drawName(this, ctx, r.name, { party: r.party, guild: r.guild }, f.x, ny, '#d8ffd0', 'rgba(16,40,20,0.9)');
       }
       for (const who of [player, ...(G.Net ? G.Net.players.values() : [])]) {
         if (!who.bubble || game.time > who.bubble.until) continue;

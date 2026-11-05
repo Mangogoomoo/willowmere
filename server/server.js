@@ -269,7 +269,7 @@ const server = http.createServer(async (req, res) => {
 
 /* ---------------------------------------------------------------- multiplayer */
 const online = new Map();   // ws -> session { accountId, charId, name, map, x, z, facing, moving, look }
-const publicState = (s) => ({ id: s.charId, name: s.name, map: s.map, x: s.x, z: s.z, facing: s.facing, moving: s.moving, look: s.look, party: s.partyName || null, guild: s.guild || null });
+const publicState = (s) => ({ id: s.charId, name: s.name, map: s.map, x: s.x, z: s.z, facing: s.facing, moving: s.moving, look: s.look, party: s.partyName || null, guild: s.guild || null, hp: s.hp, maxHp: s.maxHp });
 function broadcast(map, msg, except) {
   const data = JSON.stringify(msg);
   for (const [ws, s] of online) if (s.map === map && ws !== except && ws.readyState === 1) ws.send(data);
@@ -346,7 +346,16 @@ wss.on('connection', (ws) => {
       }
       Object.assign(me, { x: num(msg.x, me.x), z: num(msg.z, me.z), facing: num(msg.facing, me.facing), moving: !!msg.moving });
       if (Number.isInteger(msg.level)) me.level = Math.max(1, Math.min(999, msg.level));
-      broadcast(me.map, { t: 'state', map: me.map, id: me.charId, x: me.x, z: me.z, facing: me.facing, moving: me.moving }, ws);
+      const int = (v, hi) => (Number.isFinite(Number(v)) ? Math.max(0, Math.min(hi, Math.round(Number(v)))) : null);
+      me.hp = int(msg.hp, 1e7); me.maxHp = int(msg.maxHp, 1e7);
+      me.sp = int(msg.sp, 1e7); me.maxSp = int(msg.maxSp, 1e7);
+      // HP goes to everyone on the map; SP only to members of the same party.
+      const base = { t: 'state', map: me.map, id: me.charId, x: me.x, z: me.z, facing: me.facing, moving: me.moving, hp: me.hp, maxHp: me.maxHp };
+      const plain = JSON.stringify(base), withSp = JSON.stringify(Object.assign({}, base, { sp: me.sp, maxSp: me.maxSp }));
+      for (const [other, s] of online) {
+        if (other === ws || s.map !== me.map || other.readyState !== 1) continue;
+        other.send(me.partyId && s.partyId === me.partyId && me.sp != null ? withSp : plain);
+      }
     } else if (msg.t === 'look') {
       me.look = cleanLook(msg.look);
       broadcast(me.map, { t: 'look', map: me.map, id: me.charId, look: me.look }, ws);
