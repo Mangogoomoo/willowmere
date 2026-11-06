@@ -12,6 +12,10 @@
       this.inspectWin = W.create('inspect', 'Equipment', { width: 420, pos: () => ({ x: window.innerWidth / 2 - 210, y: 90 }) });
       this.tradeWin = W.create('trade', 'Trade', { width: 640, pos: () => ({ x: Math.max(16, Math.min(window.innerWidth / 2 - 320, window.innerWidth - 1090)), y: 100 }) });   // leaves room for the inventory on the right
       this.tradeWin.render = () => this.renderTrade();
+      // Closing the window any way (its X, Esc or Cancel) ends the trade for both players.
+      new MutationObserver(() => {
+        if (this.tradeWin.el.hidden && this.state && !this.ending) { this.ending = true; this.state = null; G.Net.send({ t: 'trade_cancel' }); }
+      }).observe(this.tradeWin.el, { attributes: true, attributeFilter: ['hidden'] });
       this.menu = h('div.ctx-menu', { hidden: true, role: 'menu' });
       document.body.append(this.menu);
       document.addEventListener('pointerdown', (e) => { if (!this.menu.hidden && !this.menu.contains(e.target)) this.menu.hidden = true; });
@@ -73,9 +77,9 @@
         G.Net.send({ t: 'inspect_res', to: m.from, job: p.job, level: p.baseLevel, equip, stats, look: G.Net.myLook() });
       } else if (m.t === 'inspect_res') this.showInspect(m);
       else if (m.t === 'trade_ask') this.ask(m);
-      else if (m.t === 'trade_open') { this.state = { mine: { items: [], zeny: 0 }, theirs: { items: [], zeny: 0 } }; this.partner = m.with; game.windows.open('trade'); game.windows.open('inventory'); this.renderTrade(); game.sfx('talk'); }
+      else if (m.t === 'trade_open') { this.ending = false; this.state = { mine: { items: [], zeny: 0 }, theirs: { items: [], zeny: 0 } }; this.partner = m.with; game.windows.open('trade'); game.windows.open('inventory'); this.renderTrade(); game.sfx('talk'); }
       else if (m.t === 'trade_state') { this.state = m; this.renderTrade(); }
-      else if (m.t === 'trade_closed') { this.state = null; game.windows.close('trade'); game.log.add(m.text, 'warn'); }
+      else if (m.t === 'trade_closed') { this.ending = true; this.state = null; game.windows.close('trade'); game.log.add(m.text, 'warn'); }
       else if (m.t === 'trade_done') this.finish(m);
     },
     ask(m) {
@@ -171,7 +175,7 @@
         if (e && e.id === it.id && it.forgedBy) { e.forgedBy = it.forgedBy; e.element = it.element; }
       }
       inv.changed();
-      this.state = null; game.windows.close('trade');
+      this.ending = true; this.state = null; game.windows.close('trade');
       game.sfx('zeny'); game.hud.toast('Trade complete!');
       game.log.add(`Trade with ${this.partner} complete.`, 'level');
       game.save.save(true);

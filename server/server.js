@@ -422,6 +422,7 @@ setInterval(() => { for (const ws of wss.clients) { if (!ws.isAlive) { ws.termin
 
 /* ---------------------------------------------------------------- parties & guilds */
 const Social = {
+  expShown: new Map(),   // guild id -> when its EXP was last pushed to members
   invites: new Map(),   // charId -> { kind, id, from }
   online(charId) { for (const [ws, s] of online) if (s.charId === charId) return [ws, s]; return null; },
   async load(me) {
@@ -438,12 +439,14 @@ const Social = {
       members: mem.map((c) => { const o = Social.online(Number(c.id)); return { id: Number(c.id), name: c.name, job: c.job, level: o ? o[1].level : c.base_level, online: !!o, map: o ? o[1].map : null }; }) };
   },
   async guildState(id) {
-    const g = (await pool.query('SELECT id, name, master_id, emblem_ver, skill_points, skills, ranks, level, exp FROM guilds WHERE id = $1', [id])).rows[0];
+    const g = (await pool.query('SELECT id, name, master_id, emblem_ver, skill_points, skills, ranks, rank_tax, level, exp FROM guilds WHERE id = $1', [id])).rows[0];
     if (!g) return null;
     const mem = (await pool.query('SELECT c.id, c.name, c.job, c.base_level, m.rank, m.tax FROM guild_members m JOIN characters c ON c.id = m.character_id WHERE m.guild_id = $1 ORDER BY m.rank, c.name', [id])).rows;
-    return { id: Number(g.id), name: g.name, master: Number(g.master_id), ev: g.emblem_ver, skillPoints: g.skill_points, skills: g.skills, ranks: g.ranks,
+    // Each rank has its own EXP tax; a member pays their rank's rate.
+    const rankTax = g.ranks.map((_, i) => Number((g.rank_tax || [])[i]) || 0);
+    return { id: Number(g.id), name: g.name, master: Number(g.master_id), ev: g.emblem_ver, skillPoints: g.skill_points, skills: g.skills, ranks: g.ranks, rankTax,
       level: g.level, exp: Number(g.exp), next: Social.guildNext(g.level), maxMembers: Social.maxMembers(g.skills),
-      members: mem.map((c) => { const o = Social.online(Number(c.id)); return { id: Number(c.id), name: c.name, job: c.job, level: o ? o[1].level : c.base_level, online: !!o, map: o ? o[1].map : null, rank: c.rank, tax: c.tax }; }) };
+      members: mem.map((c) => { const o = Social.online(Number(c.id)); return { id: Number(c.id), name: c.name, job: c.job, level: o ? o[1].level : c.base_level, online: !!o, map: o ? o[1].map : null, rank: c.rank, tax: rankTax[c.rank] || 0 }; }) };
   },
   sendTo(me, msg) { const o = Social.online(me.charId); if (o && o[0].readyState === 1) o[0].send(JSON.stringify(msg)); },
   async sendPartyTo(me) { Social.sendTo(me, { t: 'party', party: me.partyId ? await Social.partyState(me.partyId) : null }); },
@@ -617,24 +620,44 @@ const Social = {
         const st = me.guild && await Social.guildState(me.guild.id);
         if (!st || st.master !== me.charId) return Social.notice(me, 'Only the Guild Leader can rename ranks.');
         const i = Number(m.index), name = String(m.name || '').trim().slice(0, 20);
-        if (!(i >= 0 && i <= 3) || !/^[A-Za-z0-9][A-Za-z0-9 '\-]{0,19}$/.test(name)) return Social.notice(me, 'Rank names are 1 to 20 letters or numbers.');
-        const ranks = st.ranks.slice(); ranks[i] = name;
-        await pool.query('UPDATE guilds SET ranks = $2 WHERE id = $1', [st.id, JSON.stringify(ranks)]);
+        if (!(i >= 0 && i < st.ranks.length) || !/^[A-Za-z0-9][A-Za-z0-9 '\-]{0,19}$/.test(name)) return Social.notice(me, 'Rank names are 1 to 20 letters or numbers.');
+        await pool.query('UPDATE guilds SET ranks = jsonb_set(ranks, ARRAY[$2::text], to_jsonb($3::text)) WHERE id = $1', [st.id, i, name]);
         await Social.retag(st.id); await Social.refreshGuild(st.id); return;
       }
       case 'guild_set_rank': {
         const st = me.guild && await Social.guildState(me.guild.id);
         if (!st || st.master !== me.charId) return Social.notice(me, 'Only the Guild Leader can change ranks.');
         const who = Number(m.id), rank = Number(m.rank);
-        if (who === st.master || !(rank >= 1 && rank <= 3)) return;
+        if (who === st.master || !(rank >= 1 && rank < st.ranks.length)) return;
         await pool.query('UPDATE guild_members SET rank = $3 WHERE guild_id = $1 AND character_id = $2', [st.id, who, rank]);
         await Social.retag(st.id); await Social.refreshGuild(st.id); return;
       }
-      case 'guild_tax': {
-        if (!me.guild) return;
+      case 'guild_rank_tax': {
+        // The Guild Leader sets the EXP tax of one rank (0-50%).
+        const st = me.guild && await Social.guildState(me.guild.id);
+        if (!st || st.master !== me.charId) return Social.notice(me, 'Only the Guild Leader can set rank taxes.');
+        const i = Number(m.index);
+        if (!(i >= 0 && i < st.ranks.length)) return;
         const tax = Math.max(0, Math.min(50, Math.floor(Number(m.tax) || 0)));
-        await pool.query('UPDATE guild_members SET tax = $3 WHERE guild_id = $1 AND character_id = $2', [me.guild.id, me.charId, tax]);
-        await Social.refreshGuild(me.guild.id); return;
+        // One atomic update, so quick changes to several ranks can't overwrite each other.
+        await pool.query(`UPDATE guilds SET rank_tax = jsonb_set(
+            (SELECT COALESCE(jsonb_agg(COALESCE(rank_tax -> n, '0'::jsonb) ORDER BY n), '[]'::jsonb) FROM generate_series(0, jsonb_array_length(ranks) - 1) AS n),
+            ARRAY[$2::text], to_jsonb($3::int)) WHERE id = $1`, [st.id, i, tax]);
+        await Social.refreshGuild(st.id); return;
+      }
+      case 'guild_rank_add': {
+        // Up to 8 ranks (the leader's rank and 7 more).
+        const st = me.guild && await Social.guildState(me.guild.id);
+        if (!st || st.master !== me.charId) return Social.notice(me, 'Only the Guild Leader can add ranks.');
+        if (st.ranks.length >= 8) return Social.notice(me, 'A guild can have up to 8 ranks.');
+        const name = String(m.name || '').trim().slice(0, 20) || `Rank ${st.ranks.length + 1}`;
+        if (!/^[A-Za-z0-9][A-Za-z0-9 '\-]{0,19}$/.test(name)) return Social.notice(me, 'Rank names are 1 to 20 letters or numbers.');
+        // Atomic append (and the 8-rank limit checked in the same statement).
+        const r = await pool.query(`UPDATE guilds SET ranks = ranks || to_jsonb($2::text),
+            rank_tax = (SELECT COALESCE(jsonb_agg(COALESCE(rank_tax -> n, '0'::jsonb) ORDER BY n), '[]'::jsonb) FROM generate_series(0, jsonb_array_length(ranks) - 1) AS n) || '[0]'::jsonb
+            WHERE id = $1 AND jsonb_array_length(ranks) < 8 RETURNING id`, [st.id, name]);
+        if (!r.rowCount) return Social.notice(me, 'A guild can have up to 8 ranks.');
+        await Social.refreshGuild(st.id); return;
       }
       case 'gexp': {
         // EXP a member pays into the guild; the guild levels up and earns skill points.
@@ -648,6 +671,10 @@ const Social = {
           await pool.query('UPDATE guilds SET level = $2, exp = $3, skill_points = skill_points + $4 WHERE id = $1', [me.guild.id, level, exp, ups]);
           Social.toGuild(me.guild.id, { t: 'notice', text: `Your guild reached level ${level}! (+${ups} guild skill point${ups > 1 ? 's' : ''})` });
           await Social.refreshGuild(me.guild.id);
+        } else {
+          // Keep everyone's guild EXP bar current (at most every few seconds).
+          const now = Date.now(), last = Social.expShown.get(me.guild.id) || 0;
+          if (now - last > 3000) { Social.expShown.set(me.guild.id, now); await Social.refreshGuild(me.guild.id); }
         }
         return;
       }

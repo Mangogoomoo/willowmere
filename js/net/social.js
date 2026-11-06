@@ -33,7 +33,8 @@
     awardKill(p, base, job) {
       // Guild EXP tax: part of each kill's base EXP goes to the guild.
       const meM = this.guild && G.Net && this.guild.members.find((x) => x.id === G.Net.charId);
-      if (meM && meM.tax > 0 && this.online()) { const cut = Math.floor(base * meM.tax / 100); if (cut > 0) { this.send({ t: 'gexp', amount: cut }); base -= cut; } }
+      const tax = meM ? ((this.guild.rankTax || [])[meM.rank] || 0) : 0;   // your rank's EXP tax
+      if (tax > 0 && this.online()) { const cut = Math.floor(base * tax / 100); if (cut > 0) { this.send({ t: 'gexp', amount: cut }); base -= cut; } }
       if (this.party && this.party.expShare === 'even' && this.online()) this.send({ t: 'pexp', base, job });
       else p.gainExp(base, job);
     },
@@ -191,23 +192,31 @@
       b.append(h('div.soc-list', null, ...g.members.map((x) => {
         const row = this.memberRow(x, x.id === g.master, (master || (officer && x.rank > 1)) && x.id !== me && x.id !== g.master ? { kick: () => this.send({ t: 'guild_expel', id: x.id }) } : null);
         const rk = master && x.id !== g.master
-          ? h('select.soc-rank', { 'aria-label': `Rank of ${x.name}`, onchange: (e) => this.send({ t: 'guild_set_rank', id: x.id, rank: Number(e.target.value) }) }, ...[1, 2, 3].map((i) => h('option', { value: String(i), text: g.ranks[i], selected: x.rank === i })))
+          ? h('select.soc-rank', { 'aria-label': `Rank of ${x.name}`, onchange: (e) => this.send({ t: 'guild_set_rank', id: x.id, rank: Number(e.target.value) }) }, ...g.ranks.map((r, i) => i).filter((i) => i > 0).map((i) => h('option', { value: String(i), text: g.ranks[i], selected: x.rank === i })))
           : h('small.soc-rankname', { text: g.ranks[x.rank] || '' });
         row.insertBefore(rk, row.children[2]);
         return row;
       })), h('small.hint', { text: `${g.members.length} / ${g.maxMembers} members` }));
-      // Rank names (Guild Leader only).
-      if (master) {
-        b.append(h('h3', { text: 'Rank names' }), h('div.soc-ranks', null, ...g.ranks.map((r, i) => {
-          const inp = h('input.soc-in', { type: 'text', maxlength: '20', value: r, 'aria-label': `Rank ${i + 1} name` });
-          inp.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') inp.blur(); });
-          inp.addEventListener('change', () => this.send({ t: 'guild_rank_name', index: i, name: inp.value.trim() }));
-          return inp;
-        })));
+      // Ranks: name and EXP tax for each (the Guild Leader edits them).
+      const taxes = g.rankTax || [];
+      b.append(h('h3', { text: 'Ranks and EXP tax' }), h('div.soc-ranktable', null,
+        h('div.soc-rankrow.head', null, h('span', { text: 'Rank' }), h('span', { text: 'EXP tax' })),
+        ...g.ranks.map((r, i) => {
+          const stop = (e) => { e.stopPropagation(); if (e.key === 'Enter') e.target.blur(); };
+          const name = master
+            ? h('input.soc-in', { type: 'text', maxlength: '20', value: r, 'aria-label': `Rank ${i + 1} name`, onkeydown: stop, onchange: (e) => this.send({ t: 'guild_rank_name', index: i, name: e.target.value.trim() }) })
+            : h('span', { text: r });
+          const tax = master
+            ? h('span.soc-taxin', null, h('input.soc-in', { type: 'number', min: '0', max: '50', value: String(taxes[i] || 0), 'aria-label': `EXP tax for ${r}`, onkeydown: stop,
+                onchange: (e) => this.send({ t: 'guild_rank_tax', index: i, tax: Math.max(0, Math.min(50, Number(e.target.value) || 0)) }) }), h('small', { text: '%' }))
+            : h('span', { text: `${taxes[i] || 0}%` });
+          return h('div.soc-rankrow' + (meM.rank === i ? '.mine' : ''), null, name, tax);
+        })),
+        h('p.hint', { text: `Your rank: ${g.ranks[meM.rank] || ''}, paying ${taxes[meM.rank] || 0}% of your base EXP from kills to the guild. New members join as ${g.ranks[3] || 'the 4th rank'}.` }));
+      if (master && g.ranks.length < 8) {
+        const inp = h('input.soc-in', { type: 'text', maxlength: '20', placeholder: 'New rank name', 'aria-label': 'New rank name', onkeydown: (e) => e.stopPropagation() });
+        b.append(h('div.soc-inv', null, inp, h('button.btn.small', { type: 'button', onclick: () => { this.send({ t: 'guild_rank_add', name: inp.value.trim() }); inp.value = ''; } }, 'Add rank')));
       }
-      // Your EXP tax for the guild.
-      const tax = h('input.soc-in', { type: 'number', min: '0', max: '50', value: String(meM.tax || 0), 'aria-label': 'Guild EXP tax percent', onkeydown: (e) => e.stopPropagation(), onchange: (e) => this.send({ t: 'guild_tax', tax: Number(e.target.value) || 0 }) });
-      b.append(h('label.opt', null, h('span', { text: 'EXP tax to the guild (%)' }), tax));
       // Guild skills.
       b.append(h('h3', { text: `Guild skills (${g.skillPoints} point${g.skillPoints === 1 ? '' : 's'})` }), h('div.soc-skills', null, ...GSK.map(([id, name, max, desc]) => {
         const lv = (g.skills && g.skills[id]) || 0;

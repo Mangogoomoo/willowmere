@@ -138,3 +138,6 @@ ALTER TABLE guilds ADD COLUMN IF NOT EXISTS exp BIGINT NOT NULL DEFAULT 0;
 ALTER TABLE guild_members ADD COLUMN IF NOT EXISTS rank SMALLINT NOT NULL DEFAULT 3;
 ALTER TABLE guild_members ADD COLUMN IF NOT EXISTS tax SMALLINT NOT NULL DEFAULT 0;
 UPDATE guild_members m SET rank = 0 FROM guilds g WHERE g.id = m.guild_id AND g.master_id = m.character_id AND m.rank <> 0;
+
+-- EXP tax per guild rank (set by the Guild Leader).
+ALTER TABLE guilds ADD COLUMN IF NOT EXISTS rank_tax JSONB NOT NULL DEFAULT '[0, 0, 0, 0]';
