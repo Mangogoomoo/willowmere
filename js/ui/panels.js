@@ -316,7 +316,8 @@
           h('input', { type: 'checkbox', checked: !document.getElementById('fps').hidden, onchange: (e) => { document.getElementById('fps').hidden = !e.target.checked; G.SaveSystem.setPrefs({ fps: e.target.checked }); } }),
           h('span', { text: 'Show frames per second' })),
         h('h3', { text: 'Controls' }),
-        h('div.opt-btns', null, h('button.btn.small', { type: 'button', onclick: () => keysWindow(game).open() }, 'Key bindings…')),
+        h('div.opt-btns', null, h('button.btn.small', { type: 'button', onclick: () => keysWindow(game).open() }, 'Key bindings…'),
+          h('button.btn.small', { type: 'button', onclick: () => G.PatchNotes.open() }, `Patch notes (v${G.PatchNotes.LATEST})`)),
         h('h3', { text: 'Game' }),
         h('label.opt.check', null,
           h('input', { type: 'checkbox', checked: !!game.autoLoot, onchange: (e) => game.extras.setAutoLoot(e.target.checked) }),
@@ -389,6 +390,7 @@
     });
     const loot = h('button.mbtn.toggle', { type: 'button', 'aria-pressed': String(!!game.autoLoot), onclick: () => game.extras.setAutoLoot(!game.autoLoot) }, 'Auto-loot', h('kbd', { text: G.Keybinds.primary('autoloot') }));
     el.prepend(loot);
+    el.append(h('button.mbtn', { type: 'button', title: 'What changed in each update', onclick: () => G.PatchNotes.open() }, 'Patch notes', h('kbd', { text: 'v' + G.PatchNotes.LATEST })));
     el.append(h('button.mbtn', { type: 'button', title: 'Monster and item encyclopedia (opens in a new tab)', onclick: () => window.open(G.Config.DB_URL, '_blank', 'noopener') }, 'Database', h('kbd', { text: '↗' })));
     // Hide / show the whole button column (remembered).
     const collapsed = !!G.SaveSystem.prefs().menuHidden;

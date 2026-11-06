@@ -102,7 +102,7 @@
       if (e.key === 'Escape') {
         if (g.dialog.isOpen) { g.dialog.close(); return; }
         if (this.targeting) { this.cancelTargeting(true); return; }
-        if (!g.windows.closeTop()) g.player.clearTarget();
+        if (!g.windows.closeTop()) { if (g.player.target) g.player.clearTarget(); else g.windows.open('options'); }
         return;
       }
       const action = G.Keybinds.match(e);

@@ -716,3 +716,16 @@ button:focus-visible { outline: 2px solid #ffd76a; outline-offset: 2px; }
 .soc-rankrow.mine { background: rgba(242, 182, 50, 0.16); }
 .soc-taxin { display: flex; align-items: center; gap: 4px; }
 .soc-taxin input { width: 56px; flex: none; }
+
+/* ---------- patch notes ---------- */
+.pn-list { display: grid; gap: 6px; max-height: 60vh; overflow-y: auto; padding-right: 4px; }
+.pn { border-radius: 9px; background: var(--cell-bg); border: 1px solid var(--cell-edge); }
+.pn summary { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; align-items: baseline; padding: 8px 10px; cursor: pointer; font-size: 13px; }
+.pn summary b { color: #3f6fe0; }
+.pn summary small, .pn-head small { color: var(--ink-soft); font-size: 11px; white-space: nowrap; }
+.pn.latest { border-color: var(--accent); }
+.pn ul, .pn-new ul { margin: 0; padding: 0 12px 10px 28px; display: grid; gap: 4px; font-size: 12.5px; line-height: 1.4; }
+.pn-new { margin-bottom: 8px; }
+.pn-head { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; margin-bottom: 4px; font-size: 13px; }
+.pn-new ul { padding: 0 0 0 18px; }
+.pn-scroll { max-height: min(46vh, 380px); overflow-y: auto; padding-right: 4px; margin-bottom: 8px; }

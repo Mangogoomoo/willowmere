@@ -177,6 +177,7 @@
       this.questsWin = G.Panels.questsWindow(this);
       this.extras = new G.Extras(this);
       this.minimap = new G.Minimap(this);
+      G.PatchNotes.init(this);
       document.getElementById('fps').hidden = !G.SaveSystem.prefs().fps;
       this.setQuality(G.SaveSystem.prefs().quality || 'high', true);
       this.menu = G.Panels.menuBar(this);
@@ -207,6 +208,8 @@
       this.audio.unlock();
       this.events.emit('mapEntered', this.mapId);
       this.questlog.check();
+      // A new patch since you last played? Show what's new.
+      setTimeout(() => G.PatchNotes.checkNew(), 1500);
       if (G.Online.enabled && choice.charId) { G.Net.connect(this, choice.charId); this.save.save(true); }
       this.start();
     }
