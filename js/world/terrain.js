@@ -176,6 +176,7 @@
     { id: 5, name: 'Sand' }, { id: 6, name: 'Stone tiles' }, { id: 7, name: 'Dead grass' }, { id: 8, name: 'Graveyard soil' },
     { id: 9, name: 'Cursed ground' }, { id: 10, name: 'Mud' }, { id: 11, name: 'Snow' },
   ];
+  let paintBuilds = 0;
   let paintAtlas = null, paintIdxTex = null, paintCovTex = null, paintData = null, paintSize = 0;
   function buildPaintAtlas() {
     if (paintAtlas) return paintAtlas;
@@ -201,10 +202,11 @@
     paintSize = Math.round(SIZE);
     paintData = new Uint8Array(paintSize * paintSize * 4);
     const make = (filter) => { const t = new THREE.DataTexture(paintData, paintSize, paintSize, THREE.RGBAFormat); t.magFilter = t.minFilter = filter; t.needsUpdate = true; return t; };
-    paintIdxTex = make(THREE.NearestFilter); paintCovTex = make(THREE.LinearFilter);
+    paintIdxTex = make(THREE.NearestFilter); paintCovTex = paintIdxTex;
     const d = M && M.paint && M.paint.d;
     if (d) for (const [k, v] of Object.entries(d)) { const [px, pz] = k.split(',').map(Number); writePaint(px, pz, v[0], v[1], true); }
     const atlas = new THREE.CanvasTexture(buildPaintAtlas()); atlas.minFilter = THREE.LinearFilter; atlas.generateMipmaps = false;
+    atlas.flipY = false;   // tile rows are read top-down, like they're drawn
     const uniforms = { uPaintIdx: { value: paintIdxTex }, uPaintCov: { value: paintCovTex }, uAtlas: { value: atlas }, uHalf: { value: HALF }, uSize: { value: paintSize } };
     mat.onBeforeCompile = (sh) => {
       Object.assign(sh.uniforms, uniforms);
@@ -213,26 +215,57 @@
       sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec2 vPaintPos;\nuniform sampler2D uPaintIdx;\nuniform sampler2D uPaintCov;\nuniform sampler2D uAtlas;\nuniform float uHalf;\nuniform float uSize;')
         .replace('#include <color_fragment>', `#include <color_fragment>
           {
-            vec2 pg = (vPaintPos + uHalf) / uSize;
-            float idx = floor(texture2D(uPaintIdx, pg).r * 255.0 + 0.5);
-            float cov = texture2D(uPaintCov, pg).g;
-            if (idx > 0.5 && cov > 0.01) {
-              float i = idx - 1.0;
-              vec2 tile = vec2(mod(i, 4.0), floor(i / 4.0));
-              vec2 tuv = fract(vPaintPos / 4.0) * (252.0 / 256.0) + 2.0 / 256.0;
-              vec3 pc = texture2D(uAtlas, (tile + tuv) / vec2(4.0, 3.0)).rgb;
-              diffuseColor.rgb = mix(diffuseColor.rgb, pow(pc, vec3(2.2)), cov);
+            // Blend the four nearest painted cells, each with its own texture and strength.
+            vec2 pp = vPaintPos + uHalf - 0.5;
+            vec2 cb = floor(pp), cf = fract(pp);
+            vec2 tuv = fract(vPaintPos / 4.0) * (252.0 / 256.0) + 2.0 / 256.0;
+            vec3 acc = vec3(0.0); float wsum = 0.0;
+            for (int k = 0; k < 4; k++) {
+              float ox = float(k - (k / 2) * 2), oz = float(k / 2);
+              float w = (ox > 0.5 ? cf.x : 1.0 - cf.x) * (oz > 0.5 ? cf.y : 1.0 - cf.y);
+              vec4 cell = texture2D(uPaintIdx, (cb + vec2(ox, oz) + 0.5) / uSize);
+              float idx = floor(cell.r * 255.0 + 0.5), cov = cell.g;
+              if (idx > 0.5 && idx < 11.5 && cov > 0.0) {
+                float ti = idx - 1.0;
+                vec2 tile = vec2(mod(ti, 4.0), floor(ti / 4.0));
+                acc += pow(texture2D(uAtlas, (tile + tuv) / vec2(4.0, 3.0)).rgb, vec3(2.2)) * w * cov;
+                wsum += w * cov;
+              }
             }
+            if (wsum > 0.001) diffuseColor.rgb = mix(diffuseColor.rgb, acc / wsum, clamp(wsum, 0.0, 1.0));
           }`);
     };
-    mat.customProgramCacheKey = () => 'terrain-paint';
+    // A fresh shader per map load, so it is always wired to this load's paint textures
+    // (re-using an old one left it reading the wrong textures: black or wrong patches).
+    const key = 'terrain-paint-' + (++paintBuilds);
+    mat.customProgramCacheKey = () => key;
+  }
+  // Is this spot painted with something grass doesn't grow on (paths, stone, sand...)?
+  function paintBare(x, z) {
+    const d = M && M.paint && M.paint.d; if (!d) return false;
+    const v = d[Math.floor(x) + ',' + Math.floor(z)];
+    return !!v && v[1] > 110 && v[0] !== 1 && v[0] !== 2 && v[0] !== 7;
+  }
+  // The map's original dirt paths, plaza and streets, as paint (so they can be edited).
+  function bakeOriginalGround(b) {
+    const out = {}, T = C.TOWN;
+    for (let x = Math.floor(b.minX); x <= Math.ceil(b.maxX); x++) for (let z = Math.floor(b.minZ); z <= Math.ceil(b.maxZ); z++) {
+      const cx = x + 0.5, cz = z + 0.5;
+      let street = M.town && Math.hypot(cx - T.cx, cz - T.cz) <= 13;
+      if (!street) for (const [x1, z1, x2, z2, w] of STREETS) if (U.distToSegment ? U.distToSegment(cx, cz, x1, z1, x2, z2) <= w / 2 + 0.2 : U.distToPolyline(cx, cz, [[x1, z1], [x2, z2]]) <= w / 2 + 0.2) { street = true; break; }
+      if (street) { out[x + ',' + z] = [4, 255]; continue; }
+      const pd = pathDistance(cx, cz);
+      const pf = 1 - U.smoothstep(1.2, 3.0, pd + (U.noise2(cx * 0.6, cz * 0.6) - 0.5) * 1.2);
+      if (pf > 0.12) out[x + ',' + z] = [3, Math.round(Math.min(1, pf) * 255)];
+    }
+    return out;
   }
   function writePaint(px, pz, idx, cov, quiet) {
     const i = px + Math.floor(HALF), j = pz + Math.floor(HALF);
     if (!paintData || i < 0 || j < 0 || i >= paintSize || j >= paintSize) return;
     const o = (j * paintSize + i) * 4;
     paintData[o] = idx; paintData[o + 1] = cov;
-    if (!quiet) { paintIdxTex.needsUpdate = true; paintCovTex.needsUpdate = true; }
+    if (!quiet) paintIdxTex.needsUpdate = true;
   }
   const _n = new THREE.Vector3();
   function normalAt(x, z, out) {
@@ -363,7 +396,7 @@
     if (tf > 0) _c.lerp(COL.town, tf * 0.8);
     const pd = pathDistance(x, z);
     const pf = 1 - U.smoothstep(1.2, 3.0, pd + (U.noise2(x * 0.6, z * 0.6) - 0.5) * 1.2);
-    if (pf > 0) { _t.copy(COL.dirt).lerp(COL.dirtDark, U.noise2(x * 0.4, z * 0.4)); _c.lerp(_t, pf); }
+    if (pf > 0 && !M.noPaths) { _t.copy(COL.dirt).lerp(COL.dirtDark, U.noise2(x * 0.4, z * 0.4)); _c.lerp(_t, pf); }
     if (h < 0.1) _c.lerp(COL.sand, U.smoothstep(0.1, -0.3, h));
     if (h < C.WATER_LEVEL) _c.lerp(COL.bed, U.smoothstep(C.WATER_LEVEL, C.WATER_LEVEL - 0.6, h));
     const b = boundaryAmount(x, z);
@@ -422,7 +455,7 @@
     scene.add(water);
 
     let bridge = null;
-    if (M.town) {
+    if (M.town && !M.noPaths) {
     // Cobbled plaza and streets.
     const ctex = cobbleTexture();
     const plazaTex = ctex.clone(); plazaTex.needsUpdate = true;
@@ -524,6 +557,6 @@
     init, build, height, surfaceHeight, normalAt, raycast, isWater, onBridge, bridgeDeck,
     townFactor, pathDistance, boundaryAmount, boundaryRaw, streamZ, caveDist,
     get BRIDGE_Z() { return BRIDGE_Z; }, get POND() { return POND; }, get STREETS() { return STREETS; },
-    get FIELD_PATHS() { return FIELD_PATHS; }, get map() { return M; }, get HALF() { return HALF; }, get SIZE() { return SIZE; }, groundDelta, refreshGround, writePaint, PAINT, buildPaintAtlas, deckAt, deckBase,
+    get FIELD_PATHS() { return FIELD_PATHS; }, get map() { return M; }, get HALF() { return HALF; }, get SIZE() { return SIZE; }, groundDelta, refreshGround, writePaint, paintBare, bakeOriginalGround, PAINT, buildPaintAtlas, deckAt, deckBase,
   };
 })(window.G = window.G || {});

@@ -316,13 +316,27 @@
           forest: { count: 0, grove: 1, clearing: 1 }, seed: [...id].reduce((a, c) => a * 31 + c.charCodeAt(0), 7) >>> 0 });
       } else if (G.Maps[id] && G.Maps[id].custom && d.name) G.Maps[id].name = d.name;
     },
-    async fetch() {
+    async fetch(tries = 30, attempt = 1) {
       try {
         const r = await fetch('/api/maps', { cache: 'no-store' });
-        if (r.ok) { this.data = (await r.json()).maps || {}; this.register(); }
+        if (!r.ok) throw new Error('maps ' + r.status);
+        this.data = (await r.json()).maps || {}; this.register();
         const a = await fetch('/api/assets', { cache: 'no-store' });
         if (a.ok) this.assets = (await a.json()).assets || [];
-      } catch (e) { /* offline: no edits */ }
+        this.healCurrent();
+      } catch (e) {
+        // The server may still be waking up: try again shortly.
+        if (tries > 1) setTimeout(() => this.fetch(tries - 1, attempt + 1), Math.min(15000, 2500 * attempt));
+      }
+    },
+    // If the map we're on was built before its saved edits arrived, rebuild it with them.
+    healCurrent() {
+      const g = window.game;
+      if (!g || !g.mapId || !g.player || g.traveling) return;
+      if ((this.used || {})[g.mapId] === (this.data[g.mapId] || null)) return;
+      if (G.MapEditor && G.MapEditor.dirty) return;
+      const p = g.player.position;
+      g.travel(g.mapId, p.x, p.z, true);
     },
     // Everything a built-in map came with, as editor objects and entities.
     originals(game, onlyNew) {
@@ -379,6 +393,7 @@
     // The map definition the game should load (built-in design + edits).
     prepare(id) {
       if (!C.WORLD_SIZE_DEFAULT) C.WORLD_SIZE_DEFAULT = C.WORLD_SIZE;
+      (this.used || (this.used = {}))[id] = this.data[id] || null;   // which saved version this map was built with
       const base = G.Maps[id], d = this.data[id];
       C.WORLD_SIZE = C.WORLD_SIZE_DEFAULT;
       if (!d) return base;
@@ -389,6 +404,7 @@
       // Take-over 1: houses, trees and props; 2: also the gate, spike wall, bridge, rocks and bushes.
       map.takeover = d.takeover === true ? 1 : (d.takeover || 0);
       if (map.takeover >= 2) map.bridge = false;   // the bridge is an editor object now
+      if (map.takeover >= 3) map.noPaths = true;   // paths, plaza and streets are paint now
       map.decks = d.objects.map((o) => { const def = LIB.find((l) => l.k === o.k); if (!def || !def.deck) return null;
         const sc = o.s || 1; return { x: o.x, z: o.z, ry: o.ry || 0, hw: def.deck.hw * sc, hl: def.deck.hl * sc, top: def.deck.top * sc, y: o.y || 0 }; }).filter(Boolean);
       map.portals = (d.takeover ? [] : base.portals || []).concat(d.entities.filter((e) => e.type === 'warp' && G.Maps[e.to]).map((e) => ({ x: e.x, z: e.z, to: e.to, tx: +e.tx || 0, tz: +e.tz || 0, label: e.label || (G.Maps[e.to] || {}).name })));

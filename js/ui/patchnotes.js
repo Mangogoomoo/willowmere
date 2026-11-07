@@ -6,6 +6,14 @@
   const h = G.h;
 
   const PATCHES = [
+    { v: '0.30', date: '2026-11-08T19:00', title: 'Ground painting fixed; paths and streets editable', notes: [
+      'Fixed: ground paint could show the wrong texture or turn black (most of all after a map reloaded). Textures now always show correctly, with soft edges between them.',
+      'Painting a different texture over paint now replaces it straight away.',
+      'Map editor: “Make paths and streets paintable” turns a map’s dirt paths, town plaza and streets into ground paint, so you can erase, move or extend them. Grass and flowers don’t grow on painted paths, stone or sand.',
+    ] },
+    { v: '0.29', date: '2026-11-08T15:00', title: 'Saved maps always load', notes: [
+      'Fixed: maps could appear without their editor changes after starting the game (when the server was slow to wake up). The game now keeps trying to load saved maps and rebuilds the map you’re on as soon as they arrive.',
+    ] },
     { v: '0.28', date: '2026-11-08T12:00', title: 'Map editor: ground painting, bridges, everything editable', notes: [
       'Ground painting: paint grass, dark grass, dirt path, cobblestone, sand, stone tiles, dead grass, graveyard soil, cursed ground, mud and snow with a brush, or erase paint to bring the original ground back.',
       'Bridges to place: wooden, stone, rope bridge and boardwalk. Players walk on them, over water too.',

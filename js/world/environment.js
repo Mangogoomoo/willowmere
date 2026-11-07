@@ -583,6 +583,7 @@
         if (this.map.town && Math.hypot(x - C.TOWN.cx, z - C.TOWN.cz) < 15) continue;
         if (this.map.town && Math.abs(x) < 3 && z > -72 && z < -14) continue;
         if (TR.STREETS.some(([x1, z1, x2, z2, w]) => G.Utils.distToSegment(x, z, x1, z1, x2, z2) < w / 2 + 0.4)) continue;
+        if (TR.paintBare(x, z)) continue;
         grass.push({ x, y: h - 0.02, z, ry: rng() * 6, s: 0.7 + rng() * 0.8, color: _c.setHSL(0.24 + rng() * 0.05, 0.35, 0.8 + rng() * 0.2).getStyle() });
       }
       this.instanced(grassGeo, this.grassMat, grass, { cast: false });
@@ -601,6 +602,7 @@
         }
         const h = TR.height(x, z), s = 0.8 + rng() * 0.6, ry = rng() * 6;
         const col = palette[(U.noise2(x * 0.3, z * 0.3) * palette.length) | 0];
+        if (TR.paintBare(x, z)) continue;
         stems.push({ x, y: h - 0.02, z, ry, s, color: '#5aa043' });
         heads.push({ x, y: h - 0.02, z, ry, s, color: col });
       }
@@ -621,6 +623,7 @@
         const x = U.randRange(rng, -100, 100), z = U.randRange(rng, this.map.town ? -30 : -108, 104);
         if (!this.canPlace(x, z, { pathClear: 2 })) continue;
         if (U.fbm(x * 0.035 + 7, z * 0.035 - 2, 3) < 0.5) continue;
+        if (TR.paintBare(x, z)) continue;
         mush.push({ x, y: TR.height(x, z) - 0.02, z, ry: rng() * 6, s: 0.8 + rng() * 0.9 });
       }
       this.instanced(mushGeo, this.propMat, mush);

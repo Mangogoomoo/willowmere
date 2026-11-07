@@ -207,7 +207,7 @@
         let [i, c] = g[key] || [0, 0];
         if (erase) c -= add;
         else if (i === want) c = Math.min(255, c + add);
-        else { c -= add; if (c <= 0) { i = want; c = Math.min(255, -c + add * 0.5); } }
+        else { i = want; c = Math.min(255, add); }   // a new texture replaces the old one
         c = Math.round(c);
         if (c <= 0) { delete g[key]; i = 0; c = 0; } else g[key] = [i, c];
         TR.writePaint(x, z, i, c, true); last = [x, z, i, c];
@@ -455,6 +455,15 @@
         this.game.log.add(`Model “${r.name}” added to your library.`, 'level');
       } catch (e) { this.game.log.add('Upload failed: ' + e.message, 'warn'); }
     },
+    // The map's paths, plaza and streets become paint (existing paint stays on top).
+    bakePaths(skipConfirm) {
+      if (!skipConfirm && !confirm('Turn this map’s paths, plaza and streets into paint you can edit? The map will be saved and reloaded.')) return;
+      const d = this.data, baked = G.Terrain.bakeOriginalGround(d.bounds || CM().DEFAULT_BOUNDS);
+      d.paint = { d: Object.assign(baked, (d.paint && d.paint.d) || {}) };
+      d.takeover = 3;
+      this.game.log.add(`Turned ${Object.keys(baked).length} cells of paths and streets into paint. Saving…`, 'system');
+      return this.save();
+    },
     async takeOver(onlyNew) {
       if (!confirm(onlyNew ? 'Make the gate, spike wall, bridge, rocks and bushes editable? The map will be saved and reloaded.' : 'Make all of this map’s original objects, spawns, warps and NPCs editable? The map will be saved and reloaded.')) return;
       const o = CM().originals(this.game, onlyNew), d = this.data;
@@ -462,6 +471,8 @@
       if (onlyNew) { d.takeover = 2; this.game.log.add(`Converted ${o.objects.length} more objects. Saving…`, 'system'); await this.save(); return; }
       d.entities = o.entities.concat(d.entities.filter((e) => !(e.type === 'warp' && o.entities.some((x) => x.type === 'warp' && x.x === e.x && x.z === e.z))));
       d.takeover = 2;
+      const pathsToo = !G.Maps[this.game.mapId].cave;
+      if (pathsToo) { this.game.log.add(`Converted ${o.objects.length} objects and ${o.entities.length} entities.`, 'system'); return this.bakePaths(true); }
       this.game.log.add(`Converted ${o.objects.length} objects and ${o.entities.length} entities. Saving…`, 'system');
       await this.save();
     },
@@ -604,7 +615,10 @@
       } else if (d.takeover === true || d.takeover === 1) {
         body.append(h('h4', { text: 'Original objects' }), h('p.hint', { text: 'Houses, trees and props are editable. Make the rest editable too: the town gate, the spike wall, the bridge, rocks and bushes. This saves and reloads the map.' }),
           h('button.btn.small', { type: 'button', onclick: () => this.takeOver(true) }, 'Make remaining originals editable'));
-      } else if (d.takeover) body.append(h('p.hint', { text: 'All of this map’s original objects are editable.' }));
+      } else if (d.takeover === 2) {
+        body.append(h('h4', { text: 'Paths and streets' }), h('p.hint', { text: 'Turn this map’s dirt paths, plaza and streets into ground paint, so you can erase, move or extend them with the Paint tool. This saves and reloads the map.' }),
+          h('button.btn.small', { type: 'button', onclick: () => this.bakePaths() }, 'Make paths and streets paintable'));
+      } else if (d.takeover) body.append(h('p.hint', { text: 'Everything on this map is editable: objects, paths and streets (as paint).' }));
       body.append(h('h4', { text: 'Go to map' }), h('button.btn.small', { type: 'button', onclick: () => this.openTeleport() }, '🗺 Choose a map…'));
       const nid = h('input.soc-in', { type: 'text', placeholder: 'map_id', maxlength: '40' }), nname = h('input.soc-in', { type: 'text', placeholder: 'Map name', maxlength: '40' });
       for (const i of [nid, nname]) i.addEventListener('keydown', (e) => e.stopPropagation());
