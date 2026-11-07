@@ -18,7 +18,7 @@
 
   const Ed = {
     active: false, tab: 'place', sel: null, placing: null, grab: false, dirty: false, undoStack: [],
-    brush: { tool: 'raise', size: 4, strength: 5 }, cursor: null, remembered: null,
+    brush: { tool: 'raise', size: 4, strength: 5, tex: 3 }, cursor: null, remembered: null,
     init(game) {
       if (this.game) return;
       this.game = game;
@@ -194,7 +194,29 @@
       this.brushRing.scale.setScalar(this.brush.size);
       this.brushRing.position.set(p.x, G.Terrain.height(p.x, p.z) + 0.15, p.z);
     },
+    paintAt(p) {
+      const d = this.data, TR = G.Terrain;
+      d.paint = d.paint || { d: {} };
+      if (TR.map) TR.map.paint = d.paint;
+      const g = d.paint.d, R = this.brush.size, st = this.brush.strength / 5, erase = this.brush.tool === 'erase', want = this.brush.tex;
+      let last = null;
+      for (let x = Math.floor(p.x - R); x <= Math.ceil(p.x + R); x++) for (let z = Math.floor(p.z - R); z <= Math.ceil(p.z + R); z++) {
+        const dist = Math.hypot(x + 0.5 - p.x, z + 0.5 - p.z); if (dist > R) continue;
+        let f = 1 - dist / R; f = f * f * (3 - 2 * f);
+        const key = x + ',' + z, add = 90 * st * f;
+        let [i, c] = g[key] || [0, 0];
+        if (erase) c -= add;
+        else if (i === want) c = Math.min(255, c + add);
+        else { c -= add; if (c <= 0) { i = want; c = Math.min(255, -c + add * 0.5); } }
+        c = Math.round(c);
+        if (c <= 0) { delete g[key]; i = 0; c = 0; } else g[key] = [i, c];
+        TR.writePaint(x, z, i, c, true); last = [x, z, i, c];
+      }
+      if (last) TR.writePaint(last[0], last[1], last[2], last[3], false);
+      this.dirty = true;
+    },
     sculptAt(p) {
+      if (this.brush.tool === 'paint' || this.brush.tool === 'erase') return this.paintAt(p);
       const d = this.data, TR = G.Terrain;
       d.ground = d.ground || { d: {} };
       if (TR.map) TR.map.ground = d.ground;   // the terrain reads the same edits live
@@ -225,15 +247,21 @@
       this.rebuildMarkers(); this.render();
     },
     renderGround(body) {
-      const tools = [['raise', '⬆️', 'Raise'], ['lower', '⬇️', 'Lower'], ['smooth', '〰️', 'Smooth'], ['flatten', '▭', 'Flatten']];
-      body.append(h('div.ed-grid', null, ...tools.map(([id, ic, name]) => this.paletteBtn(name, ic, this.brush.tool === id, () => { this.brush.tool = id; this.render(); }))));
+      const tools = [['raise', '⬆️', 'Raise'], ['lower', '⬇️', 'Lower'], ['smooth', '〰️', 'Smooth'], ['flatten', '▭', 'Flatten'], ['paint', '🖌️', 'Paint'], ['erase', '🧽', 'Erase paint']];
+      body.append(h('h4', { text: 'Shape and paint' }), h('div.ed-grid', null, ...tools.map(([id, ic, name]) => this.paletteBtn(name, ic, this.brush.tool === id, () => { this.brush.tool = id; this.render(); }))));
+      if (this.brush.tool === 'paint') {
+        const atlas = G.Terrain.buildPaintAtlas();
+        if (!this.swatches) this.swatches = G.Terrain.PAINT.map((t) => { const c = document.createElement('canvas'); c.width = c.height = 64; c.getContext('2d').drawImage(atlas, ((t.id - 1) % 4) * 256, Math.floor((t.id - 1) / 4) * 256, 256, 256, 0, 0, 64, 64); return c.toDataURL(); });
+        body.append(h('h4', { text: 'Texture' }), h('div.ed-swatches', null, ...G.Terrain.PAINT.map((t, i) => h('button.ed-swatch' + (this.brush.tex === t.id ? '.on' : ''), { type: 'button', title: t.name, onclick: () => { this.brush.tex = t.id; this.render(); } },
+          h('img', { src: this.swatches[i], alt: '' }), h('span', { text: t.name })))));
+      }
       const slider = (label, key, min, max) => {
         const out = h('b', { text: String(this.brush[key]) });
         const inp = h('input', { type: 'range', min: String(min), max: String(max), value: String(this.brush[key]), 'aria-label': label, oninput: (e) => { this.brush[key] = Number(e.target.value); out.textContent = e.target.value; } });
         return h('label.ed-slider', null, h('span', { text: label }), inp, out);
       };
       body.append(slider('Brush size', 'size', 1, 20), slider('Strength', 'strength', 1, 10),
-        h('p.hint', { text: 'Hold the left mouse button and drag over the ground. Flatten levels everything to the height where you start. The ground updates as you paint; walking follows the new shape after saving.' }));
+        h('p.hint', { text: 'Hold the left mouse button and drag over the ground. Flatten levels everything to the height where you start; Paint layers a texture (paint again to make it stronger), Erase paint brings the original ground back. Walking follows a new shape after saving.' }));
     },
 
     /* ---------- placing ---------- */
@@ -283,6 +311,11 @@
       const s = this.sel; if (!s) return;
       if (s.kind === 'object') { const g = this.objFor(s); if (g) CM().place(g, s.item); }
       else {
+        if (s.item.type === 'npcref' || s.item.type === 'npc') {
+          const id = s.item.type === 'npcref' ? s.item.ref : 'custom_' + s.item.u;
+          const n = (this.game.npcs.list || []).find((x) => x.id === id || (x.def && x.def.id === id));
+          if (n) { n.setPosition(s.item.x, s.item.z); n.facing = s.item.ry || 0; if (n.def) { n.def.x = s.item.x; n.def.z = s.item.z; n.def.facing = s.item.ry || 0; } }
+        }
         const L = (CM().lights || []).find((l) => l.userData.ent === s.item);
         if (L) { L.position.set(s.item.x, G.Terrain.height(s.item.x, s.item.z) + (+s.item.y || 2.5), s.item.z); L.color.set(s.item.color || '#ffffff'); L.intensity = +s.item.intensity || 1; L.distance = +s.item.range || 10; }
         this.rebuildMarkers();
@@ -372,6 +405,14 @@
         bulb.position.y = e.type === 'light' ? (+e.y || 2.5) : 2.3; g.add(bulb);
         const text = e.type === 'warp' ? `Warp → ${(G.Maps[e.to] || {}).name || e.to}` : e.type === 'spawn' ? `${(G.Config.MONSTERS[e.monster] || {}).name || e.monster} ×${e.count}` : (e.type === 'npc' || e.type === 'npcref') ? e.name : def.name;
         const lab = this.label(text, def.color); lab.position.y = 3.1; g.add(lab);
+        if (e.type === 'npc' || e.type === 'npcref') {
+          // An arrow on the ground pointing where the NPC looks.
+          const shape = new THREE.Shape(); shape.moveTo(0, 2.2); shape.lineTo(0.55, 1.1); shape.lineTo(0.18, 1.1); shape.lineTo(0.18, 0.4); shape.lineTo(-0.18, 0.4); shape.lineTo(-0.18, 1.1); shape.lineTo(-0.55, 1.1); shape.closePath();
+          const arrow = new THREE.Mesh(new THREE.ShapeGeometry(shape), new THREE.MeshBasicMaterial({ color: '#ffd84a', side: THREE.DoubleSide, depthTest: false, transparent: true, opacity: 0.95 }));
+          arrow.rotation.x = -Math.PI / 2; arrow.renderOrder = 12;
+          const turn = new THREE.Group(); turn.rotation.y = e.ry || 0; turn.position.y = 0.12; turn.add(arrow); arrow.rotation.z = Math.PI; arrow.rotation.x = Math.PI / 2;
+          g.add(turn);
+        }
         g.position.set(e.x, y, e.z);
         this.markers.add(g);
       }
@@ -414,12 +455,13 @@
         this.game.log.add(`Model “${r.name}” added to your library.`, 'level');
       } catch (e) { this.game.log.add('Upload failed: ' + e.message, 'warn'); }
     },
-    async takeOver() {
-      if (!confirm('Make all of this map’s original objects, spawns, warps and NPCs editable? The map will be saved and reloaded.')) return;
-      const o = CM().originals(this.game), d = this.data;
+    async takeOver(onlyNew) {
+      if (!confirm(onlyNew ? 'Make the gate, spike wall, bridge, rocks and bushes editable? The map will be saved and reloaded.' : 'Make all of this map’s original objects, spawns, warps and NPCs editable? The map will be saved and reloaded.')) return;
+      const o = CM().originals(this.game, onlyNew), d = this.data;
       d.objects = o.objects.concat(d.objects);
+      if (onlyNew) { d.takeover = 2; this.game.log.add(`Converted ${o.objects.length} more objects. Saving…`, 'system'); await this.save(); return; }
       d.entities = o.entities.concat(d.entities.filter((e) => !(e.type === 'warp' && o.entities.some((x) => x.type === 'warp' && x.x === e.x && x.z === e.z))));
-      d.takeover = true;
+      d.takeover = 2;
       this.game.log.add(`Converted ${o.objects.length} objects and ${o.entities.length} entities. Saving…`, 'system');
       await this.save();
     },
@@ -463,12 +505,23 @@
     paletteBtn(label, icon, on, onclick, title) {
       return h('button.ed-item' + (on ? '.on' : ''), { type: 'button', title: title || label, onclick }, h('span.ed-ico', { text: icon }), h('span', { text: label }));
     },
+    capName(k) {
+      const c = this.game.env.captured && this.game.env.captured[k.slice(4)];
+      const kind = !c ? 'Decoration' : c.mat === this.game.env.foliageMat ? 'Plant' : 'Rock / prop';
+      const n = Object.keys(this.game.env.captured || {}).indexOf(k.slice(4)) + 1;
+      return `${kind} (from this map, #${n})`;
+    },
     renderPlace(body) {
       const cats = [...new Set(CM().LIB.map((l) => l.cat))];
       for (const c of cats) {
         body.append(h('h4', { text: c }), h('div.ed-grid', null, ...CM().LIB.filter((l) => l.cat === c).map((l) =>
           this.paletteBtn(l.name, l.icon, this.placing && this.placing.k === l.k, () => this.startPlacing({ kind: 'object', k: l.k })))));
       }
+      const caps = Object.keys(this.game.env.captured || {});
+      if (caps.length) body.append(h('h4', { text: 'From this map' }), h('div.ed-grid', null, ...caps.map((key) => {
+        const k = 'cap:' + key, c = this.game.env.captured[key];
+        return this.paletteBtn(this.capName(k).replace(' (from this map', ' (').replace('#', ''), c.mat === this.game.env.foliageMat ? '🌿' : '🪨', this.placing && this.placing.k === k, () => this.startPlacing({ kind: 'object', k }));
+      })));
       const file = h('input', { type: 'file', accept: '.glb', hidden: true });
       file.addEventListener('change', () => { if (file.files[0]) this.upload(file.files[0]); file.value = ''; });
       body.append(h('h4', { text: 'My models' }), h('div.ed-grid', null, ...CM().assets.map((a) =>
@@ -502,7 +555,7 @@
       const s = this.sel;
       if (!s) { body.append(h('p.hint', { text: 'Click an object or entity in the world to select it.' })); return; }
       const it = s.item, set = (k, num) => (v) => { this.snapshot(); it[k] = num ? Number(v) : v; this.applySel(); this.render(); };
-      const name = s.kind === 'object' ? (it.k.startsWith('asset:') ? ((CM().assets.find((a) => 'asset:' + a.id === it.k) || {}).name || 'Model') : (CM().LIB.find((l) => l.k === it.k) || {}).name) : (CM().ENTITIES.find((d) => d.type === it.type) || {}).name;
+      const name = s.kind === 'object' && it.k.startsWith('cap:') ? this.capName(it.k) : s.kind === 'object' ? (it.k.startsWith('asset:') ? ((CM().assets.find((a) => 'asset:' + a.id === it.k) || {}).name || 'Model') : (CM().LIB.find((l) => l.k === it.k) || {}).name) : (CM().ENTITIES.find((d) => d.type === it.type) || {}).name;
       body.append(h('h4', { text: name || 'Selected' }),
         h('div.ed-xyz', null, this.field('X', it.x, set('x', 1), { type: 'number', key: 'x' }), this.field('Z', it.z, set('z', 1), { type: 'number', key: 'z' }), this.field('Height', it.y || 0, set('y', 1), { type: 'number', key: 'y' })),
         h('div.ed-xyz', null, this.field('Rotation °', Math.round((it.ry || 0) * 180 / Math.PI), (v) => { this.snapshot(); it.ry = r2(Number(v) * Math.PI / 180); this.applySel(); }, { type: 'number', key: 'ry' }),
@@ -548,7 +601,10 @@
       if (G.Maps[this.game.mapId] && !G.Maps[this.game.mapId].custom && !d.takeover) {
         body.append(h('h4', { text: 'Original objects' }), h('p.hint', { text: 'Turn this map’s own houses, trees, props, monster spawns (training dummies too), warps and NPCs into editor objects you can move or delete. This saves and reloads the map.' }),
           h('button.btn.small', { type: 'button', onclick: () => this.takeOver() }, 'Make original objects editable'));
-      } else if (d.takeover) body.append(h('p.hint', { text: 'This map’s original objects are editable.' }));
+      } else if (d.takeover === true || d.takeover === 1) {
+        body.append(h('h4', { text: 'Original objects' }), h('p.hint', { text: 'Houses, trees and props are editable. Make the rest editable too: the town gate, the spike wall, the bridge, rocks and bushes. This saves and reloads the map.' }),
+          h('button.btn.small', { type: 'button', onclick: () => this.takeOver(true) }, 'Make remaining originals editable'));
+      } else if (d.takeover) body.append(h('p.hint', { text: 'All of this map’s original objects are editable.' }));
       body.append(h('h4', { text: 'Go to map' }), h('button.btn.small', { type: 'button', onclick: () => this.openTeleport() }, '🗺 Choose a map…'));
       const nid = h('input.soc-in', { type: 'text', placeholder: 'map_id', maxlength: '40' }), nname = h('input.soc-in', { type: 'text', placeholder: 'Map name', maxlength: '40' });
       for (const i of [nid, nname]) i.addEventListener('keydown', (e) => e.stopPropagation());

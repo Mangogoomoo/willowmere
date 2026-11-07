@@ -146,10 +146,93 @@
   function surfaceHeight(x, z) {
     const h = height(x, z);
     if (onBridge(x, z)) return Math.max(h, bridgeDeck(z));
-    return h;
+    const d = deckAt(x, z);
+    return d ? Math.max(h, deckHeight(d)) : h;
   }
   function isWater(x, z) {
-    return height(x, z) < C.WATER_LEVEL + 0.12 && !onBridge(x, z);
+    return height(x, z) < C.WATER_LEVEL + 0.12 && !onBridge(x, z) && !deckAt(x, z);
+  }
+  /* Bridges placed with the map editor: walkable rectangles (decks). */
+  function deckAt(x, z) {
+    const list = M && M.decks; if (!list) return null;
+    for (const d of list) {
+      const dx = x - d.x, dz = z - d.z, c = Math.cos(d.ry), sn = Math.sin(d.ry);
+      const lx = dx * c - dz * sn, lz = dx * sn + dz * c;
+      if (Math.abs(lx) <= d.hw && Math.abs(lz) <= d.hl) return d;
+    }
+    return null;
+  }
+  function deckBase(d) {
+    // The deck rests on the higher of its two ends.
+    const ex = Math.sin(d.ry) * d.hl, ez = Math.cos(d.ry) * d.hl;
+    return Math.max(height(d.x + ex, d.z + ez), height(d.x - ex, d.z - ez), C.WATER_LEVEL + 0.2) + (d.y || 0);
+  }
+  function deckHeight(d) { if (d.h == null) d.h = deckBase(d) + d.top; return d.h; }
+
+  /* Ground painting: a texture layer over the ground, one cell per world unit.
+     Layers 1..11 come from a texture atlas (4 x 3 tiles). */
+  const PAINT = [
+    { id: 1, name: 'Grass' }, { id: 2, name: 'Dark grass' }, { id: 3, name: 'Dirt path' }, { id: 4, name: 'Cobblestone' },
+    { id: 5, name: 'Sand' }, { id: 6, name: 'Stone tiles' }, { id: 7, name: 'Dead grass' }, { id: 8, name: 'Graveyard soil' },
+    { id: 9, name: 'Cursed ground' }, { id: 10, name: 'Mud' }, { id: 11, name: 'Snow' },
+  ];
+  let paintAtlas = null, paintIdxTex = null, paintCovTex = null, paintData = null, paintSize = 0;
+  function buildPaintAtlas() {
+    if (paintAtlas) return paintAtlas;
+    const T = 256, c = U.makeCanvas(T * 4, T * 3), x = c.getContext('2d'), rng = U.mulberry32(99);
+    const tile = (i, draw) => { x.save(); x.translate((i % 4) * T, Math.floor(i / 4) * T); x.beginPath(); x.rect(0, 0, T, T); x.clip(); draw(); x.restore(); };
+    const speckle = (base, cols, n, rmin, rmax) => { x.fillStyle = base; x.fillRect(0, 0, T, T); for (let k = 0; k < n; k++) { x.fillStyle = cols[k % cols.length]; const r = rmin + rng() * (rmax - rmin); x.beginPath(); x.ellipse(rng() * T, rng() * T, r, r * (0.5 + rng() * 0.5), rng() * 3, 0, 7); x.fill(); } };
+    const blades = (cols, n) => { for (let k = 0; k < n; k++) { x.strokeStyle = cols[k % cols.length]; x.lineWidth = 1.5; const px = rng() * T, py = rng() * T; x.beginPath(); x.moveTo(px, py); x.lineTo(px + (rng() - 0.5) * 4, py - 4 - rng() * 6); x.stroke(); } };
+    tile(0, () => { speckle('#79b452', ['#6aa548', '#8cc45e', '#5f9a43'], 260, 4, 14); blades(['#9ad06a', '#5a9440'], 500); });
+    tile(1, () => { speckle('#4f7a3a', ['#456d33', '#5b8842', '#3d6230'], 260, 4, 14); blades(['#679a4a', '#36572a'], 500); });
+    tile(2, () => { speckle('#c49a66', ['#b58b58', '#d1a874', '#a98050'], 320, 2, 9); for (let k = 0; k < 40; k++) { x.fillStyle = '#9a8a76'; x.beginPath(); x.arc(rng() * T, rng() * T, 1 + rng() * 2.5, 0, 7); x.fill(); } });
+    tile(3, () => { x.fillStyle = '#857a6a'; x.fillRect(0, 0, T, T); const n = 6, cell = T / n; for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) { const off = (j % 2) * cell / 2, v = 170 + rng() * 40 | 0; x.fillStyle = `rgb(${v + 6},${v},${v - 12})`; for (const ox of [0, -T]) { x.beginPath(); if (x.roundRect) x.roundRect(i * cell + off + ox + 3, j * cell + 3, cell - 6, cell - 6, 8); else x.rect(i * cell + off + ox + 3, j * cell + 3, cell - 6, cell - 6); x.fill(); } } });
+    tile(4, () => { speckle('#e2cf98', ['#d8c48c', '#ecdcab', '#cfba80'], 400, 1, 5); });
+    tile(5, () => { x.fillStyle = '#6f6b66'; x.fillRect(0, 0, T, T); const n = 4, cell = T / n; for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) { const v = 140 + rng() * 30 | 0; x.fillStyle = `rgb(${v},${v - 3},${v - 8})`; x.fillRect(i * cell + 3, j * cell + 3, cell - 6, cell - 6); x.strokeStyle = 'rgba(40,36,32,0.35)'; x.beginPath(); x.moveTo(i * cell + 3 + rng() * cell * 0.6, j * cell + 3); x.lineTo(i * cell + 3 + rng() * cell * 0.8, j * cell + cell - 3); x.stroke(); } });
+    tile(6, () => { speckle('#a99a62', ['#9c8c55', '#b8aa72', '#8f8050'], 260, 4, 12); blades(['#c2b077', '#857a48'], 450); });
+    tile(7, () => { speckle('#4d4640', ['#433d38', '#58504a', '#3b3632', '#5c544c'], 420, 2, 9); for (let k = 0; k < 26; k++) { x.fillStyle = rng() < 0.3 ? '#cfc8b8' : '#77706a'; x.beginPath(); x.ellipse(rng() * T, rng() * T, 1.5 + rng() * 3, 1 + rng() * 2, rng() * 3, 0, 7); x.fill(); } });
+    tile(8, () => { speckle('#2c2433', ['#251f2c', '#352b3e', '#1f1a25'], 380, 3, 11); x.strokeStyle = 'rgba(150,90,200,0.35)'; x.lineWidth = 1.2; for (let k = 0; k < 14; k++) { let px = rng() * T, py = rng() * T; x.beginPath(); x.moveTo(px, py); for (let q = 0; q < 4; q++) { px += (rng() - 0.5) * 40; py += (rng() - 0.5) * 40; x.lineTo(px, py); } x.stroke(); } });
+    tile(9, () => { speckle('#5a4632', ['#4f3d2b', '#64503a', '#45362a'], 320, 4, 14); for (let k = 0; k < 18; k++) { x.fillStyle = 'rgba(120,140,150,0.25)'; x.beginPath(); x.ellipse(rng() * T, rng() * T, 6 + rng() * 14, 3 + rng() * 6, rng() * 3, 0, 7); x.fill(); } });
+    tile(10, () => { speckle('#eef3f6', ['#e2e9ee', '#f8fbfc', '#d8e2e8'], 300, 3, 12); });
+    paintAtlas = c;
+    return c;
+  }
+  function setupPaint(mat) {
+    paintSize = Math.round(SIZE);
+    paintData = new Uint8Array(paintSize * paintSize * 4);
+    const make = (filter) => { const t = new THREE.DataTexture(paintData, paintSize, paintSize, THREE.RGBAFormat); t.magFilter = t.minFilter = filter; t.needsUpdate = true; return t; };
+    paintIdxTex = make(THREE.NearestFilter); paintCovTex = make(THREE.LinearFilter);
+    const d = M && M.paint && M.paint.d;
+    if (d) for (const [k, v] of Object.entries(d)) { const [px, pz] = k.split(',').map(Number); writePaint(px, pz, v[0], v[1], true); }
+    const atlas = new THREE.CanvasTexture(buildPaintAtlas()); atlas.minFilter = THREE.LinearFilter; atlas.generateMipmaps = false;
+    const uniforms = { uPaintIdx: { value: paintIdxTex }, uPaintCov: { value: paintCovTex }, uAtlas: { value: atlas }, uHalf: { value: HALF }, uSize: { value: paintSize } };
+    mat.onBeforeCompile = (sh) => {
+      Object.assign(sh.uniforms, uniforms);
+      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec2 vPaintPos;')
+        .replace('#include <begin_vertex>', '#include <begin_vertex>\nvPaintPos = (modelMatrix * vec4(transformed, 1.0)).xz;');
+      sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec2 vPaintPos;\nuniform sampler2D uPaintIdx;\nuniform sampler2D uPaintCov;\nuniform sampler2D uAtlas;\nuniform float uHalf;\nuniform float uSize;')
+        .replace('#include <color_fragment>', `#include <color_fragment>
+          {
+            vec2 pg = (vPaintPos + uHalf) / uSize;
+            float idx = floor(texture2D(uPaintIdx, pg).r * 255.0 + 0.5);
+            float cov = texture2D(uPaintCov, pg).g;
+            if (idx > 0.5 && cov > 0.01) {
+              float i = idx - 1.0;
+              vec2 tile = vec2(mod(i, 4.0), floor(i / 4.0));
+              vec2 tuv = fract(vPaintPos / 4.0) * (252.0 / 256.0) + 2.0 / 256.0;
+              vec3 pc = texture2D(uAtlas, (tile + tuv) / vec2(4.0, 3.0)).rgb;
+              diffuseColor.rgb = mix(diffuseColor.rgb, pow(pc, vec3(2.2)), cov);
+            }
+          }`);
+    };
+    mat.customProgramCacheKey = () => 'terrain-paint';
+  }
+  function writePaint(px, pz, idx, cov, quiet) {
+    const i = px + Math.floor(HALF), j = pz + Math.floor(HALF);
+    if (!paintData || i < 0 || j < 0 || i >= paintSize || j >= paintSize) return;
+    const o = (j * paintSize + i) * 4;
+    paintData[o] = idx; paintData[o + 1] = cov;
+    if (!quiet) { paintIdxTex.needsUpdate = true; paintCovTex.needsUpdate = true; }
   }
   const _n = new THREE.Vector3();
   function normalAt(x, z, out) {
@@ -318,6 +401,7 @@
     const mat = new THREE.MeshStandardMaterial({
       vertexColors: true, map: grassDetailTexture(), roughness: 1, metalness: 0, flatShading: true,
     });
+    setupPaint(mat);
     const mesh = new THREE.Mesh(geo, mat);
     mesh.receiveShadow = true;
     mesh.name = 'terrain';
@@ -440,6 +524,6 @@
     init, build, height, surfaceHeight, normalAt, raycast, isWater, onBridge, bridgeDeck,
     townFactor, pathDistance, boundaryAmount, boundaryRaw, streamZ, caveDist,
     get BRIDGE_Z() { return BRIDGE_Z; }, get POND() { return POND; }, get STREETS() { return STREETS; },
-    get FIELD_PATHS() { return FIELD_PATHS; }, get map() { return M; }, get HALF() { return HALF; }, get SIZE() { return SIZE; }, groundDelta, refreshGround,
+    get FIELD_PATHS() { return FIELD_PATHS; }, get map() { return M; }, get HALF() { return HALF; }, get SIZE() { return SIZE; }, groundDelta, refreshGround, writePaint, PAINT, buildPaintAtlas, deckAt, deckBase,
   };
 })(window.G = window.G || {});

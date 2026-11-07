@@ -746,6 +746,7 @@ button:focus-visible { outline: 2px solid #ffd76a; outline-offset: 2px; }
 .ed-item { display: grid; justify-items: center; gap: 2px; padding: 6px 2px; border: 1px solid var(--cell-edge); border-radius: 8px; background: var(--cell-bg); color: var(--ink); font: 600 11px var(--font); cursor: pointer; text-align: center; line-height: 1.15; }
 .ed-item:hover, .ed-item:focus-visible { border-color: var(--accent); outline: none; }
 .ed-item.on { background: #fff4cc; border-color: #e0b84a; }
+.ed-item.on, .ed-item.on span:last-child { color: #1a2030; }
 .ed-ico { font-size: 20px; }
 .ed-field { display: grid; gap: 2px; font-size: 11.5px; color: var(--ink-soft); font-weight: 600; margin-bottom: 6px; }
 .ed-field input, .ed-field select, .ed-field textarea { font: 500 13px var(--font); padding: 4px 6px; border-radius: 6px; border: 1px solid #b9c2d6; color: #1a2030; background: #fff; min-width: 0; }
@@ -757,9 +758,8 @@ button:focus-visible { outline: 2px solid #ffd76a; outline-offset: 2px; }
 
 /* Map editor: readable dark text in every white box. */
 .gwin .ed-body input, .gwin .ed-body select, .gwin .ed-body textarea, .gwin .ed-body .soc-in, #teleport input { color: #1a2030; background: #fff; }
-.ed-item { color: #1a2030; }
-.ed-item span:last-child { color: #1a2030; }
-.ed-field > span { color: #3a4358; }
+.ed-item, .ed-item span:last-child { color: var(--ink); }
+.ed-field > span { color: var(--ink-soft); }
 /* While editing: hide the action bar, character window, debug buttons and buffs. */
 body.editing #hotbar, body.editing #status, body.editing #debug, body.editing #buffs, body.editing #tracker { display: none !important; }
 #ed-keys { position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%); z-index: 25; max-width: min(900px, 92vw); padding: 8px 14px; border-radius: 12px;
@@ -767,11 +767,17 @@ body.editing #hotbar, body.editing #status, body.editing #debug, body.editing #b
 #ed-keys[hidden] { display: none; }
 #ed-keys .kb-coords { display: flex; gap: 18px; justify-content: center; flex-wrap: wrap; color: #ffd98a; font-variant-numeric: tabular-nums; }
 .ed-tp { bottom: 246px; }
-.tp-head { margin: 6px 0 4px; font-size: 12px; color: #3a4358; text-transform: uppercase; letter-spacing: 0.04em; }
+.tp-head { margin: 6px 0 4px; font-size: 12px; color: var(--ink-soft); text-transform: uppercase; letter-spacing: 0.04em; }
 .tp-list { display: grid; gap: 4px; margin-bottom: 6px; }
-.tp-item { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--cell-edge); background: var(--cell-bg); color: #1a2030; font: 600 13px var(--font); cursor: pointer; text-align: left; }
+.tp-item { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--cell-edge); background: var(--cell-bg); color: var(--ink); font: 600 13px var(--font); cursor: pointer; text-align: left; }
 .tp-item:hover, .tp-item:focus-visible { border-color: var(--accent); outline: none; }
-.tp-item small { color: #5a6378; font-weight: 500; }
+.tp-item small { color: var(--ink-soft); font-weight: 500; }
 .tp-item.here { background: #fff4cc; border-color: #e0b84a; }
-.ed-slider { display: grid; grid-template-columns: 80px 1fr 28px; gap: 8px; align-items: center; font-size: 12px; color: #3a4358; font-weight: 600; margin: 6px 0; }
-.ed-mem { color: #3a4358; font-size: 11.5px; align-self: center; }
+.tp-item.here, .tp-item.here small { color: #1a2030; }
+.ed-slider { display: grid; grid-template-columns: 80px 1fr 28px; gap: 8px; align-items: center; font-size: 12px; color: var(--ink-soft); font-weight: 600; margin: 6px 0; }
+.ed-mem { color: var(--ink-soft); font-size: 11.5px; align-self: center; }
+
+.ed-swatches { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin-bottom: 6px; }
+.ed-swatch { display: grid; gap: 3px; justify-items: center; padding: 4px; border: 2px solid var(--cell-edge); border-radius: 8px; background: var(--cell-bg); color: var(--ink); font: 600 11px var(--font); cursor: pointer; }
+.ed-swatch img { width: 100%; aspect-ratio: 1; border-radius: 5px; image-rendering: auto; }
+.ed-swatch.on { border-color: #e0b84a; box-shadow: 0 0 0 2px #e0b84a inset; }

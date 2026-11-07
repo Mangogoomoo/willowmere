@@ -99,13 +99,16 @@
   /* ------------------------------------------------------------ object library */
   const noop = new Proxy({}, { get: () => () => {} });
   // Build one of the game's own props by itself (at the origin, base on the ground).
-  function fromEnv(env, draw) {
+  function fromEnv(env, draw, center) {
     const fake = Object.create(env); fake.nav = noop; fake.colliders = []; fake._lib = true;
+    fake.scene = new THREE.Group(); fake.landmarks = [];
     const parts = []; draw(fake, parts);
-    const geo = U.mergeParts(parts); geo.computeBoundingBox();
-    geo.translate(0, -geo.boundingBox.min.y, 0);
-    const m = new THREE.Mesh(geo, env.propMat); m.castShadow = true; m.receiveShadow = true;
-    return m;
+    const g = new THREE.Group();
+    if (parts.length) { const m = new THREE.Mesh(U.mergeParts(parts), env.propMat); m.castShadow = true; m.receiveShadow = true; g.add(m); }
+    for (const c of [...fake.scene.children]) g.add(c);
+    const box = new THREE.Box3().setFromObject(g), c = box.getCenter(new THREE.Vector3());
+    for (const ch of g.children) { ch.position.y -= box.min.y; if (center) { ch.position.x -= c.x; ch.position.z -= c.z; } }
+    return g;
   }
   const wrap = (m) => { const g = new THREE.Group(); g.add(m); return g; };
   const tintMats = {};
@@ -202,6 +205,31 @@
       { geo: new THREE.CylinderGeometry(0.9, 0.95, 0.8, 12), color: '#9c958a', pos: [0, 0.4, 0], jitter: 0.15 },
       { geo: new THREE.BoxGeometry(0.12, 1.6, 0.12), color: '#7a5a3e', pos: [-0.8, 1.2, 0] }, { geo: new THREE.BoxGeometry(0.12, 1.6, 0.12), color: '#7a5a3e', pos: [0.8, 1.2, 0] },
       { geo: new THREE.ConeGeometry(1.2, 0.6, 4), color: '#a4553e', pos: [0, 2.2, 0], rot: [0, Math.PI / 4, 0] }], e.propMat) },
+    { k: 'gate', name: 'Town gate', cat: 'Town', icon: '🏰', solid: 0, rect: [5.2, 1.2], build: (e) => fromEnv(e, (f, p) => f.gate(p, p), true) },
+    { k: 'spike_wall', name: 'Spike wall', cat: 'Town', icon: '🪵', solid: 0, rect: (o) => [((o.opts && o.opts.n) || 8) * 0.25, 0.3], build: (e, o) => {
+      const n = (o && o.opts && o.opts.n) || 8, parts = [], r = U.mulberry32(n * 7 + 3);
+      for (let i = 0; i < n; i++) { const x = (i - (n - 1) / 2) * 0.5, sc = 0.9 + r() * 0.25;
+        parts.push({ geo: new THREE.CylinderGeometry(0.2, 0.24, 2.4, 6), color: '#8a5a33', pos: [x, 1.2 * sc, 0], scale: [1, sc, 1], jitter: 0.15 }, { geo: new THREE.ConeGeometry(0.21, 0.5, 6), color: '#a77446', pos: [x, 2.4 * sc + 0.25, 0] }); }
+      return prim(parts, e.propMat); } },
+    // Bridges (walkable: players walk on the deck, over water too)
+    { k: 'bridge_wood', name: 'Wooden bridge', cat: 'Bridges', icon: '🌉', solid: 0, deck: { hw: 2.6, hl: 7.5, top: 0.35 }, rails: true, build: (e) => prim([
+      { geo: new THREE.BoxGeometry(5.2, 0.25, 15), color: '#9a7350', pos: [0, 0.22, 0] },
+      ...Array.from({ length: 14 }, (_, i) => ({ geo: new THREE.BoxGeometry(5.3, 0.06, 0.9), color: i % 2 ? '#a77c55' : '#8f6a46', pos: [0, 0.37, -6.5 + i * 1.0] })),
+      ...[-1, 1].flatMap((sx) => [{ geo: new THREE.BoxGeometry(0.14, 0.14, 15), color: '#7a5636', pos: [sx * 2.5, 1.25, 0] },
+        ...Array.from({ length: 6 }, (_, i) => ({ geo: new THREE.BoxGeometry(0.18, 1.1, 0.18), color: '#6e4c30', pos: [sx * 2.5, 0.85, -7.2 + i * 2.88] }))]),
+      ...[-1, 1].flatMap((sx) => [-1, 1].map((sz) => ({ geo: new THREE.CylinderGeometry(0.22, 0.26, 2.4, 7), color: '#6a4a2e', pos: [sx * 2.4, -0.9, sz * 6.8] })))], e.propMat) },
+    { k: 'bridge_stone', name: 'Stone bridge', cat: 'Bridges', icon: '🌁', solid: 0, deck: { hw: 2.4, hl: 7, top: 0.6 }, rails: true, build: (e) => prim([
+      { geo: new THREE.BoxGeometry(4.8, 0.5, 14), color: '#b3aca0', pos: [0, 0.35, 0], jitter: 0.06 },
+      { geo: new THREE.CylinderGeometry(3.2, 3.2, 4.6, 16, 1, false, 0, Math.PI), color: '#a39c90', pos: [0, -2.6, 0], rot: [0, Math.PI / 2, Math.PI / 2], scale: [1, 1, 1] },
+      ...[-1, 1].map((sx) => ({ geo: new THREE.BoxGeometry(0.35, 0.7, 14), color: '#c2bbae', pos: [sx * 2.3, 0.95, 0], jitter: 0.05 }))], e.propMat) },
+    { k: 'bridge_rope', name: 'Rope bridge', cat: 'Bridges', icon: '🪢', solid: 0, deck: { hw: 1.1, hl: 6, top: 0.25 }, rails: true, build: (e) => prim([
+      ...Array.from({ length: 16 }, (_, i) => ({ geo: new THREE.BoxGeometry(2.2, 0.08, 0.55), color: i % 2 ? '#a77c55' : '#8f6a46', pos: [0, 0.2, -5.6 + i * 0.75], rot: [0, (i % 3 - 1) * 0.04, 0] })),
+      ...[-1, 1].flatMap((sx) => [{ geo: new THREE.CylinderGeometry(0.04, 0.04, 12, 4), color: '#c9b48a', pos: [sx * 1.05, 1.0, 0], rot: [Math.PI / 2, 0, 0] },
+        ...[-1, 1].map((sz) => ({ geo: new THREE.CylinderGeometry(0.1, 0.12, 1.6, 6), color: '#6e4c30', pos: [sx * 1.05, 0.6, sz * 5.9] }))])], e.propMat) },
+    { k: 'boardwalk', name: 'Boardwalk / dock', cat: 'Bridges', icon: '🛶', solid: 0, deck: { hw: 1.6, hl: 4, top: 0.4 }, rails: false, build: (e) => prim([
+      ...Array.from({ length: 10 }, (_, i) => ({ geo: new THREE.BoxGeometry(3.2, 0.1, 0.75), color: i % 2 ? '#a77c55' : '#94704b', pos: [0, 0.35, -3.6 + i * 0.8] })),
+      ...[-1, 1].flatMap((sx) => [-1, 0, 1].map((sz) => ({ geo: new THREE.CylinderGeometry(0.13, 0.15, 2, 6), color: '#6e4c30', pos: [sx * 1.45, -0.6, sz * 3.6] })))], e.propMat) },
+    { k: 'stalagmite', name: 'Stalagmite', cat: 'Props', icon: '🗻', solid: 0.5, build: (e) => prim([{ geo: new THREE.ConeGeometry(0.6, 2.4, 7), color: '#8a7f70', pos: [0, 1.2, 0], jitter: 0.2 }], e.propMat) },
     // Props
     { k: 'barrel', name: 'Barrel', cat: 'Props', icon: '🛢️', solid: 0.4, build: (e) => fromEnv(e, (f, p) => f.barrel(p, 0, 0)) },
     { k: 'crate', name: 'Crate', cat: 'Props', icon: '📦', solid: 0.45, build: (e) => fromEnv(e, (f, p) => f.crate(p, 0, 0, 0)) },
@@ -226,14 +254,37 @@
   /* Original props: recorded while a map is built, so they can be turned into
      editable objects; once a map's originals are "taken over", they're skipped
      here and come back as editor objects instead. */
-  const REC = { house: 'house', fountain: 'fountain', stall: 'stall_blue', lamp: 'lamp', bench: 'bench', planter: 'planter', barrel: 'barrel', crate: 'crate', noticeBoard: 'board' };
+  const REC = { house: 'house', fountain: 'fountain', stall: 'stall_blue', lamp: 'lamp', bench: 'bench', planter: 'planter', barrel: 'barrel', crate: 'crate', noticeBoard: 'board', gate: 'gate', palisade: 'spike_wall' };
+  // Batched decorations (rocks, boulders, bushes, mushrooms, stalagmites...) are captured
+  // item by item while these builders run; grass tufts and small flowers stay as ground cover.
+  const CAPTURE = ['buildField', 'buildCave', 'giantMushrooms', 'pondDetails'];
+  if (G.Environment) {
+    const P = G.Environment.prototype, inst = P.instanced;
+    P.instanced = function (geo, mat, list, opts) {
+      if (this._capCtx && !this._lib && (mat === this.propMat || mat === this.foliageMat) && list.length && list.length <= 800) {
+        const key = this._capCtx + '#' + (this._capN = (this._capN || 0) + 1);
+        (this.captured || (this.captured = {}))[key] = { geo, mat, n: geo.attributes.position.count };
+        (this.capturedItems || (this.capturedItems = [])).push(...list.map((it) => ({ key, x: it.x, z: it.z, ry: it.ry || 0, s: Array.isArray(it.s) ? it.s[1] : (it.s || 1) })));
+        if (this.map && this.map.takeover >= 2) return null;
+      }
+      return inst.call(this, geo, mat, list, opts);
+    };
+    // Trees are recorded one by one already; their batch isn't captured.
+    const flush = P.flushTrees;
+    if (flush) P.flushTrees = function (...a) { const prev = this._capCtx; this._capCtx = null; try { return flush.apply(this, a); } finally { this._capCtx = prev; } };
+    for (const fn of CAPTURE) {
+      const orig = P[fn]; if (!orig) continue;
+      P[fn] = function (...a) { const prev = this._capCtx; this._capCtx = fn; this._capN = 0; try { return orig.apply(this, a); } finally { this._capCtx = prev; } };
+    }
+  }
   if (G.Environment) for (const fn of [...Object.keys(REC), 'treeAt']) {
     const orig = G.Environment.prototype[fn];
     if (!orig) continue;
     G.Environment.prototype[fn] = function (...a) {
       if (this._lib || this._inRec) return orig.apply(this, a);
       (this.recorded || (this.recorded = [])).push({ fn, a: fn === 'treeAt' ? a.slice(0, 4) : a.slice(1) });
-      if (this.map && this.map.takeover) return fn === 'treeAt' ? true : undefined;
+      const v2only = fn === 'gate' || fn === 'palisade';
+      if (this.map && this.map.takeover && (!v2only || this.map.takeover >= 2)) return fn === 'treeAt' ? true : undefined;
       this._inRec = true;
       try { return orig.apply(this, a); } finally { this._inRec = false; }
     };
@@ -274,13 +325,34 @@
       } catch (e) { /* offline: no edits */ }
     },
     // Everything a built-in map came with, as editor objects and entities.
-    originals(game) {
+    originals(game, onlyNew) {
       const base = G.Maps[game.mapId], out = { objects: [], entities: [] };
+      const NEW = { gate: 1, palisade: 1 };
       const u = () => Math.random().toString(36).slice(2, 9), r2 = (v) => Math.round(v * 100) / 100;
       for (const r of game.env.recorded || []) {
+        if (onlyNew && !NEW[r.fn]) continue;
         if (r.fn === 'treeAt') {
           const [kind, x, z, sc] = r.a;
           out.objects.push({ u: u(), k: { round: 'tree', pine: 'pine', blossom: 'blossom' }[kind] || 'tree', x: r2(x), z: r2(z), y: 0, ry: 0, s: r2(sc || 1) });
+          continue;
+        }
+        if (r.fn === 'gate') { out.objects.push({ u: u(), k: 'gate', x: 0, z: r2(C.TOWN.cz + C.TOWN.radius + 0.8), y: 0, ry: 0, s: 1 }); continue; }
+        if (r.fn === 'palisade') {
+          // The ring of spikes, as straight wall segments of about 8 spikes each.
+          const T = C.TOWN, R = T.radius + 1, n = Math.round((Math.PI * 2 * R) / 0.5);
+          let run = [];
+          const flush = () => {
+            if (!run.length) return;
+            const a0 = run[0], a1 = run[run.length - 1], am = (a0 + a1) / 2, ch = Math.cos((a1 - a0) / 2);
+            out.objects.push({ u: u(), k: 'spike_wall', x: r2(T.cx + Math.cos(am) * R * ch), z: r2(T.cz + Math.sin(am) * R * ch), y: 0, ry: r2(-am - Math.PI / 2), s: 1, opts: { n: run.length } });
+            run = [];
+          };
+          for (let i = 0; i < n; i++) {
+            const a = (i / n) * Math.PI * 2, x = T.cx + Math.cos(a) * R, z = T.cz + Math.sin(a) * R;
+            if (z > T.cz && Math.abs(x) < 4.6) { flush(); continue; }
+            run.push(a); if (run.length === 8) flush();
+          }
+          flush();
           continue;
         }
         const [x, z, rot, extra] = r.a;
@@ -289,6 +361,9 @@
         if (r.fn === 'stall' && Array.isArray(extra)) o.opts = extra.slice(0, 2);
         out.objects.push(o);
       }
+      for (const it of game.env.capturedItems || []) out.objects.push({ u: u(), k: 'cap:' + it.key, x: r2(it.x), z: r2(it.z), y: 0, ry: r2(it.ry), s: r2(it.s) });
+      if (base.bridge && G.Terrain.BRIDGE_Z > -9000) out.objects.push({ u: u(), k: 'bridge_wood', x: C.BRIDGE.x, z: r2(G.Terrain.BRIDGE_Z), y: 0, ry: 0, s: 1 });
+      if (onlyNew) return out;
       for (const sp of base.spawns || []) out.entities.push({ u: u(), type: 'spawn', monster: sp.type, x: sp.x, z: sp.z, y: 0, ry: 0, r: sp.r || 0.5, count: sp.count || 1 });
       for (const pt of base.portals || []) out.entities.push({ u: u(), type: 'warp', to: pt.to, tx: pt.tx, tz: pt.tz, label: pt.label || '', x: pt.x, z: pt.z, y: 0, ry: 0 });
       for (const id of base.npcs || []) {
@@ -310,7 +385,12 @@
       const map = Object.assign({}, base);
       if (d.bounds) { map.bounds = d.bounds; map.worldSize = this.worldSizeFor(d.bounds); C.WORLD_SIZE = map.worldSize; }
       if (d.ground) map.ground = d.ground;
-      map.takeover = !!d.takeover;
+      if (d.paint) map.paint = d.paint;
+      // Take-over 1: houses, trees and props; 2: also the gate, spike wall, bridge, rocks and bushes.
+      map.takeover = d.takeover === true ? 1 : (d.takeover || 0);
+      if (map.takeover >= 2) map.bridge = false;   // the bridge is an editor object now
+      map.decks = d.objects.map((o) => { const def = LIB.find((l) => l.k === o.k); if (!def || !def.deck) return null;
+        const sc = o.s || 1; return { x: o.x, z: o.z, ry: o.ry || 0, hw: def.deck.hw * sc, hl: def.deck.hl * sc, top: def.deck.top * sc, y: o.y || 0 }; }).filter(Boolean);
       map.portals = (d.takeover ? [] : base.portals || []).concat(d.entities.filter((e) => e.type === 'warp' && G.Maps[e.to]).map((e) => ({ x: e.x, z: e.z, to: e.to, tx: +e.tx || 0, tz: +e.tz || 0, label: e.label || (G.Maps[e.to] || {}).name })));
       map.spawns = (d.takeover ? [] : base.spawns || []).concat(d.entities.filter((e) => e.type === 'spawn' && C.MONSTERS[e.monster]).map((e) => ({ type: e.monster, x: e.x, z: e.z, r: Math.max(1, +e.r || 5), count: Math.max(1, Math.min(50, +e.count || 1)) })));
       const npcs = d.entities.filter((e) => e.type === 'npc');
@@ -355,6 +435,9 @@
       if (o.k.startsWith('asset:')) {
         const id = o.k.slice(6);
         this.loadModel(id).then((m) => { holder.add(m.clone()); }).catch((e) => console.warn('Model', id, e.message));
+      } else if (o.k.startsWith('cap:')) {
+        const c = game.env.captured && game.env.captured[o.k.slice(4)];
+        if (c) { const m = new THREE.Mesh(c.geo, c.mat); m.castShadow = true; m.receiveShadow = true; holder.add(m); }
       } else {
         // Each kind of object is built once per map and shared by all its copies.
         const key = o.k + (o.opts ? JSON.stringify(o.opts) : '');
@@ -372,13 +455,23 @@
       this.group.add(g);
       this.objects.push(g);
       const def = LIB.find((l) => l.k === o.k);
-      const solid = o.solid != null ? o.solid : (def ? def.solid : 0);
+      const solid = o.solid != null ? o.solid : (def ? def.solid : (o.k.startsWith('cap:') ? 0.4 : 0));
       if (block && solid > 0) game.nav.blockCircle(o.x, o.z, solid * (o.s || 1));
+      if (block && def && def.rect) { const [hw, hd] = typeof def.rect === 'function' ? def.rect(o) : def.rect; game.nav.blockRect(o.x, o.z, hw * (o.s || 1), hd * (o.s || 1), o.ry || 0); }
+      if (block && def && def.deck && def.rails) {
+        // Railings along both sides of a bridge.
+        const sc = o.s || 1, hw = def.deck.hw * sc, hl = def.deck.hl * sc, c = Math.cos(o.ry || 0), sn = Math.sin(o.ry || 0);
+        for (const sx of [-1, 1]) { const px = sx * hw * c, pz = -sx * hw * sn, ax = hl * sn, az = hl * c;
+          game.nav.blockSegment(o.x + px - ax, o.z + pz - az, o.x + px + ax, o.z + pz + az, 0.25); }
+      }
       if (def && def.light) this.spawnLight(game, Object.assign({ x: o.x, z: o.z, y: (o.y || 0) + 1.9, u: o.u + '_l', fromObject: true }, def.light));
       return g;
     },
     place(g, o) {
-      const y = (o.y || 0) + G.Terrain.height(o.x, o.z);
+      const def = LIB.find((l) => l.k === o.k);
+      const y = def && def.deck
+        ? G.Terrain.deckBase({ x: o.x, z: o.z, ry: o.ry || 0, hl: def.deck.hl * (o.s || 1), y: o.y || 0 })
+        : (o.y || 0) + G.Terrain.height(o.x, o.z);
       g.position.set(o.x, y, o.z); g.rotation.set(0, o.ry || 0, 0); g.scale.setScalar(o.s || 1);
     },
     spawnLight(game, e) {

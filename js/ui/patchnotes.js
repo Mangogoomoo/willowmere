@@ -6,6 +6,12 @@
   const h = G.h;
 
   const PATCHES = [
+    { v: '0.28', date: '2026-11-08T12:00', title: 'Map editor: ground painting, bridges, everything editable', notes: [
+      'Ground painting: paint grass, dark grass, dirt path, cobblestone, sand, stone tiles, dead grass, graveyard soil, cursed ground, mud and snow with a brush, or erase paint to bring the original ground back.',
+      'Bridges to place: wooden, stone, rope bridge and boardwalk. Players walk on them, over water too.',
+      'Making a map’s originals editable now covers everything: the town gate and its sign, the wooden spike wall (as segments), the river bridge, and every rock, boulder, bush and berry bush. Original pieces can be placed again from “From this map”.',
+      'NPCs show an arrow on the ground for the way they face, and turn live when you rotate them.',
+    ] },
     { v: '0.27', date: '2026-11-07T18:00', title: 'Map editor: ground tools and original objects', notes: [
       'Ground tab: raise, lower, smooth and flatten the ground with a brush (adjustable size and strength). Walking follows the new shape after saving.',
       'Maps’ original houses, trees, props, monster spawns (training dummies too), warps and NPCs can now be made editable: move, rotate or delete them. NPCs keep their shops, quests and dialog.',
