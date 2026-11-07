@@ -729,3 +729,28 @@ button:focus-visible { outline: 2px solid #ffd76a; outline-offset: 2px; }
 .pn-head { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; margin-bottom: 4px; font-size: 13px; }
 .pn-new ul { padding: 0 0 0 18px; }
 .pn-scroll { max-height: min(46vh, 380px); overflow-y: auto; padding-right: 4px; margin-bottom: 8px; }
+
+/* ---------- map editor ---------- */
+.ed-toggle { position: fixed; left: 12px; bottom: 210px; z-index: 30; padding: 6px 12px; border-radius: 9px; border: 1px solid var(--panel-edge); background: var(--panel-bg); color: var(--ink); font: 700 12.5px var(--font); cursor: pointer; box-shadow: var(--shadow); }
+.ed-toggle[hidden] { display: none; }
+.ed-status { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; font-size: 12.5px; margin-bottom: 6px; }
+.ed-status span { color: var(--ink-soft); }
+.ed-dirty { margin-left: auto; font-weight: 700; }
+.ed-dirty.on { color: #d9822b; }
+.ed-tabs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 3px; margin-bottom: 8px; }
+.ed-tab { padding: 6px 4px; border: 1px solid var(--cell-edge); border-radius: 7px; background: var(--cell-bg); color: var(--ink); font: 600 12px var(--font); cursor: pointer; }
+.ed-tab.on { background: var(--accent); color: #fff; border-color: transparent; }
+.ed-body { max-height: 52vh; overflow-y: auto; padding-right: 4px; }
+.ed-body h4 { margin: 8px 0 5px; font-size: 12px; color: var(--ink-soft); text-transform: uppercase; letter-spacing: 0.04em; }
+.ed-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin-bottom: 6px; }
+.ed-item { display: grid; justify-items: center; gap: 2px; padding: 6px 2px; border: 1px solid var(--cell-edge); border-radius: 8px; background: var(--cell-bg); color: var(--ink); font: 600 11px var(--font); cursor: pointer; text-align: center; line-height: 1.15; }
+.ed-item:hover, .ed-item:focus-visible { border-color: var(--accent); outline: none; }
+.ed-item.on { background: #fff4cc; border-color: #e0b84a; }
+.ed-ico { font-size: 20px; }
+.ed-field { display: grid; gap: 2px; font-size: 11.5px; color: var(--ink-soft); font-weight: 600; margin-bottom: 6px; }
+.ed-field input, .ed-field select, .ed-field textarea { font: 500 13px var(--font); padding: 4px 6px; border-radius: 6px; border: 1px solid var(--cell-edge); color: var(--ink); background: #fff; min-width: 0; }
+.ed-field input[type=color] { padding: 0; height: 28px; }
+.ed-xyz { display: grid; grid-template-columns: repeat(auto-fit, minmax(80px, 1fr)); gap: 6px; }
+.ed-grow { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; font-size: 12px; margin: 4px 0; }
+.ed-foot { display: flex; gap: 6px; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--cell-edge); }
+.ed-help { margin: 6px 0 0; font-size: 11px; color: var(--ink-soft); line-height: 1.4; }

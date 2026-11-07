@@ -141,3 +141,20 @@ UPDATE guild_members m SET rank = 0 FROM guilds g WHERE g.id = m.guild_id AND g.
 
 -- EXP tax per guild rank (set by the Guild Leader).
 ALTER TABLE guilds ADD COLUMN IF NOT EXISTS rank_tax JSONB NOT NULL DEFAULT '[0, 0, 0, 0]';
+
+-- Map editor: admin accounts, edited/custom maps and uploaded 3D models.
+ALTER TABLE accounts ADD COLUMN IF NOT EXISTS is_admin BOOLEAN NOT NULL DEFAULT false;
+CREATE TABLE IF NOT EXISTS custom_maps (
+  id          TEXT PRIMARY KEY,
+  data        JSONB NOT NULL,
+  updated_by  BIGINT,
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS map_assets (
+  id          TEXT PRIMARY KEY,
+  name        TEXT NOT NULL,
+  size        INT  NOT NULL,
+  data        BYTEA NOT NULL,
+  uploaded_by BIGINT,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);

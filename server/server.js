@@ -70,8 +70,17 @@ async function newSession(accountId) {
 }
 async function accountFromToken(token) {
   if (!token || typeof token !== 'string' || token.length > 100) return null;
-  const r = await pool.query('SELECT a.id, a.username FROM sessions s JOIN accounts a ON a.id = s.account_id WHERE s.token_hash = $1 AND s.expires_at > now()', [sha256(token)]);
+  const r = await pool.query('SELECT a.id, a.username, a.is_admin FROM sessions s JOIN accounts a ON a.id = s.account_id WHERE s.token_hash = $1 AND s.expires_at > now()', [sha256(token)]);
   return r.rows[0] || null;
+}
+// Admins: accounts marked is_admin, or listed in the ADMIN_USERS setting (comma-separated usernames).
+const ADMINS = new Set(String(process.env.ADMIN_USERS || '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean));
+async function requireAdmin(req, res) {
+  const h = req.headers.authorization || '';
+  const acct = await accountFromToken(h.startsWith('Bearer ') ? h.slice(7) : '');
+  if (!acct) { send(res, 401, { error: 'Please log in again.' }); return null; }
+  if (!acct.is_admin && !ADMINS.has(acct.username.toLowerCase())) { send(res, 403, { error: 'Only admins can do that.' }); return null; }
+  return acct;
 }
 async function requireAccount(req, res) {
   const h = req.headers.authorization || '';
@@ -163,6 +172,60 @@ async function api(req, res, url) {
   const ip = req.socket.remoteAddress || '?';
   const m = (re) => re.exec(url.pathname);
   if (url.pathname === '/api/health') return send(res, 200, { ok: true, online: online.size });
+  /* ---- map editor: edited maps and uploaded 3D models ---- */
+  if (url.pathname === '/api/me') {
+    const acct = await requireAccount(req, res); if (!acct) return;
+    return send(res, 200, { username: acct.username, isAdmin: !!acct.is_admin || ADMINS.has(acct.username.toLowerCase()) });
+  }
+  if (url.pathname === '/api/maps' && req.method === 'GET') {
+    const rows = (await pool.query('SELECT id, data FROM custom_maps')).rows;
+    return send(res, 200, { maps: Object.fromEntries(rows.map((r) => [r.id, r.data])) });
+  }
+  let mapM;
+  if ((mapM = /^\/api\/maps\/([a-z0-9_]{1,40})$/.exec(url.pathname)) && (req.method === 'PUT' || req.method === 'DELETE')) {
+    const acct = await requireAdmin(req, res); if (!acct) return;
+    const id = mapM[1];
+    if (req.method === 'DELETE') {
+      await pool.query('DELETE FROM custom_maps WHERE id = $1', [id]);
+      for (const [ws] of online) if (ws.readyState === 1) ws.send(JSON.stringify({ t: 'map_updated', id, data: null }));
+      return send(res, 200, { ok: true });
+    }
+    const body = await readJson(req, 3_000_000);
+    const data = body && body.data;
+    if (!data || typeof data !== 'object' || !Array.isArray(data.objects) || !Array.isArray(data.entities)) return send(res, 400, { error: 'Bad map data.' });
+    if (data.objects.length > 5000 || data.entities.length > 1000) return send(res, 400, { error: 'Too many objects on one map.' });
+    data.id = id;
+    await pool.query('INSERT INTO custom_maps (id, data, updated_by, updated_at) VALUES ($1, $2, $3, now()) ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data, updated_by = EXCLUDED.updated_by, updated_at = now()', [id, JSON.stringify(data), acct.id]);
+    // Everyone online gets the new version straight away.
+    for (const [ws] of online) if (ws.readyState === 1) ws.send(JSON.stringify({ t: 'map_updated', id, data }));
+    return send(res, 200, { ok: true });
+  }
+  if (url.pathname === '/api/assets' && req.method === 'GET') {
+    const rows = (await pool.query('SELECT id, name, size FROM map_assets ORDER BY created_at')).rows;
+    return send(res, 200, { assets: rows });
+  }
+  if (url.pathname === '/api/assets' && req.method === 'POST') {
+    const acct = await requireAdmin(req, res); if (!acct) return;
+    const body = await readJson(req, 21_000_000);
+    const name = String((body && body.name) || 'model').replace(/\.glb$/i, '').replace(/[^A-Za-z0-9 _-]/g, '').slice(0, 40) || 'model';
+    const buf = Buffer.from(String((body && body.data) || ''), 'base64');
+    if (buf.length < 20 || buf.length > 15_000_000 || buf.toString('ascii', 0, 4) !== 'glTF') return send(res, 400, { error: 'Upload a .glb file (binary glTF) of at most 15 MB.' });
+    const id = name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 24) + '_' + crypto.randomBytes(3).toString('hex');
+    await pool.query('INSERT INTO map_assets (id, name, size, data, uploaded_by) VALUES ($1, $2, $3, $4, $5)', [id, name, buf.length, buf, acct.id]);
+    return send(res, 200, { id, name, size: buf.length });
+  }
+  let am;
+  if ((am = /^\/api\/assets\/([a-z0-9_]{1,40})$/.exec(url.pathname))) {
+    if (req.method === 'DELETE') {
+      const acct = await requireAdmin(req, res); if (!acct) return;
+      await pool.query('DELETE FROM map_assets WHERE id = $1', [am[1]]);
+      return send(res, 200, { ok: true });
+    }
+    const r = (await pool.query('SELECT data FROM map_assets WHERE id = $1', [am[1]])).rows[0];
+    if (!r) { res.writeHead(404); return res.end(); }
+    res.writeHead(200, { 'Content-Type': 'model/gltf-binary', 'Cache-Control': 'public, max-age=31536000, immutable' });
+    return res.end(r.data);
+  }
   if (url.pathname === '/api/db') {
     const items = (await pool.query('SELECT data FROM item_defs ORDER BY id')).rows.map((r) => r.data);
     const monsters = (await pool.query('SELECT id, data FROM monster_defs ORDER BY level, id')).rows.map((r) => Object.assign({ id: r.id }, r.data));
@@ -184,7 +247,7 @@ async function api(req, res, url) {
     if (typeof password !== 'string' || password.length < 8 || password.length > 200) return send(res, 400, { error: 'Passwords need at least 8 characters.' });
     try {
       const r = await pool.query('INSERT INTO accounts (username, pass_hash, last_login) VALUES ($1, $2, now()) RETURNING id, username', [username, hashPassword(password)]);
-      return send(res, 200, { token: await newSession(r.rows[0].id), username: r.rows[0].username });
+      return send(res, 200, { token: await newSession(r.rows[0].id), username: r.rows[0].username, isAdmin: ADMINS.has(r.rows[0].username.toLowerCase()) });
     } catch (e) { if (e.code === '23505') return send(res, 409, { error: 'That username is taken.' }); throw e; }
   }
   if (url.pathname === '/api/login' && req.method === 'POST') {
@@ -194,7 +257,7 @@ async function api(req, res, url) {
     const a = r.rows[0];
     if (!a || typeof password !== 'string' || !checkPassword(password, a.pass_hash)) return send(res, 401, { error: 'Wrong username or password.' });
     await pool.query('UPDATE accounts SET last_login = now() WHERE id = $1', [a.id]);
-    return send(res, 200, { token: await newSession(a.id), username: a.username });
+    return send(res, 200, { token: await newSession(a.id), username: a.username, isAdmin: !!a.is_admin || ADMINS.has(a.username.toLowerCase()) });
   }
   if (url.pathname === '/api/logout' && req.method === 'POST') {
     const h = req.headers.authorization || '';
@@ -855,6 +918,7 @@ async function start() {
   for (const [id, m] of Object.entries(mons)) await pool.query('INSERT INTO monster_defs (id, name, level, hp, element, data) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, level = EXCLUDED.level, hp = EXCLUDED.hp, element = EXCLUDED.element, data = EXCLUDED.data', [id, m.name, m.level, m.hp, m.element || 'neutral', JSON.stringify(m)]);
   if (G.Maps) for (const [mapId, map] of Object.entries(G.Maps)) for (const sp of map.spawns || []) await pool.query('INSERT INTO monster_spawns (map, monster_id, x, z, r, count) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING', [mapId, sp.type, sp.x, sp.z, sp.r, sp.count]);
   await pool.query('DELETE FROM sessions WHERE expires_at < now()');
+  if (ADMINS.size) await pool.query('UPDATE accounts SET is_admin = true WHERE lower(username) = ANY($1)', [[...ADMINS]]);
   server.listen(PORT, () => console.log(`Willowmere server on http://localhost:${PORT}  (${Object.keys(items).length} items, ${Object.keys(mons).length} monsters in the database)`));
 }
 start().catch((e) => { console.error('Start-up failed:', e.message); process.exit(1); });

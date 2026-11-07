@@ -472,6 +472,9 @@
     }
 
     buildField() {
+      // Decorations cover the map's own area (maps can be grown with the map editor).
+      const FB = this.map.bounds || { minX: -104, maxX: 104, minZ: -112, maxZ: 106 };
+      const areaK = Math.max(1, ((FB.maxX - FB.minX) * (FB.maxZ - FB.minZ)) / (208 * 218));
       const rng = this.rng;
       // Groves: noise-driven clusters plus scattered loners.
       let placed = 0;
@@ -495,8 +498,8 @@
         if (rng() < 0.55) this.treeAt(rng() < 0.5 ? 'pine' : 'round', x, z, 0.9 + rng() * 0.5, true);
       }
       // Dense forest ring along the map edge.
-      for (let i = 0; i < 900; i++) {
-        const x = U.randRange(rng, -118, 118), z = U.randRange(rng, -118, 118);
+      for (let i = 0; i < 900 * areaK; i++) {
+        const x = U.randRange(rng, -TR.HALF + 2, TR.HALF - 2), z = U.randRange(rng, -TR.HALF + 2, TR.HALF - 2);
         const b = TR.boundaryRaw(x, z);
         if (b < -5 || b > 12) continue;
         if (this.map.town && Math.hypot(x - C.TOWN.cx, z - C.TOWN.cz) < C.TOWN.radius + 3) continue;
@@ -519,7 +522,7 @@
       });
       const rocks = [[], [], []];
       for (let i = 0; i < 900 && rocks.flat().length < 110; i++) {
-        const x = U.randRange(rng, -104, 104), z = U.randRange(rng, -112, 106);
+        const x = U.randRange(rng, FB.minX, FB.maxX), z = U.randRange(rng, FB.minZ, FB.maxZ);
         if (!this.canPlace(x, z, { pathClear: 2.6, streamClear: 4.2 })) continue;
         if (TR.boundaryAmount(x, z) > 6) continue;
         const big = rng() < 0.3;
@@ -544,7 +547,7 @@
       ]);
       const bushes = [], berries = [];
       for (let i = 0; i < 1400 && bushes.length + berries.length < 240; i++) {
-        const x = U.randRange(rng, -104, 104), z = U.randRange(rng, -112, 106);
+        const x = U.randRange(rng, FB.minX, FB.maxX), z = U.randRange(rng, FB.minZ, FB.maxZ);
         if (!this.canPlace(x, z, { pathClear: 2.2, streamClear: 4.5 })) continue;
         if (TR.boundaryAmount(x, z) > 2) continue;
         const it = { x, y: TR.height(x, z) - 0.1, z, ry: rng() * 6, s: 0.7 + rng() * 0.6, color: _c.setHSL(0.27, 0.3, 0.85 + rng() * 0.15).getStyle() };
@@ -573,7 +576,7 @@
       })();
       const grass = [];
       for (let i = 0; i < 14000 && grass.length < 7000; i++) {
-        const x = U.randRange(rng, -104, 104), z = U.randRange(rng, -112, 106);
+        const x = U.randRange(rng, FB.minX, FB.maxX), z = U.randRange(rng, FB.minZ, FB.maxZ);
         const h = TR.height(x, z);
         if (h < 0.08 || TR.boundaryAmount(x, z) > 3) continue;
         if (TR.pathDistance(x, z) < 1.8) continue;
@@ -590,7 +593,7 @@
       const stems = [], heads = [];
       const palette = ['#ff6b8b', '#ffd84d', '#ffffff', '#b38cff', '#ff9f43', '#7cc8ff', '#ff5e7a'];
       for (let i = 0; i < 9000 && heads.length < 2200; i++) {
-        const x = U.randRange(rng, -104, 104), z = U.randRange(rng, -112, 106);
+        const x = U.randRange(rng, FB.minX, FB.maxX), z = U.randRange(rng, FB.minZ, FB.maxZ);
         const patch = U.noise2(x * 0.09 + 40, z * 0.09);
         if (patch < 0.6 && rng() > 0.08) continue;
         if (!this.canPlace(x, z, { pathClear: 1.8, streamClear: 4 })) {

@@ -61,7 +61,9 @@
     /* ---------------- maps ---------------- */
     // Build a map: terrain, scenery, navigation, monsters, NPCs and portals.
     loadMap(id) {
-      const map = G.Maps[id];
+      // The map's own design plus any edits made with the map editor.
+      const map = G.CustomMaps.prepare(id);
+      this.loadCount = (this.loadCount || 0) + 1;   // lets the minimap re-bake after a reload
       if (this.mapRoot) this.unloadMap();
       this.map = map;
       this.mapId = id;
@@ -76,6 +78,8 @@
       this.monsters = new G.MonsterManager(this, map.spawns);
       this.npcs = new G.NPCManager(this, map.npcs || []);
       this.portals = new G.Portals(this, map.portals || []);
+      G.CustomMaps.build(this);
+      if (G.MapEditor) G.MapEditor.onMapLoaded();
       this.zoneName = null;
       // Quests like "Visit Mossy Hollow" remember the visit.
       if (this.player) this.events.emit('mapEntered', id);
@@ -113,14 +117,14 @@
     }
 
     /* Walk through a portal (or use a wing) to another map, with a short fade. */
-    travel(id, x, z) {
+    travel(id, x, z, reload) {
       if (this.traveling) return;
       this.traveling = true;
       const fade = document.getElementById('fade');
       fade.classList.add('on');
       this.sfx('portal');
       setTimeout(() => {
-        if (id !== this.mapId) this.loadMap(id);
+        if (id !== this.mapId || reload) this.loadMap(id);   // reload: the same map, rebuilt (after map edits)
         const p = this.player;
         const spot = this.nav.nearestWalkable(x, z, 8) || { x, z };
         p.setPosition(spot.x, spot.z);
@@ -173,6 +177,7 @@
       G.bindInventoryDrops(this);
       G.Social.init(this);
       G.Trade.init(this);
+      G.MapEditor.init(this);
       this.questlog = new G.QuestLog(this);
       this.questsWin = G.Panels.questsWindow(this);
       this.extras = new G.Extras(this);

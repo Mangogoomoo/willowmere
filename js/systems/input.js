@@ -65,6 +65,7 @@
 
     onDown(e) {
       this.setNdc(e);
+      if (G.MapEditor && G.MapEditor.active && G.MapEditor.pointer(e)) return;   // the map editor handles clicks
       if (e.button === 2 && this.targeting) this.cancelTargeting(true);
       if (e.button === 2) {
         this.rotating = true;

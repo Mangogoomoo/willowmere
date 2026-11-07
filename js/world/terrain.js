@@ -5,8 +5,9 @@
   'use strict';
   const U = G.Utils, C = G.Config;
 
-  const SIZE = C.WORLD_SIZE, HALF = SIZE / 2;
-  const SEG = 160, STEP = SIZE / SEG;
+  // The world's size can differ per map (the map editor can grow a map in any direction).
+  let SIZE = C.WORLD_SIZE, HALF = SIZE / 2;
+  let SEG = 160, STEP = SIZE / SEG;
   const T = C.TOWN;
 
   // Cobbled town streets: [x1,z1,x2,z2,width]
@@ -43,6 +44,9 @@
   }
   // Signed distance past the playable edge (negative = inside the map).
   function boundaryRaw(x, z) {
+    // A map edited with the map editor has its own edges; hills rise beyond them.
+    const b = M && M.bounds;
+    if (b) return Math.max(b.minX - x, x - b.maxX, b.minZ - z, z - b.maxZ);
     return Math.max(Math.abs(x) - 100, z - 102, -z - 112);
   }
   function boundaryAmount(x, z) { return Math.max(0, boundaryRaw(x, z)); }
@@ -93,8 +97,8 @@
     return h;
   }
 
-  const N = SEG + 1;
-  const heights = new Float32Array(N * N);
+  let N = SEG + 1;
+  let heights = new Float32Array(N * N);
 
   // Exact height on the rendered triangle mesh (PlaneGeometry triangulation).
   function height(x, z) {
@@ -263,6 +267,9 @@
 
   /* ---------- build ---------- */
   function init(map) {
+    SIZE = (map && map.worldSize) || C.WORLD_SIZE; HALF = SIZE / 2;
+    SEG = Math.min(320, Math.max(160, Math.round(SIZE / 1.5))); STEP = SIZE / SEG;
+    if (N !== SEG + 1) { N = SEG + 1; heights = new Float32Array(N * N); }
     setMap(map);
     for (let iz = 0; iz < N; iz++) for (let ix = 0; ix < N; ix++) {
       heights[iz * N + ix] = rawHeight(-HALF + ix * STEP, -HALF + iz * STEP);
@@ -409,6 +416,6 @@
     init, build, height, surfaceHeight, normalAt, raycast, isWater, onBridge, bridgeDeck,
     townFactor, pathDistance, boundaryAmount, boundaryRaw, streamZ, caveDist,
     get BRIDGE_Z() { return BRIDGE_Z; }, get POND() { return POND; }, get STREETS() { return STREETS; },
-    get FIELD_PATHS() { return FIELD_PATHS; }, get map() { return M; }, HALF,
+    get FIELD_PATHS() { return FIELD_PATHS; }, get map() { return M; }, get HALF() { return HALF; }, get SIZE() { return SIZE; },
   };
 })(window.G = window.G || {});

@@ -4,7 +4,8 @@
 (function (G) {
   'use strict';
   const h = G.h;
-  const SIZE = G.Config.WORLD_SIZE, HALF = SIZE / 2;
+  // The size follows the current map (maps can be grown with the map editor).
+  let SIZE = G.Config.WORLD_SIZE, HALF = SIZE / 2;
 
   class Minimap {
     constructor(game) {
@@ -31,6 +32,7 @@
     // Bake the current map into an image (1 pixel per world unit).
     bake() {
       const game = this.game, nav = game.nav;
+      SIZE = G.Config.WORLD_SIZE; HALF = SIZE / 2;
       const img = document.createElement('canvas'); img.width = img.height = SIZE;
       const x = img.getContext('2d'), data = x.createImageData(SIZE, SIZE);
       for (let j = 0; j < SIZE; j++) for (let i = 0; i < SIZE; i++) {
@@ -41,7 +43,7 @@
         data.data[o] = r; data.data[o + 1] = g; data.data[o + 2] = b; data.data[o + 3] = 255;
       }
       x.putImageData(data, 0, 0);
-      this.image = img;
+      this.image = img; this.baked = this.game.loadCount;
       this.mapId = game.mapId;
       this.label.textContent = game.map.name;
       if (game.windows.isOpen('worldmap')) this.drawBig();
@@ -87,7 +89,7 @@
 
     update(dt) {
       if (!this.game.player) return;
-      if (this.mapId !== this.game.mapId) this.bake();
+      if (this.mapId !== this.game.mapId || this.baked !== this.game.loadCount) this.bake();
       this.t += dt;
       if (this.t < 0.08) return;
       this.t = 0;

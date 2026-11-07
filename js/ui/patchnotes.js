@@ -6,6 +6,13 @@
   const h = G.h;
 
   const PATCHES = [
+    { v: '0.26', date: '2026-11-07T12:00', title: 'Map editor for admins', notes: [
+      'New: a map editor for admins (F10 or the Map editor button). Place trees, houses, fountains, market stalls, lamps, fences, rocks, crystals and more, or your own uploaded 3D models (.glb).',
+      'Place entities too: warps between maps, lights, monster spawns, NPCs with their own lines, and player start points.',
+      'Arrow keys nudge, Page Up/Down raise and lower, Q/E rotate, +/- scale, G grabs, Delete removes, Ctrl+D copies and Ctrl+Z undoes.',
+      'Maps can grow in any direction and new maps can be created. Saving updates the map live for every player on it.',
+      'The minimap and the grass and flowers now follow a map’s real size.',
+    ] },
     { v: '0.25', date: '2026-11-06T10:30', title: 'Patch notes and guild rank taxes', notes: [
       'New: patch notes! A “What’s new” popup appears when there has been an update since you last played, and every patch is listed under Options → Patch notes (Esc opens Options when nothing else is open) or the Patch notes button on the menu.',
       'Guilds: each rank now has its own EXP tax (0–50%), set by the Guild Leader. Add your own ranks (up to 8), for example a “TAX” rank at 50%.',

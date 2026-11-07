@@ -18,6 +18,11 @@
         const r = await fetch('/api/health', { cache: 'no-store' });
         this.enabled = r.ok && !!(await r.json()).ok;
       } catch (e) { this.enabled = false; }
+      if (this.enabled) {
+        // Map edits load in the background; admin status for a saved login.
+        G.CustomMaps.fetch();
+        if (this.token) this.api('/api/me').then((me) => { this.isAdmin = !!me.isAdmin; if (G.MapEditor) G.MapEditor.refreshAdmin(); }).catch(() => {});
+      }
       return this.enabled;
     },
     async api(path, method, body) {
@@ -68,7 +73,8 @@
           go.disabled = true; showErr('');
           try {
             const r = await Online.api(mode === 'login' ? '/api/login' : '/api/register', 'POST', { username: u, password: p });
-            Online.setToken(r.token); Online.username = r.username;
+            Online.setToken(r.token); Online.username = r.username; Online.isAdmin = !!r.isAdmin;
+            if (G.MapEditor) G.MapEditor.refreshAdmin();
             resolve();
           } catch (e) { showErr(e.message); } finally { go.disabled = false; }
         };
@@ -200,6 +206,11 @@
         G.GroundSync.load(m.ground, m.map);
         if (m.t === 'welcome') game.log.add(`Connected. ${m.online} player${m.online === 1 ? '' : 's'} online.`, 'system');
       } else if (m.t === 'join') { this.add(m.p); game.log.add(`${m.p.name} arrived.`, 'info'); }
+      else if (m.t === 'map_updated') {
+        // An admin saved a map: use the new version, and reload it if we're on it.
+        G.CustomMaps.set(m.id, m.data);
+        if (m.id === game.mapId && !game.traveling) { const p = game.player.position; game.travel(game.mapId, p.x, p.z, true); }
+      }
       else if (m.t === 'leave') { const r = this.players.get(m.id); if (r) { game.log.add(`${r.name} left.`, 'info'); this.remove(r); } }
       else if (m.t === 'state') {
         const r = this.players.get(m.id);
