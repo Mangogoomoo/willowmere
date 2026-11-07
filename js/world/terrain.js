@@ -43,6 +43,29 @@
     return best;
   }
   // Signed distance past the playable edge (negative = inside the map).
+  /* Ground edits from the map editor: height changes on a 1-unit grid,
+     stored sparsely as {"x,z": delta} and blended between grid points. */
+  let groundGeo = null;
+  function groundDelta(x, z) {
+    const d = M && M.ground && M.ground.d;
+    if (!d) return 0;
+    const x0 = Math.floor(x), z0 = Math.floor(z), fx = x - x0, fz = z - z0;
+    const g = (a, b) => d[a + ',' + b] || 0;
+    return (g(x0, z0) * (1 - fx) + g(x0 + 1, z0) * fx) * (1 - fz) + (g(x0, z0 + 1) * (1 - fx) + g(x0 + 1, z0 + 1) * fx) * fz;
+  }
+  // Re-bake the heights and the visible ground inside a square (after sculpting).
+  function refreshGround(cx, cz, r) {
+    const i0 = Math.max(0, Math.floor((cx - r + HALF) / STEP)), i1 = Math.min(N - 1, Math.ceil((cx + r + HALF) / STEP));
+    const j0 = Math.max(0, Math.floor((cz - r + HALF) / STEP)), j1 = Math.min(N - 1, Math.ceil((cz + r + HALF) / STEP));
+    for (let iz = j0; iz <= j1; iz++) for (let ix = i0; ix <= i1; ix++) {
+      const x = -HALF + ix * STEP, z = -HALF + iz * STEP;
+      heights[iz * N + ix] = rawHeight(x, z) + groundDelta(x, z);
+    }
+    if (!groundGeo) return;
+    const pos = groundGeo.attributes.position;
+    for (let iz = j0; iz <= j1; iz++) for (let ix = i0; ix <= i1; ix++) pos.setY(iz * N + ix, heights[iz * N + ix]);
+    pos.needsUpdate = true; groundGeo.computeVertexNormals();
+  }
   function boundaryRaw(x, z) {
     // A map edited with the map editor has its own edges; hills rise beyond them.
     const b = M && M.bounds;
@@ -272,13 +295,14 @@
     if (N !== SEG + 1) { N = SEG + 1; heights = new Float32Array(N * N); }
     setMap(map);
     for (let iz = 0; iz < N; iz++) for (let ix = 0; ix < N; ix++) {
-      heights[iz * N + ix] = rawHeight(-HALF + ix * STEP, -HALF + iz * STEP);
+      heights[iz * N + ix] = rawHeight(-HALF + ix * STEP, -HALF + iz * STEP) + groundDelta(-HALF + ix * STEP, -HALF + iz * STEP);
     }
   }
 
   function build(scene) {
     const geo = new THREE.PlaneGeometry(SIZE, SIZE, SEG, SEG);
     geo.rotateX(-Math.PI / 2);
+    groundGeo = geo;
     const pos = geo.attributes.position;
     const colors = new Float32Array(pos.count * 3);
     for (let i = 0; i < pos.count; i++) {
@@ -416,6 +440,6 @@
     init, build, height, surfaceHeight, normalAt, raycast, isWater, onBridge, bridgeDeck,
     townFactor, pathDistance, boundaryAmount, boundaryRaw, streamZ, caveDist,
     get BRIDGE_Z() { return BRIDGE_Z; }, get POND() { return POND; }, get STREETS() { return STREETS; },
-    get FIELD_PATHS() { return FIELD_PATHS; }, get map() { return M; }, get HALF() { return HALF; }, get SIZE() { return SIZE; },
+    get FIELD_PATHS() { return FIELD_PATHS; }, get map() { return M; }, get HALF() { return HALF; }, get SIZE() { return SIZE; }, groundDelta, refreshGround,
   };
 })(window.G = window.G || {});

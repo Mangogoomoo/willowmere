@@ -18,6 +18,7 @@
 
   const Ed = {
     active: false, tab: 'place', sel: null, placing: null, grab: false, dirty: false, undoStack: [],
+    brush: { tool: 'raise', size: 4, strength: 5 }, cursor: null, remembered: null,
     init(game) {
       if (this.game) return;
       this.game = game;
@@ -27,19 +28,61 @@
       window.addEventListener('keydown', (e) => this.onKey(e), true);
       const canvas = game.renderer.domElement;
       canvas.addEventListener('pointermove', (e) => this.onMove(e));
-      // A button for admins.
+      canvas.addEventListener('pointerup', () => this.endStroke());
+      window.addEventListener('pointerup', () => this.endStroke());
+      // Buttons for admins: the editor, and teleporting to any map.
       this.btn = h('button.ed-toggle', { type: 'button', hidden: true, title: 'Map editor (F10)', onclick: () => this.toggle() }, '🛠 Map editor');
-      document.body.append(this.btn);
+      this.tpBtn = h('button.ed-toggle.ed-tp', { type: 'button', hidden: true, title: 'Teleport to any map (admins)', onclick: () => this.openTeleport() }, '🗺 Teleport');
+      // While editing: key hints and coordinates where the action bar normally is.
+      this.keybar = h('div#ed-keys', { hidden: true, 'aria-live': 'off' });
+      document.body.append(this.btn, this.tpBtn, this.keybar);
+      this.tpWin = game.windows.create('teleport', 'Teleport to map', { width: 300, pos: () => ({ x: window.innerWidth / 2 - 150, y: 90 }) });
+      setInterval(() => this.updateKeybar(), 250);
       this.refreshAdmin();
     },
     // The button shows for admins while the editor is closed (the panel has its own ✕).
-    refreshAdmin() { if (this.btn) this.btn.hidden = !(G.Online && G.Online.isAdmin) || this.active; },
+    refreshAdmin() {
+      const admin = !!(G.Online && G.Online.isAdmin);
+      if (this.btn) this.btn.hidden = !admin || this.active;
+      if (this.tpBtn) this.tpBtn.hidden = !admin || this.active;   // the editor's Map tab has its own
+    },
+    // Where to arrive on a map: its start point, else a known safe spot.
+    arrival(id) {
+      const d = CM().get(id), st = d && d.entities.find((e) => e.type === 'start');
+      if (st) return [st.x, st.z];
+      return ({ meadow: [0, -60], forest: [0, -90], dungeon: [0, -86], orc_dungeon: [0, -86], ember_ruins: [0, -86] })[id] || [0, 0];
+    },
+    openTeleport() {
+      if (!(G.Online && G.Online.isAdmin)) return;
+      const w = this.tpWin, b = w.body;
+      b.textContent = '';
+      const ids = Object.keys(G.Maps);
+      const group = (title, list) => { if (!list.length) return; b.append(h('h4.tp-head', { text: title }), h('div.tp-list', null, ...list.map((id) => h('button.tp-item' + (id === this.game.mapId ? '.here' : ''), { type: 'button', onclick: () => {
+        if (this.dirty && !confirm('Leave without saving your map changes?')) return;
+        this.dirty = false; const [x, z] = this.arrival(id); this.game.windows.close('teleport'); this.game.travel(id, x, z);
+      } }, h('b', { text: G.Maps[id].name || id }), h('small', { text: id === this.game.mapId ? 'you are here' : id }))))); };
+      group('Maps', ids.filter((id) => !G.Maps[id].custom));
+      group('Maps made in the editor', ids.filter((id) => G.Maps[id].custom));
+      this.game.windows.open('teleport');
+    },
+    updateKeybar() {
+      if (!this.active || !this.keybar) return;
+      const p = this.game.player.position, c = this.cursor;
+      const keys = this.tab === 'ground' ? 'Hold left mouse and drag to sculpt · [ ] brush size · Ctrl+Z undo · WASD move'
+        : 'Click select · Arrows nudge (Shift fine, Ctrl big) · PgUp/PgDn height · Q/E rotate · +/- size · G grab · Del remove · Ctrl+D copy · Ctrl+Z undo · WASD move · Esc cancel';
+      this.keybar.textContent = '';
+      this.keybar.append(h('div.kb-keys', { text: keys }), h('div.kb-coords', null,
+        h('span', { text: `Map: ${(G.Maps[this.game.mapId] || {}).name || this.game.mapId} (${this.game.mapId})` }),
+        h('span', { text: `You: X ${p.x.toFixed(1)}  Z ${p.z.toFixed(1)}` }),
+        h('span', { text: c ? `Cursor: X ${c.x.toFixed(1)}  Z ${c.z.toFixed(1)}  height ${G.Terrain.height(c.x, c.z).toFixed(2)}` : 'Cursor: –' })));
+    },
     toggle() {
       if (!(G.Online && G.Online.isAdmin)) { this.game.log.add('The map editor is for admins only.', 'warn'); return; }
       this.active ? this.close() : this.open();
     },
     open() {
       this.active = true; this.game.editing = true;
+      document.body.classList.add('editing'); this.keybar.hidden = false;
       this.ensureData();
       this.game.scene.add(this.markers); this.rebuildMarkers();
       this.game.windows.open('mapeditor'); this.render(); this.refreshAdmin();
@@ -48,6 +91,7 @@
     close() {
       if (this.dirty && !confirm('You have unsaved map changes. Close the editor anyway? (They stay until you leave this map.)')) return;
       this.active = false; this.game.editing = false;
+      document.body.classList.remove('editing'); this.keybar.hidden = true; this.brushRing && this.brushRing.removeFromParent();
       this.cancelPlacing(); this.select(null);
       this.markers.removeFromParent();
       this.game.windows.close('mapeditor'); this.refreshAdmin();
@@ -77,7 +121,8 @@
       const s = this.undoStack.pop(); if (!s) return;
       const d = JSON.parse(s); Object.assign(this.data, d);
       CM().data[this.game.mapId] = this.data;
-      this.sel = null; CM().build(this.game); this.ensureData(); this.rebuildMarkers(); this.changed();
+      this.sel = null; G.Terrain.refreshGround(0, 0, G.Terrain.HALF + 2);
+      CM().build(this.game); this.ensureData(); this.rebuildMarkers(); this.changed();
     },
 
     /* ---------- picking ---------- */
@@ -110,6 +155,11 @@
     // Called by the game's input before it handles a click.
     pointer(e) {
       if (!this.active || e.button !== 0) return false;
+      if (this.tab === 'ground') {
+        const p = this.groundAt(e); if (!p) return true;
+        this.snapshot(); this.sculpting = true; this.flatY = null; this.sculptAt(p); this.lastSculpt = Date.now();
+        return true;
+      }
       if (this.grab) { this.grab = false; this.render(); return true; }
       if (this.placing) {
         const p = this.groundAt(e); if (!p) return true;
@@ -122,10 +172,68 @@
     },
     onMove(e) {
       if (!this.active) return;
-      if (!(this.placing || this.grab)) return;
       const p = this.groundAt(e); if (!p) return;
+      this.cursor = p;
+      if (this.tab === 'ground') {
+        this.showBrush(p);
+        if (this.sculpting && Date.now() - this.lastSculpt > 35) { this.lastSculpt = Date.now(); this.sculptAt(p); }
+        return;
+      }
+      if (!(this.placing || this.grab)) return;
       if (this.placing && this.ghost) { this.ghost.position.set(p.x, G.Terrain.height(p.x, p.z), p.z); }
       if (this.grab && this.sel) { this.sel.item.x = r2(p.x); this.sel.item.z = r2(p.z); this.applySel(); }
+    },
+
+    /* ---------- ground ---------- */
+    showBrush(p) {
+      if (!this.brushRing) {
+        this.brushRing = new THREE.Mesh(new THREE.RingGeometry(0.94, 1, 48), new THREE.MeshBasicMaterial({ color: 0xffe066, transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthTest: false }));
+        this.brushRing.rotation.x = -Math.PI / 2; this.brushRing.renderOrder = 20;
+      }
+      if (!this.brushRing.parent) this.game.scene.add(this.brushRing);
+      this.brushRing.scale.setScalar(this.brush.size);
+      this.brushRing.position.set(p.x, G.Terrain.height(p.x, p.z) + 0.15, p.z);
+    },
+    sculptAt(p) {
+      const d = this.data, TR = G.Terrain;
+      d.ground = d.ground || { d: {} };
+      if (TR.map) TR.map.ground = d.ground;   // the terrain reads the same edits live
+      const g = d.ground.d, R = this.brush.size, st = this.brush.strength / 5, tool = this.brush.tool;
+      if (tool === 'flatten' && this.flatY == null) this.flatY = TR.height(p.x, p.z);
+      const upd = {};
+      for (let x = Math.floor(p.x - R); x <= Math.ceil(p.x + R); x++) for (let z = Math.floor(p.z - R); z <= Math.ceil(p.z + R); z++) {
+        const dist = Math.hypot(x - p.x, z - p.z); if (dist > R) continue;
+        let f = 1 - dist / R; f = f * f * (3 - 2 * f);
+        const key = x + ',' + z, cur = g[key] || 0, hh = TR.height(x, z);
+        let nd = cur;
+        if (tool === 'raise') nd += 0.12 * st * f;
+        else if (tool === 'lower') nd -= 0.12 * st * f;
+        else if (tool === 'flatten') nd += (this.flatY - hh) * 0.3 * Math.min(1, st) * f;
+        else { const avg = (TR.height(x + 1, z) + TR.height(x - 1, z) + TR.height(x, z + 1) + TR.height(x, z - 1)) / 4; nd += (avg - hh) * 0.45 * Math.min(1, st) * f; }
+        upd[key] = Math.max(-30, Math.min(30, Math.round(nd * 1000) / 1000));
+      }
+      for (const [k, v] of Object.entries(upd)) { if (Math.abs(v) < 0.004) delete g[k]; else g[k] = v; }
+      TR.refreshGround(p.x, p.z, R + 1.5);
+      this.dirty = true;
+    },
+    endStroke() {
+      if (!this.sculpting) return;
+      this.sculpting = false;
+      // Objects and markers settle onto the new ground.
+      for (const gObj of CM().objects || []) CM().place(gObj, gObj.userData.obj);
+      for (const L of CM().lights || []) { const e = L.userData.ent; L.position.y = G.Terrain.height(e.x, e.z) + (+e.y || 2.5); }
+      this.rebuildMarkers(); this.render();
+    },
+    renderGround(body) {
+      const tools = [['raise', '⬆️', 'Raise'], ['lower', '⬇️', 'Lower'], ['smooth', '〰️', 'Smooth'], ['flatten', '▭', 'Flatten']];
+      body.append(h('div.ed-grid', null, ...tools.map(([id, ic, name]) => this.paletteBtn(name, ic, this.brush.tool === id, () => { this.brush.tool = id; this.render(); }))));
+      const slider = (label, key, min, max) => {
+        const out = h('b', { text: String(this.brush[key]) });
+        const inp = h('input', { type: 'range', min: String(min), max: String(max), value: String(this.brush[key]), 'aria-label': label, oninput: (e) => { this.brush[key] = Number(e.target.value); out.textContent = e.target.value; } });
+        return h('label.ed-slider', null, h('span', { text: label }), inp, out);
+      };
+      body.append(slider('Brush size', 'size', 1, 20), slider('Strength', 'strength', 1, 10),
+        h('p.hint', { text: 'Hold the left mouse button and drag over the ground. Flatten levels everything to the height where you start. The ground updates as you paint; walking follows the new shape after saving.' }));
     },
 
     /* ---------- placing ---------- */
@@ -217,6 +325,7 @@
       const step = e.shiftKey ? 0.1 : e.ctrlKey ? 2 : 0.5;
       if (k === 'Escape') { stop(); if (this.placing) this.cancelPlacing(); else if (this.grab) this.grab = false; else this.select(null); this.render(); return; }
       if ((e.ctrlKey || e.metaKey) && k.toLowerCase() === 'z') { stop(); this.undo(); return; }
+      if (this.tab === 'ground' && (k === '[' || k === ']')) { stop(); this.brush.size = Math.max(1, Math.min(20, this.brush.size + (k === ']' ? 1 : -1))); this.render(); if (this.cursor) this.showBrush(this.cursor); return; }
       if (/^[wasd]$/i.test(k) && !e.ctrlKey) {
         stop();
         const p = this.game.player, d = e.shiftKey ? 4 : 1.5, dir = k.toLowerCase();
@@ -261,7 +370,7 @@
         pole.position.y = 1.1; g.add(pole);
         const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.28, 12, 8), new THREE.MeshBasicMaterial({ color: e.type === 'light' ? (e.color || def.color) : def.color }));
         bulb.position.y = e.type === 'light' ? (+e.y || 2.5) : 2.3; g.add(bulb);
-        const text = e.type === 'warp' ? `Warp → ${(G.Maps[e.to] || {}).name || e.to}` : e.type === 'spawn' ? `${(G.Config.MONSTERS[e.monster] || {}).name || e.monster} ×${e.count}` : e.type === 'npc' ? e.name : def.name;
+        const text = e.type === 'warp' ? `Warp → ${(G.Maps[e.to] || {}).name || e.to}` : e.type === 'spawn' ? `${(G.Config.MONSTERS[e.monster] || {}).name || e.monster} ×${e.count}` : (e.type === 'npc' || e.type === 'npcref') ? e.name : def.name;
         const lab = this.label(text, def.color); lab.position.y = 3.1; g.add(lab);
         g.position.set(e.x, y, e.z);
         this.markers.add(g);
@@ -305,6 +414,15 @@
         this.game.log.add(`Model “${r.name}” added to your library.`, 'level');
       } catch (e) { this.game.log.add('Upload failed: ' + e.message, 'warn'); }
     },
+    async takeOver() {
+      if (!confirm('Make all of this map’s original objects, spawns, warps and NPCs editable? The map will be saved and reloaded.')) return;
+      const o = CM().originals(this.game), d = this.data;
+      d.objects = o.objects.concat(d.objects);
+      d.entities = o.entities.concat(d.entities.filter((e) => !(e.type === 'warp' && o.entities.some((x) => x.type === 'warp' && x.x === e.x && x.z === e.z))));
+      d.takeover = true;
+      this.game.log.add(`Converted ${o.objects.length} objects and ${o.entities.length} entities. Saving…`, 'system');
+      await this.save();
+    },
     async newMap(id, name) {
       id = String(id || '').toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 40);
       if (!id || G.Maps[id]) { this.game.log.add('Pick a new, unused map id (letters, numbers, _).', 'warn'); return; }
@@ -323,17 +441,23 @@
       const d = this.data, mapName = (G.Maps[this.game.mapId] || {}).name || this.game.mapId;
       b.append(h('div.ed-status', null, h('b', { text: mapName }), h('span', { text: `${d.objects.length} objects · ${d.entities.length} entities` }),
         h('span.ed-dirty' + (this.dirty ? '.on' : ''), { text: this.dirty ? '● Unsaved' : 'Saved' })));
-      const tabs = [['place', 'Objects'], ['entities', 'Entities'], ['selected', 'Selected'], ['map', 'Map']];
+      const tabs = [['place', 'Objects'], ['entities', 'Entities'], ['ground', 'Ground'], ['selected', 'Selected'], ['map', 'Map']];
+      if (this.tab !== 'ground' && this.brushRing) this.brushRing.removeFromParent();
       b.append(h('div.ed-tabs', { role: 'tablist' }, ...tabs.map(([id, t]) => h('button.ed-tab' + (this.tab === id ? '.on' : ''), { type: 'button', role: 'tab', 'aria-selected': String(this.tab === id), onclick: () => { this.tab = id; this.render(); } }, t))));
       const body = h('div.ed-body'); b.append(body);
       if (this.tab === 'place') this.renderPlace(body);
       else if (this.tab === 'entities') this.renderEntities(body);
       else if (this.tab === 'selected') this.renderSelected(body);
+      else if (this.tab === 'ground') this.renderGround(body);
       else this.renderMap(body);
       b.append(h('div.ed-foot', null,
         h('button.btn.small', { type: 'button', disabled: !this.dirty, onclick: () => this.save() }, 'Save map'),
         h('button.btn.small.ghost', { type: 'button', onclick: () => this.undo(), disabled: !this.undoStack.length }, 'Undo'),
         h('button.btn.small.ghost', { type: 'button', onclick: () => this.revert() }, 'Revert')),
+        h('div.opt-btns', null, h('button.btn.small.ghost', { type: 'button', title: 'Remember where you stand, to use as a warp destination', onclick: () => {
+          const p = this.game.player.position; this.remembered = { map: this.game.mapId, x: Math.round(p.x * 10) / 10, z: Math.round(p.z * 10) / 10 };
+          this.game.log.add(`Remembered: ${(G.Maps[this.remembered.map] || {}).name} at X ${this.remembered.x}, Z ${this.remembered.z}.`, 'system'); this.render();
+        } }, '📍 Remember this spot'), this.remembered ? h('small.ed-mem', { text: `${(G.Maps[this.remembered.map] || {}).name} ${this.remembered.x}, ${this.remembered.z}` }) : null),
         h('p.ed-help', { text: this.grab ? 'Moving with the mouse: click to drop it.' : this.placing ? 'Click the ground to place (Shift+click to keep placing, Q/E rotate, Esc stops).' : 'Click to select · arrows nudge · PgUp/PgDn height · Q/E rotate · +/- size · G grab · Del remove · Ctrl+D copy · Ctrl+Z undo · WASD move' }));
     },
     paletteBtn(label, icon, on, onclick, title) {
@@ -353,7 +477,7 @@
       h('p.hint', { text: 'Binary glTF (.glb), up to 15 MB. 1 unit ≈ 1 metre; a character is about 1.8 units tall.' }));
     },
     renderEntities(body) {
-      body.append(h('div.ed-grid', null, ...CM().ENTITIES.map((d) => this.paletteBtn(d.name, d.icon, this.placing && this.placing.type === d.type, () => this.startPlacing({ kind: 'entity', type: d.type })))),
+      body.append(h('div.ed-grid', null, ...CM().ENTITIES.filter((d) => !d.hidden).map((d) => this.paletteBtn(d.name, d.icon, this.placing && this.placing.type === d.type, () => this.startPlacing({ kind: 'entity', type: d.type })))),
         h('p.hint', { text: 'Warps, spawns and NPCs take effect when you save (the map reloads for everyone). Lights and objects show right away.' }));
     },
     field(label, value, onchange, opts) {
@@ -388,13 +512,18 @@
         body.append(this.field('Blocks walking (radius)', it.solid != null ? it.solid : (def ? def.solid : 0), set('solid', 1), { type: 'number', step: '0.1' }));
       } else if (it.type === 'warp') {
         const maps = Object.keys(G.Maps).map((id) => [id, G.Maps[id].name || id]);
+        const mem = this.remembered;
+        if (mem) body.append(h('button.btn.small', { type: 'button', onclick: () => { this.snapshot(); it.to = mem.map; it.tx = mem.x; it.tz = mem.z; this.applySel(); this.render(); } },
+          `Use remembered spot: ${(G.Maps[mem.map] || {}).name} (${mem.x}, ${mem.z})`));
         body.append(this.field('Goes to map', it.to, set('to'), { options: maps }), h('div.ed-xyz', null, this.field('Arrive at X', it.tx, set('tx', 1), { type: 'number' }), this.field('Arrive at Z', it.tz, set('tz', 1), { type: 'number' })),
           this.field('Label', it.label, set('label')));
       } else if (it.type === 'light') {
         body.append(this.field('Colour', it.color, set('color'), { type: 'color' }), h('div.ed-xyz', null, this.field('Brightness', it.intensity, set('intensity', 1), { type: 'number', step: '0.1' }), this.field('Reach', it.range, set('range', 1), { type: 'number' })));
       } else if (it.type === 'spawn') {
-        const mons = Object.entries(G.Config.MONSTERS).filter(([, m]) => !m.immortal).sort((a, b) => a[1].level - b[1].level).map(([id, m]) => [id, `${m.name} (lv ${m.level})`]);
+        const mons = Object.entries(G.Config.MONSTERS).sort((a, b) => a[1].level - b[1].level).map(([id, m]) => [id, `${m.name} (lv ${m.level})`]);
         body.append(this.field('Monster', it.monster, set('monster'), { options: mons }), h('div.ed-xyz', null, this.field('How many', it.count, set('count', 1), { type: 'number' }), this.field('Area radius', it.r, set('r', 1), { type: 'number' })));
+      } else if (it.type === 'npcref') {
+        body.append(h('p.hint', { text: `${it.name} is one of the map’s own NPCs: move, turn or delete them here; their shop, quests and dialog stay the same.` }));
       } else if (it.type === 'npc') {
         const jobs = G.Jobs.ALL ? Object.keys(G.Jobs.ALL) : ['novice'];
         body.append(this.field('Name', it.name, set('name')), this.field('Title', it.title, set('title')),
@@ -416,13 +545,11 @@
           h('button.btn.small.ghost', { type: 'button', onclick: () => grow('minZ', -20) }, 'North'), h('button.btn.small.ghost', { type: 'button', onclick: () => grow('maxZ', 20) }, 'South'),
           h('button.btn.small.ghost', { type: 'button', onclick: () => grow('minX', -20) }, 'West'), h('button.btn.small.ghost', { type: 'button', onclick: () => grow('maxX', 20) }, 'East')),
         h('p.hint', { text: 'The red line shows the edges. New ground appears after saving (the map reloads).' }));
-      const maps = Object.keys(G.Maps).map((id) => [id, G.Maps[id].name || id]);
-      const goSel = h('select', null, ...maps.map(([v, t]) => h('option', { value: v, text: t, selected: v === this.game.mapId })));
-      body.append(h('h4', { text: 'Go to map' }), h('div.soc-inv', null, goSel, h('button.btn.small', { type: 'button', onclick: () => {
-        const id = goSel.value, dd = CM().get(id), st = dd && dd.entities.find((e) => e.type === 'start');
-        if (this.dirty && !confirm('Leave without saving your changes?')) return;
-        this.dirty = false; this.game.travel(id, st ? st.x : 0, st ? st.z : 0);
-      } }, 'Go')));
+      if (G.Maps[this.game.mapId] && !G.Maps[this.game.mapId].custom && !d.takeover) {
+        body.append(h('h4', { text: 'Original objects' }), h('p.hint', { text: 'Turn this map’s own houses, trees, props, monster spawns (training dummies too), warps and NPCs into editor objects you can move or delete. This saves and reloads the map.' }),
+          h('button.btn.small', { type: 'button', onclick: () => this.takeOver() }, 'Make original objects editable'));
+      } else if (d.takeover) body.append(h('p.hint', { text: 'This map’s original objects are editable.' }));
+      body.append(h('h4', { text: 'Go to map' }), h('button.btn.small', { type: 'button', onclick: () => this.openTeleport() }, '🗺 Choose a map…'));
       const nid = h('input.soc-in', { type: 'text', placeholder: 'map_id', maxlength: '40' }), nname = h('input.soc-in', { type: 'text', placeholder: 'Map name', maxlength: '40' });
       for (const i of [nid, nname]) i.addEventListener('keydown', (e) => e.stopPropagation());
       body.append(h('h4', { text: 'New map' }), h('div.soc-inv', null, nid, nname), h('button.btn.small', { type: 'button', onclick: () => this.newMap(nid.value, nname.value.trim()) }, 'Create and go there'));

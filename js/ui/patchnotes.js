@@ -6,6 +6,15 @@
   const h = G.h;
 
   const PATCHES = [
+    { v: '0.27', date: '2026-11-07T18:00', title: 'Map editor: ground tools and original objects', notes: [
+      'Ground tab: raise, lower, smooth and flatten the ground with a brush (adjustable size and strength). Walking follows the new shape after saving.',
+      'Maps’ original houses, trees, props, monster spawns (training dummies too), warps and NPCs can now be made editable: move, rotate or delete them. NPCs keep their shops, quests and dialog.',
+      'While editing, the action bar, character window and debug buttons are hidden; a bar shows the keys and live coordinates of you and your cursor.',
+      '“Remember this spot” makes setting a warp’s destination easy: stand where players should arrive, remember it, then use it on the warp.',
+      'Admins have a Teleport button that lists every map.',
+      'More to place: autumn, golden, dark oak, birch, willow, palm, dead and frosted trees, saplings, stumps, logs, berry bushes, hedges, ferns, tall grass, tulips, sunflowers, lavender, daisies, roses, mushrooms, pebbles, pillars, hay bales, carts and tents.',
+      'Easier to read: dark text in the editor’s boxes. If a map ever fails to load, the game no longer gets stuck on a faded screen.',
+    ] },
     { v: '0.26', date: '2026-11-07T12:00', title: 'Map editor for admins', notes: [
       'New: a map editor for admins (F10 or the Map editor button). Place trees, houses, fountains, market stalls, lamps, fences, rocks, crystals and more, or your own uploaded 3D models (.glb).',
       'Place entities too: warps between maps, lights, monster spawns, NPCs with their own lines, and player start points.',

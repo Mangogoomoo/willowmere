@@ -447,7 +447,7 @@
     }
     flushTrees() {
       const g = this.treeGeometries();
-      for (const k of Object.keys(this._trees)) {
+      for (const k of Object.keys(this._trees || {})) {   // none when a map's trees are editor objects
         this.instanced(g[k], this.foliageMat, this._trees[k], { cast: true });
         this._trees[k] = [];
       }

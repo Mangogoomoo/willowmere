@@ -124,7 +124,13 @@
       fade.classList.add('on');
       this.sfx('portal');
       setTimeout(() => {
-        if (id !== this.mapId || reload) this.loadMap(id);   // reload: the same map, rebuilt (after map edits)
+        try {
+          if (id !== this.mapId || reload) this.loadMap(id);
+        } catch (e) {
+          // Never get stuck on a faded screen if a map fails to load.
+          console.error(e); this.log.add('Loading the map failed: ' + e.message, 'warn');
+          fade.classList.remove('on'); this.traveling = false; return;
+        }   // reload: the same map, rebuilt (after map edits)
         const p = this.player;
         const spot = this.nav.nearestWalkable(x, z, 8) || { x, z };
         p.setPosition(spot.x, spot.z);
