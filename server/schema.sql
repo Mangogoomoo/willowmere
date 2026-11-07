@@ -158,3 +158,13 @@ CREATE TABLE IF NOT EXISTS map_assets (
   uploaded_by BIGINT,
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Map editor: earlier versions of each map (the last 30 saves are kept).
+CREATE TABLE IF NOT EXISTS custom_map_versions (
+  id        BIGSERIAL PRIMARY KEY,
+  map_id    TEXT NOT NULL,
+  data      JSONB NOT NULL,
+  saved_by  BIGINT,
+  saved_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS custom_map_versions_map ON custom_map_versions (map_id, saved_at DESC);

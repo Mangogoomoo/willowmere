@@ -195,10 +195,23 @@ async function api(req, res, url) {
     if (!data || typeof data !== 'object' || !Array.isArray(data.objects) || !Array.isArray(data.entities)) return send(res, 400, { error: 'Bad map data.' });
     if (data.objects.length > 5000 || data.entities.length > 1000) return send(res, 400, { error: 'Too many objects on one map.' });
     data.id = id;
+    // Keep the version being replaced (the last 30 per map).
+    await pool.query('INSERT INTO custom_map_versions (map_id, data, saved_by, saved_at) SELECT id, data, updated_by, updated_at FROM custom_maps WHERE id = $1', [id]);
+    await pool.query('DELETE FROM custom_map_versions WHERE map_id = $1 AND id NOT IN (SELECT id FROM custom_map_versions WHERE map_id = $1 ORDER BY saved_at DESC LIMIT 30)', [id]);
     await pool.query('INSERT INTO custom_maps (id, data, updated_by, updated_at) VALUES ($1, $2, $3, now()) ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data, updated_by = EXCLUDED.updated_by, updated_at = now()', [id, JSON.stringify(data), acct.id]);
     // Everyone online gets the new version straight away.
     for (const [ws] of online) if (ws.readyState === 1) ws.send(JSON.stringify({ t: 'map_updated', id, data }));
     return send(res, 200, { ok: true });
+  }
+  let verM;
+  if ((verM = /^\/api\/maps\/([a-z0-9_]{1,40})\/versions(?:\/(\d+))?$/.exec(url.pathname)) && req.method === 'GET') {
+    const acct = await requireAdmin(req, res); if (!acct) return;
+    if (verM[2]) {
+      const r = (await pool.query('SELECT data FROM custom_map_versions WHERE map_id = $1 AND id = $2', [verM[1], Number(verM[2])])).rows[0];
+      return r ? send(res, 200, { data: r.data }) : send(res, 404, { error: 'Not found.' });
+    }
+    const rows = (await pool.query("SELECT v.id, v.saved_at, a.username, jsonb_array_length(v.data->'objects') AS objects FROM custom_map_versions v LEFT JOIN accounts a ON a.id = v.saved_by WHERE v.map_id = $1 ORDER BY v.saved_at DESC LIMIT 30", [verM[1]])).rows;
+    return send(res, 200, { versions: rows });
   }
   if (url.pathname === '/api/assets' && req.method === 'GET') {
     const rows = (await pool.query('SELECT id, name, size FROM map_assets ORDER BY created_at')).rows;

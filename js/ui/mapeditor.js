@@ -19,6 +19,8 @@
   const Ed = {
     active: false, tab: 'place', sel: null, placing: null, grab: false, dirty: false, undoStack: [],
     brush: { tool: 'raise', size: 4, strength: 5, tex: 3 }, cursor: null, remembered: null,
+    extra: [], extraBoxes: [], grid: 0, clip: null, testing: false,
+    scatter: { items: ['tree', 'pine', 'bush'], density: 3, size: 8 },
     init(game) {
       if (this.game) return;
       this.game = game;
@@ -167,8 +169,119 @@
         if (!e.shiftKey) this.cancelPlacing();
         return true;
       }
-      this.select(this.pickThing(e));
+      const hit = this.pickThing(e);
+      if (e.shiftKey && hit) { this.toggleExtra(hit); return true; }
+      if (e.ctrlKey || e.metaKey) { this.startBox(e); return true; }
+      this.select(hit);
       return true;
+    },
+    /* ---------- several things at once ---------- */
+    all() { return [this.sel, ...this.extra].filter(Boolean); },
+    clearExtra() { this.extra = []; for (const b of this.extraBoxes) b.removeFromParent(); this.extraBoxes = []; },
+    toggleExtra(hit) {
+      if (!this.sel) { this.select(hit); return; }
+      const same = (a) => a.item === hit.item;
+      if (same(this.sel)) return;
+      const i = this.extra.findIndex(same);
+      if (i >= 0) this.extra.splice(i, 1); else this.extra.push(hit);
+      this.refreshExtraBoxes(); this.render();
+    },
+    refreshExtraBoxes() {
+      for (const b of this.extraBoxes) b.removeFromParent(); this.extraBoxes = [];
+      for (const s of this.extra) { const o = this.objFor(s); if (o) { const b = new THREE.BoxHelper(o, 0x7fd3ff); this.game.scene.add(b); this.extraBoxes.push(b); } }
+    },
+    startBox(e) {
+      this.boxStart = { x: e.clientX, y: e.clientY };
+      if (!this.boxEl) { this.boxEl = h('div.ed-box'); document.body.append(this.boxEl); }
+      const move = (ev) => {
+        const x0 = Math.min(ev.clientX, this.boxStart.x), y0 = Math.min(ev.clientY, this.boxStart.y);
+        Object.assign(this.boxEl.style, { display: 'block', left: x0 + 'px', top: y0 + 'px', width: Math.abs(ev.clientX - this.boxStart.x) + 'px', height: Math.abs(ev.clientY - this.boxStart.y) + 'px' });
+      };
+      const up = (ev) => {
+        window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up);
+        this.boxEl.style.display = 'none';
+        const x0 = Math.min(ev.clientX, this.boxStart.x), x1 = Math.max(ev.clientX, this.boxStart.x), y0 = Math.min(ev.clientY, this.boxStart.y), y1 = Math.max(ev.clientY, this.boxStart.y);
+        if (x1 - x0 < 4 && y1 - y0 < 4) return;
+        const rect = this.game.renderer.domElement.getBoundingClientRect(), v = new THREE.Vector3(), found = [];
+        const inBox = (x, z) => { v.set(x, G.Terrain.height(x, z) + 0.5, z).project(this.game.camera3); if (v.z > 1) return false;
+          const sx = rect.left + (v.x * 0.5 + 0.5) * rect.width, sy = rect.top + (-v.y * 0.5 + 0.5) * rect.height; return sx >= x0 && sx <= x1 && sy >= y0 && sy <= y1; };
+        for (const o of this.data.objects) if (inBox(o.x, o.z)) found.push({ kind: 'object', item: o });
+        for (const en of this.data.entities) if (inBox(en.x, en.z)) found.push({ kind: 'entity', item: en });
+        if (!found.length) return;
+        this.select(found[0]); this.extra = found.slice(1); this.refreshExtraBoxes(); this.render();
+        this.game.log.add(`Selected ${found.length} things.`, 'system');
+      };
+      window.addEventListener('pointermove', move); window.addEventListener('pointerup', up);
+    },
+    // Keys that act on every selected thing at once.
+    groupKey(e, k) {
+      const list = this.all(); if (list.length < 2) return false;
+      const cam = this.game.camera, yaw = cam.yaw || 0, fx = -Math.sin(yaw), fz = -Math.cos(yaw), rx = Math.cos(yaw), rz = -Math.sin(yaw);
+      const step = this.grid || (e.shiftKey ? 0.1 : e.ctrlKey ? 2 : 0.5);
+      const each = (fn) => { this.snapOnce(); for (const s of list) { fn(s.item); this.applyOne(s); } this.refreshExtraBoxes(); this.dirty = true; this.render(); };
+      const mv = (dx, dz) => each((it) => { it.x = r2(it.x + dx * step); it.z = r2(it.z + dz * step); });
+      if (k === 'ArrowUp') mv(fx, fz); else if (k === 'ArrowDown') mv(-fx, -fz); else if (k === 'ArrowLeft') mv(-rx, -rz); else if (k === 'ArrowRight') mv(rx, rz);
+      else if (k === 'PageUp' || k === 'PageDown') each((it) => { it.y = r2((+it.y || 0) + (k === 'PageUp' ? 1 : -1) * (e.shiftKey ? 0.05 : 0.25)); });
+      else if (/^[qe]$/i.test(k)) {
+        // Turn the whole group around its centre.
+        const a = (k.toLowerCase() === 'q' ? 1 : -1) * (e.shiftKey ? Math.PI / 36 : Math.PI / 12), c = Math.cos(a), sn = Math.sin(a);
+        const cx = list.reduce((t, s) => t + s.item.x, 0) / list.length, cz = list.reduce((t, s) => t + s.item.z, 0) / list.length;
+        each((it) => { const dx = it.x - cx, dz = it.z - cz; it.x = r2(cx + dx * c + dz * sn); it.z = r2(cz - dx * sn + dz * c); it.ry = r2((it.ry || 0) + a); });
+      } else if (k === 'Delete' || k === 'Backspace') {
+        this.snapshot();
+        for (const s of list) this.removeOne(s);
+        this.clearExtra(); this.select(null); this.rebuildMarkers(); this.changed();
+      } else if ((e.ctrlKey || e.metaKey) && k.toLowerCase() === 'd') { this.copySel(); this.paste(true); }
+      else return false;
+      return true;
+    },
+    applyOne(s) { const keep = this.sel; this.sel = s; this.applySel(); this.sel = keep; },
+    removeOne(s) {
+      if (s.kind === 'object') { const g = this.objFor(s); if (g) { g.removeFromParent(); CM().objects.splice(CM().objects.indexOf(g), 1); } const i = this.data.objects.indexOf(s.item); if (i >= 0) this.data.objects.splice(i, 1); }
+      else { const L = (CM().lights || []).find((l) => l.userData.ent === s.item); if (L) L.removeFromParent(); const i = this.data.entities.indexOf(s.item); if (i >= 0) this.data.entities.splice(i, 1); }
+    },
+    // Copy: remembered relative to the group's centre (works across maps).
+    copySel() {
+      const list = this.all(); if (!list.length) return;
+      const cx = list.reduce((t, s) => t + s.item.x, 0) / list.length, cz = list.reduce((t, s) => t + s.item.z, 0) / list.length;
+      this.clip = list.filter((s) => !(s.kind === 'entity' && (s.item.type === 'start' || s.item.type === 'npcref')))
+        .map((s) => ({ kind: s.kind, item: Object.assign(JSON.parse(JSON.stringify(s.item)), { x: s.item.x - cx, z: s.item.z - cz }) }));
+      this.clipCenter = { x: cx, z: cz };
+      this.game.log.add(`Copied ${this.clip.length} thing${this.clip.length === 1 ? '' : 's'}. Ctrl+V pastes at the cursor.`, 'system');
+    },
+    paste(offset) {
+      if (!this.clip || !this.clip.length) return;
+      const at = offset ? { x: this.clipCenter.x + 2, z: this.clipCenter.z + 2 } : (this.cursor || this.game.player.position);
+      this.snapshot();
+      const made = [];
+      for (const c of this.clip) {
+        const it = Object.assign(JSON.parse(JSON.stringify(c.item)), { u: uid(), x: r2(this.snap(at.x + c.item.x)), z: r2(this.snap(at.z + c.item.z)) });
+        if (c.kind === 'object') { this.data.objects.push(it); CM().spawnObject(this.game, it, false); }
+        else { this.data.entities.push(it); if (it.type === 'light') CM().spawnLight(this.game, it); }
+        made.push({ kind: c.kind, item: it });
+      }
+      this.rebuildMarkers();
+      this.select(made[0]); this.extra = made.slice(1); this.refreshExtraBoxes(); this.changed();
+    },
+    snap(v) { return this.grid ? Math.round(v / this.grid) * this.grid : v; },
+    // Test play: hide the editor and play as normal; Ctrl+P (or the button) comes back.
+    testPlay() {
+      if (!this.active) return;
+      this.cancelPlacing(); this.select(null); this.clearExtra();
+      this.active = false; this.testing = true; this.game.editing = false;
+      document.body.classList.remove('editing'); this.keybar.hidden = true;
+      this.markers.removeFromParent(); this.brushRing && this.brushRing.removeFromParent();
+      this.game.windows.close('mapeditor');
+      if (!this.backBtn) { this.backBtn = h('button.ed-back', { type: 'button', onclick: () => this.endTest() }, '■ Back to the editor (Ctrl+P)'); document.body.append(this.backBtn); }
+      this.backBtn.hidden = false;
+    },
+    endTest() {
+      if (!this.testing) return;
+      this.testing = false; if (this.backBtn) this.backBtn.hidden = true;
+      this.active = true; this.game.editing = true;
+      document.body.classList.add('editing'); this.keybar.hidden = false;
+      this.game.scene.add(this.markers); this.rebuildMarkers();
+      this.game.windows.open('mapeditor'); this.render(); this.refreshAdmin();
     },
     onMove(e) {
       if (!this.active) return;
@@ -180,8 +293,8 @@
         return;
       }
       if (!(this.placing || this.grab)) return;
-      if (this.placing && this.ghost) { this.ghost.position.set(p.x, G.Terrain.height(p.x, p.z), p.z); }
-      if (this.grab && this.sel) { this.sel.item.x = r2(p.x); this.sel.item.z = r2(p.z); this.applySel(); }
+      if (this.placing && this.ghost) { const gx = this.snap(p.x), gz = this.snap(p.z); this.ghost.position.set(gx, G.Terrain.height(gx, gz), gz); }
+      if (this.grab && this.sel) { this.sel.item.x = r2(this.snap(p.x)); this.sel.item.z = r2(this.snap(p.z)); this.applySel(); }
     },
 
     /* ---------- ground ---------- */
@@ -215,7 +328,22 @@
       if (last) TR.writePaint(last[0], last[1], last[2], last[3], false);
       this.dirty = true;
     },
+    // Scatter: drop a few random items from the chosen set around the brush, spaced apart.
+    scatterAt(p) {
+      const S = this.scatter, R = this.brush.size; if (!S.items.length) return;
+      const near = this.data.objects.filter((o) => Math.abs(o.x - p.x) < R + 3 && Math.abs(o.z - p.z) < R + 3);
+      for (let n = 0; n < S.density; n++) {
+        const a = Math.random() * Math.PI * 2, r = Math.sqrt(Math.random()) * R, x = r2(p.x + Math.cos(a) * r), z = r2(p.z + Math.sin(a) * r);
+        const k = S.items[Math.floor(Math.random() * S.items.length)];
+        const def = CM().LIB.find((l) => l.k === k), gap = Math.max(1.2, (def && def.solid ? def.solid * 3 : 1.2));
+        if (near.some((o) => Math.hypot(o.x - x, o.z - z) < gap) || !this.game.nav.walkable(x, z)) continue;
+        const o = { u: uid(), k, x, z, y: 0, ry: r2(Math.random() * Math.PI * 2), s: r2(0.75 + Math.random() * 0.5) };
+        this.data.objects.push(o); near.push(o); CM().spawnObject(this.game, o, false);
+      }
+      this.dirty = true;
+    },
     sculptAt(p) {
+      if (this.brush.tool === 'scatter') return this.scatterAt(p);
       if (this.brush.tool === 'paint' || this.brush.tool === 'erase') return this.paintAt(p);
       const d = this.data, TR = G.Terrain;
       d.ground = d.ground || { d: {} };
@@ -247,8 +375,15 @@
       this.rebuildMarkers(); this.render();
     },
     renderGround(body) {
-      const tools = [['raise', '⬆️', 'Raise'], ['lower', '⬇️', 'Lower'], ['smooth', '〰️', 'Smooth'], ['flatten', '▭', 'Flatten'], ['paint', '🖌️', 'Paint'], ['erase', '🧽', 'Erase paint']];
+      const tools = [['raise', '⬆️', 'Raise'], ['lower', '⬇️', 'Lower'], ['smooth', '〰️', 'Smooth'], ['flatten', '▭', 'Flatten'], ['paint', '🖌️', 'Paint'], ['erase', '🧽', 'Erase paint'], ['scatter', '🌲', 'Scatter']];
       body.append(h('h4', { text: 'Shape and paint' }), h('div.ed-grid', null, ...tools.map(([id, ic, name]) => this.paletteBtn(name, ic, this.brush.tool === id, () => { this.brush.tool = id; this.render(); }))));
+      if (this.brush.tool === 'scatter') {
+        const S = this.scatter, pick = CM().LIB.filter((l) => ['Nature', 'Trees', 'Flowers', 'Props'].includes(l.cat) && !l.deck);
+        body.append(h('h4', { text: 'Scatter these (click to choose)' }), h('div.ed-grid', null, ...pick.map((l) => this.paletteBtn(l.name, l.icon, S.items.includes(l.k), () => {
+          const i = S.items.indexOf(l.k); if (i >= 0) S.items.splice(i, 1); else S.items.push(l.k); this.render(); }))));
+        const out = h('b', { text: String(S.density) });
+        body.append(h('label.ed-slider', null, h('span', { text: 'Density' }), h('input', { type: 'range', min: '1', max: '10', value: String(S.density), 'aria-label': 'Scatter density', oninput: (e) => { S.density = Number(e.target.value); out.textContent = e.target.value; } }), out));
+      }
       if (this.brush.tool === 'paint') {
         const atlas = G.Terrain.buildPaintAtlas();
         if (!this.swatches) this.swatches = G.Terrain.PAINT.map((t) => { const c = document.createElement('canvas'); c.width = c.height = 64; c.getContext('2d').drawImage(atlas, ((t.id - 1) % 4) * 256, Math.floor((t.id - 1) / 4) * 256, 256, 256, 0, 0, 64, 64); return c.toDataURL(); });
@@ -274,6 +409,7 @@
     cancelPlacing() { if (this.ghost) { this.ghost.removeFromParent(); this.ghost = null; } this.placing = null; },
     placeAt(x, z) {
       this.snapshot();
+      x = this.snap(x); z = this.snap(z);
       const sp = this.placing, base = { u: uid(), x: r2(x), z: r2(z), y: 0, ry: this.ghost ? r2(this.ghost.rotation.y) : 0 };
       if (sp.kind === 'object') {
         const o = Object.assign(base, { k: sp.k, s: 1 });
@@ -292,6 +428,7 @@
 
     /* ---------- selection ---------- */
     select(s, keepTab) {
+      this.clearExtra();
       this.sel = s;
       if (this.box) { this.box.removeFromParent(); this.box = null; }
       if (s) {
@@ -349,15 +486,19 @@
     /* ---------- keys ---------- */
     onKey(e) {
       if (e.key === 'F10') { e.preventDefault(); this.toggle(); return; }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'p' && (this.active || this.testing)) { e.preventDefault(); e.stopImmediatePropagation(); this.testing ? this.endTest() : this.testPlay(); return; }
       if (!this.active) return;
       if (e.target && /input|textarea|select/i.test(e.target.tagName)) return;
       const k = e.key, s = this.sel, cam = this.game.camera;
       const stop = () => { e.preventDefault(); e.stopImmediatePropagation(); };
       // Camera-relative directions: "up" pushes away from the camera.
       const yaw = cam.yaw || 0, fx = -Math.sin(yaw), fz = -Math.cos(yaw), rx = Math.cos(yaw), rz = -Math.sin(yaw);
-      const step = e.shiftKey ? 0.1 : e.ctrlKey ? 2 : 0.5;
+      const step = this.grid || (e.shiftKey ? 0.1 : e.ctrlKey ? 2 : 0.5);
       if (k === 'Escape') { stop(); if (this.placing) this.cancelPlacing(); else if (this.grab) this.grab = false; else this.select(null); this.render(); return; }
       if ((e.ctrlKey || e.metaKey) && k.toLowerCase() === 'z') { stop(); this.undo(); return; }
+      if ((e.ctrlKey || e.metaKey) && k.toLowerCase() === 'c') { stop(); this.copySel(); return; }
+      if ((e.ctrlKey || e.metaKey) && k.toLowerCase() === 'v') { stop(); this.paste(false); return; }
+      if (this.extra.length && this.groupKey(e, k)) { stop(); return; }
       if (this.tab === 'ground' && (k === '[' || k === ']')) { stop(); this.brush.size = Math.max(1, Math.min(20, this.brush.size + (k === ']' ? 1 : -1))); this.render(); if (this.cursor) this.showBrush(this.cursor); return; }
       if (/^[wasd]$/i.test(k) && !e.ctrlKey) {
         stop();
@@ -464,6 +605,43 @@
       this.game.log.add(`Turned ${Object.keys(baked).length} cells of paths and streets into paint. Saving…`, 'system');
       return this.save();
     },
+    // Load a whole map version into the editor (press Save to keep it).
+    loadVersion(d) {
+      this.snapshot();
+      for (const k of Object.keys(this.data)) delete this.data[k];
+      Object.assign(this.data, JSON.parse(JSON.stringify(d)), { id: this.game.mapId });
+      CM().data[this.game.mapId] = this.data;
+      if (G.Terrain.map) { G.Terrain.map.ground = this.data.ground; G.Terrain.map.paint = this.data.paint; }
+      G.Terrain.refreshGround(0, 0, G.Terrain.HALF + 2);
+      this.select(null); CM().build(this.game); this.ensureData(); this.rebuildMarkers(); this.changed();
+      this.game.log.add('Loaded. Press Save map to keep it (paint shows fully after saving).', 'system');
+    },
+    async showHistory() {
+      const W = this.game.windows, w = this.histWin || (this.histWin = W.create('maphistory', 'Map history', { width: 340, pos: () => ({ x: 370, y: 90 }) }));
+      w.body.textContent = ''; w.body.append(h('p.hint', { text: 'Loading…' })); W.open('maphistory');
+      try {
+        const r = await G.Online.api(`/api/maps/${this.game.mapId}/versions`);
+        w.body.textContent = '';
+        if (!r.versions.length) { w.body.append(h('p.hint', { text: 'No earlier versions yet. One is kept every time you save.' })); return; }
+        w.body.append(h('div.tp-list', null, ...r.versions.map((v) => h('button.tp-item', { type: 'button', onclick: async () => {
+          if (!confirm('Load this version into the editor? (Nothing changes for players until you save.)')) return;
+          const one = await G.Online.api(`/api/maps/${this.game.mapId}/versions/${v.id}`); this.loadVersion(one.data); W.close('maphistory');
+        } }, h('b', { text: new Date(v.saved_at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) }), h('small', { text: `${v.objects} objects${v.username ? ' · ' + v.username : ''}` })))));
+      } catch (e) { w.body.textContent = ''; w.body.append(h('p.hint', { text: 'Could not load the history: ' + e.message })); }
+    },
+    exportMap() {
+      const blob = new Blob([JSON.stringify(this.data)], { type: 'application/json' });
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `willowmere-map-${this.game.mapId}-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    },
+    async importMap(file) {
+      try {
+        const d = JSON.parse(await file.text());
+        if (!Array.isArray(d.objects) || !Array.isArray(d.entities)) throw new Error('not a Willowmere map file');
+        if (!confirm(`Replace this map’s editor data with “${file.name}”? (Nothing changes for players until you save.)`)) return;
+        this.loadVersion(d);
+      } catch (e) { this.game.log.add('Import failed: ' + e.message, 'warn'); }
+    },
     async takeOver(onlyNew) {
       if (!confirm(onlyNew ? 'Make the gate, spike wall, bridge, rocks and bushes editable? The map will be saved and reloaded.' : 'Make all of this map’s original objects, spawns, warps and NPCs editable? The map will be saved and reloaded.')) return;
       const o = CM().originals(this.game, onlyNew), d = this.data;
@@ -493,7 +671,9 @@
       b.textContent = '';
       const d = this.data, mapName = (G.Maps[this.game.mapId] || {}).name || this.game.mapId;
       b.append(h('div.ed-status', null, h('b', { text: mapName }), h('span', { text: `${d.objects.length} objects · ${d.entities.length} entities` }),
-        h('span.ed-dirty' + (this.dirty ? '.on' : ''), { text: this.dirty ? '● Unsaved' : 'Saved' })));
+        h('span.ed-dirty' + (this.dirty ? '.on' : ''), { text: this.dirty ? '● Unsaved' : 'Saved' })),
+        h('div.ed-row', null, this.all().length > 1 ? h('small.ed-selcount', { text: `${this.all().length} selected · Ctrl+C copy · Ctrl+D duplicate · Del delete` }) : h('small.ed-selcount', { text: 'Shift+click adds to the selection · Ctrl+drag selects a box' }),
+          h('button.btn.small.ghost', { type: 'button', title: 'Play the map as a normal player (Ctrl+P)', onclick: () => this.testPlay() }, '▶ Test play')));
       const tabs = [['place', 'Objects'], ['entities', 'Entities'], ['ground', 'Ground'], ['selected', 'Selected'], ['map', 'Map']];
       if (this.tab !== 'ground' && this.brushRing) this.brushRing.removeFromParent();
       b.append(h('div.ed-tabs', { role: 'tablist' }, ...tabs.map(([id, t]) => h('button.ed-tab' + (this.tab === id ? '.on' : ''), { type: 'button', role: 'tab', 'aria-selected': String(this.tab === id), onclick: () => { this.tab = id; this.render(); } }, t))));
@@ -523,6 +703,8 @@
       return `${kind} (from this map, #${n})`;
     },
     renderPlace(body) {
+      body.append(h('div.ed-snap', null, h('span', { text: 'Snap to grid:' }), ...[[0, 'Off'], [0.5, '0.5'], [1, '1'], [2, '2'], [4, '4']].map(([v, t]) =>
+        h('button.ed-snapbtn' + (this.grid === v ? '.on' : ''), { type: 'button', onclick: () => { this.grid = v; this.render(); } }, t))));
       const cats = [...new Set(CM().LIB.map((l) => l.cat))];
       for (const c of cats) {
         body.append(h('h4', { text: c }), h('div.ed-grid', null, ...CM().LIB.filter((l) => l.cat === c).map((l) =>
@@ -619,6 +801,13 @@
         body.append(h('h4', { text: 'Paths and streets' }), h('p.hint', { text: 'Turn this map’s dirt paths, plaza and streets into ground paint, so you can erase, move or extend them with the Paint tool. This saves and reloads the map.' }),
           h('button.btn.small', { type: 'button', onclick: () => this.bakePaths() }, 'Make paths and streets paintable'));
       } else if (d.takeover) body.append(h('p.hint', { text: 'Everything on this map is editable: objects, paths and streets (as paint).' }));
+      const imp = h('input', { type: 'file', accept: '.json,application/json', hidden: true });
+      imp.addEventListener('change', () => { const f = imp.files[0]; if (f) this.importMap(f); imp.value = ''; });
+      body.append(h('h4', { text: 'Backups' }), h('div.opt-btns', null,
+        h('button.btn.small', { type: 'button', onclick: () => this.showHistory() }, '🕘 History…'),
+        h('button.btn.small.ghost', { type: 'button', onclick: () => this.exportMap() }, '⬇ Export'),
+        h('button.btn.small.ghost', { type: 'button', onclick: () => imp.click() }, '⬆ Import')), imp,
+        h('p.hint', { text: 'Every save keeps the version before it (the last 30). Export downloads this map as a file; Import loads one (then press Save).' }));
       body.append(h('h4', { text: 'Go to map' }), h('button.btn.small', { type: 'button', onclick: () => this.openTeleport() }, '🗺 Choose a map…'));
       const nid = h('input.soc-in', { type: 'text', placeholder: 'map_id', maxlength: '40' }), nname = h('input.soc-in', { type: 'text', placeholder: 'Map name', maxlength: '40' });
       for (const i of [nid, nname]) i.addEventListener('keydown', (e) => e.stopPropagation());

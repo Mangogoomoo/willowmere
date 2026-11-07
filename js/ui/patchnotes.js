@@ -6,6 +6,14 @@
   const h = G.h;
 
   const PATCHES = [
+    { v: '0.31', date: '2026-11-08T22:00', title: 'Map editor: selection, copy/paste, scatter brush, backups', notes: [
+      'Select several things: Shift+click adds or removes, Ctrl+drag selects a box. Arrow keys, Page Up/Down, Q/E (turns the group around its centre), Delete and Ctrl+D work on all of them.',
+      'Copy and paste: Ctrl+C copies the selection, Ctrl+V pastes it at the cursor — on any map.',
+      'Snap to grid (0.5, 1, 2 or 4 units) for neat placing, grabbing and nudging.',
+      'Scatter brush (Ground tab): choose trees, bushes, flowers or rocks and paint whole forests with natural spacing.',
+      'Backups: every save keeps the previous version (the last 30). Map → History lets you load any of them; Export downloads a map as a file and Import loads one.',
+      'Test play (Ctrl+P or ▶ Test play): play the map as a normal player, then hop back into the editor.',
+    ] },
     { v: '0.30', date: '2026-11-08T19:00', title: 'Ground painting fixed; paths and streets editable', notes: [
       'Fixed: ground paint could show the wrong texture or turn black (most of all after a map reloaded). Textures now always show correctly, with soft edges between them.',
       'Painting a different texture over paint now replaces it straight away.',
