@@ -45,6 +45,7 @@
       this.casting = null;      // { id, level, target, t, dur }
       this.queued = null;       // waiting to get in range: { id, target }
       this.delay = 0;           // short after-cast delay shared by all skills
+      this.motion = 0;          // seconds the character stands still while a skill goes off
     }
 
     level(id) { return this.levels[id] || 0; }
@@ -294,6 +295,12 @@
       if (s.zeny) p.zeny -= s.zeny(lv);
       this.cooldowns[s.id] = s.cd(lv);
       this.delay = 0.25;
+      // Like RO: using a skill stops you where you stand for one attack motion (based on ASPD).
+      p.path = null; p.approachTarget = null; p.pendingLoot = null;
+      const motion = p.sprite.duration('attack');
+      this.motion = Math.min(motion, p.derived.attackDelay * 0.92);
+      this.motionAnim = s.target === 'self' || s.target === 'ally' ? 'cast' : 'attack';
+      p.sprite.play(this.motionAnim, { restart: true, speed: this.motionAnim === 'attack' ? motion / this.motion : 1 });
       if (target && target !== p) p.faceTowards(target.position.x, target.position.z);
       if (G.SkillSystem.payExtra) G.SkillSystem.payExtra(this, s, lv);
       if (G.Net && G.Net.ws) G.Net.skillFx(s, lv, target);
@@ -318,6 +325,7 @@
       const p = this.player;
       for (const id in this.cooldowns) { this.cooldowns[id] -= dt; if (this.cooldowns[id] <= 0) delete this.cooldowns[id]; }
       if (this.delay > 0) this.delay -= dt;
+      if (this.motion > 0) this.motion -= dt;
       let changed = false;
       for (const id in this.buffs) if (this.game.time >= this.buffs[id].until) {
         delete this.buffs[id]; changed = true;

@@ -25,6 +25,9 @@
       d.addEventListener('contextmenu', (e) => e.preventDefault());
       d.addEventListener('pointerdown', (e) => this.onDown(e));
       d.addEventListener('pointermove', (e) => this.onMove(e));
+      // The skill cursor only shows over the game world (windows keep the normal pointer).
+      d.addEventListener('pointerleave', () => { if (this.cursorEl) this.cursorEl.hidden = true; });
+      d.addEventListener('pointerenter', () => { if (this.cursorEl && this.targeting) this.cursorEl.hidden = false; });
       window.addEventListener('pointerup', (e) => this.onUp(e));
       d.addEventListener('wheel', (e) => { e.preventDefault(); this.game.camera.zoom(e.deltaY * (e.deltaMode === 1 ? 16 : 1)); }, { passive: false });
       window.addEventListener('blur', () => { this.rotating = false; this.leftDown = false; this.holdMove = false; this.updateCursor(); });
@@ -84,6 +87,8 @@
 
     onMove(e) {
       this.setNdc(e);
+      this.mouseX = e.clientX; this.mouseY = e.clientY;
+      if (this.targeting && this.cursorEl) this.cursorEl.style.transform = `translate(${e.clientX}px, ${e.clientY}px)`;
       if (this.rotating) {
         const dx = e.clientX - this.lastX, dy = e.clientY - this.lastY;
         this.lastX = e.clientX; this.lastY = e.clientY;
@@ -127,6 +132,12 @@
       this.targeting = skillId;
       this.targetMode = mode || 'enemy';
       document.body.classList.add('cursor-target');
+      // Like RO: a turning target ring at the mouse, with the skill's name and level beside it.
+      const el = this.skillCursor(), s = G.Skills.get(skillId);
+      el.querySelector('.sc-label').textContent = `${s.name} Lv ${this.game.player.skills.useLevel(skillId)}`;
+      if (this.mouseX != null) el.style.transform = `translate(${this.mouseX}px, ${this.mouseY}px)`;
+      el.hidden = this.mouseX == null;
+      this.updateCursor();
       this.game.hud.toast(this.targetMode === 'ground' ? `Click the ground to place ${G.Skills.get(skillId).name}. Right-click or Esc cancels.`
         : this.targetMode === 'ally'
         ? `Click a character (yourself or another player) to cast ${G.Skills.get(skillId).name}. Right-click or Esc cancels.`
@@ -150,10 +161,20 @@
       }
       return best;
     }
+    skillCursor() {
+      if (this.cursorEl) return this.cursorEl;
+      const el = this.cursorEl = document.createElement('div');
+      el.id = 'skill-cursor'; el.hidden = true; el.setAttribute('aria-hidden', 'true');
+      el.innerHTML = '<svg class="sc-ring" viewBox="0 0 48 48" width="48" height="48"><circle class="sc-out" cx="24" cy="24" r="17"/><circle class="sc-seg" cx="24" cy="24" r="17"/>'
+        + '<circle class="sc-in" cx="24" cy="24" r="9"/><circle class="sc-dot" cx="24" cy="24" r="1.8"/></svg><span class="sc-label"></span>';
+      document.body.appendChild(el);
+      return el;
+    }
     cancelTargeting(msg) {
       if (!this.targeting) return;
       this.targeting = null;
       document.body.classList.remove('cursor-target');
+      if (this.cursorEl) this.cursorEl.hidden = true;
       if (msg) this.game.log.add('Skill cancelled.', 'info');
     }
 
@@ -232,6 +253,8 @@
       b.toggle('cursor-attack', !this.rotating && !!this.hover);
       b.toggle('cursor-pickup', !this.rotating && !this.hover && !!this.hoverLoot);
       b.toggle('cursor-talk', !this.rotating && !this.hover && !!this.hoverNpc);
+      // The skill ring lights up over something it can be used on.
+      if (this.cursorEl) this.cursorEl.classList.toggle('over', !!this.targeting && (this.targetMode === 'ground' || (this.targetMode === 'enemy' && !!this.hover)));
     }
   }
 

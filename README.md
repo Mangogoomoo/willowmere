@@ -216,7 +216,8 @@ the database on the same origin.
   2 s, Fire Ball 1.5 s, bolts 0.7 s per level, Heal 0.4 s, Increase AGI 1 s,
   Arrow Repel 1.5 s...). DEX shortens it (150 DEX = instant), the tooltip
   shows your own cast time, a green cast bar fills above your head, and
-  taking damage interrupts the cast unless Endure is active.
+  taking damage interrupts the cast unless Endure is active. You stand still
+  while casting (Free Cast excepted) and for one attack motion after any skill.
 - **Sell all** button on every row of the NPC sell list.
 - **Minimap** (top-right, north-up, zoomable) and **world map** (M): terrain,
   obstacles, NPCs, monsters, the boss, portals, your trial objective, your

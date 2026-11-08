@@ -257,14 +257,12 @@
       if (item.use && item.use.fn && G.ItemUse && G.ItemUse[item.use.fn]) return G.ItemUse[item.use.fn](this, item);
       const u = item.use, game = this.game;
       if (u.heal) {
-        if (this.hp >= this.maxHp) { game.log.add('Your HP is already full.', 'info'); return false; }
         const amount = Math.floor(u.heal * (1 + this.derived.total.vit * 0.02));
         this.hp = Math.min(this.maxHp, this.hp + amount);
         game.overlay.addText(this.position, `+${amount}`, 'heal');
         game.effects.sparkle(this.position, [0.55, 1, 0.6], 14);
       }
       if (u.sp) {
-        if (this.sp >= this.maxSp && !u.heal) { game.log.add('Your SP is already full.', 'info'); return false; }
         const amount = Math.floor(u.sp * (1 + this.derived.total.int * 0.02));
         this.sp = Math.min(this.maxSp, this.sp + amount);
         game.overlay.addText(this.position, `+${amount} SP`, 'spheal');
@@ -308,12 +306,12 @@
     /* ---------- commands ---------- */
     moveTo(point, silent) {
       if (!this.alive) return false;
+      // Like RO: you stand still while casting (Free Cast lets Sages walk) and while a skill goes off.
+      if ((this.skills.casting && !this.derived.extra.freeCast) || this.skills.motion > 0) return false;
       this.attacking = false;
       this.pendingLoot = null;
       this.approachTarget = null;
       this.standUp();
-      // Free Cast lets Sages keep casting while they walk.
-      if (this.skills.casting && !this.derived.extra.freeCast) this.skills.cancelCast('Casting interrupted.');
       this.skills.queued = null;
       if (this.swinging && this.impactDone) this.swinging = false; // allow cancelling the recovery
       const path = this.game.nav.findPath(this.position.x, this.position.z, point.x, point.z);
@@ -539,7 +537,7 @@
 
       const stopDist = this.attacking && t ? this.attackRange + t.def.radius - 0.15
         : this.approachTarget ? Math.max(0, this.approachTarget.range - 0.2) : 0;
-      this.moving = !this.swinging && this.followPath(dt, this.moveSpeed, stopDist);
+      this.moving = !this.swinging && !(this.skills.motion > 0) && this.followPath(dt, this.moveSpeed, stopDist);
       // Little dust puffs at the feet while walking.
       if (this.moving) {
         this.dustT = (this.dustT || 0) + dt;
@@ -552,6 +550,7 @@
       }
 
       if (this.swinging) this.sprite.play('attack');
+      else if (this.skills.motion > 0) this.sprite.play(this.skills.motionAnim);
       else if (this.moving) this.sprite.play('walk');
       else if (this.hurtT > 0) this.sprite.play('hit');
       else this.sprite.play('idle');

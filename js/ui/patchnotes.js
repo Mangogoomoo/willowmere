@@ -6,6 +6,12 @@
   const h = G.h;
 
   const PATCHES = [
+    { v: '0.38', date: '2026-11-14T12:00', title: 'Skills feel more like RO', notes: [
+      'You now stand still while casting: clicking the ground no longer walks you away (and no longer cancels the spell). Sages with Free Cast can still walk while casting.',
+      'Using a skill stops you where you stand for one attack motion (shorter with more ASPD), so you can’t walk and shoot Double Strafe at the same time any more.',
+      'Potions work even when your HP or SP is full, like in RO.',
+      'New skill cursor: when a skill asks for a target, the mouse becomes a turning target ring with the skill’s name and level next to it. It turns red over a monster you can use it on.',
+    ] },
     { v: '0.37', date: '2026-11-13T12:00', title: 'Map editor: all original scenery is editable', notes: [
       'Fixed: rocks and other converted scenery turned dark (sometimes black) once a map’s originals were made editable. Converted pieces now keep their own colour, shape, tilt, height and how much they block walking. Maps converted earlier are repaired automatically.',
       'More of each map can be made editable: fallen logs, lily pads, reeds, the signpost by the bridge (which used to vanish), the forest’s giant mushrooms, and in caves the glowing crystals, torches, rubble, bones, mushrooms and gold crystals. On maps you already converted, press “Make remaining originals editable” (Map tab).',
