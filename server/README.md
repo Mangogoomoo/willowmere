@@ -17,6 +17,19 @@ written to the tables every 15 seconds, on logout, right after a trade and when
 the server is stopped. The game's own save (`PUT /api/characters/:id`) now only
 stores position, HP/SP, skills, hotbar, quest progress and preferences.
 
+**Monsters (Stage 9, phase 2).** `world.js` runs the monsters of every map that
+has players on it. It loads the game's own files (terrain, navigation grid,
+scenery, map-editor edits, the `Monster` class and its AI) into a sandbox with
+nothing drawn, one sandbox per map, so monsters walk exactly where they do in
+the browser. Every 0.1 s it moves them; every 0.2 s it sends the changes to the
+map's players (`{ t: 'mobs' }`). Players' hits arrive as `{ t: 'mob', op:
+'dmg' | 'status' | 'knock' }`; the server tells a player when a monster swings
+at them (`op: 'attack'`) or when their blow killed it (`op: 'killed'`). The town is
+started with the server; other maps start when someone arrives and stop ten
+minutes after the last player leaves. A map is rebuilt when an admin saves it
+in the map editor. One map costs about 8 MB of memory and a fraction of a
+millisecond per step (`/api/health` shows how many maps are running).
+
 Reference tables filled on every start: `item_defs`, `monster_defs`,
 `monster_spawns`, `monster_drops`, `job_defs`, `skill_defs`, `shops` and
 `shop_items` (shop NPCs from the map editor are added when a map is saved),

@@ -49,7 +49,7 @@
         game.save.save(true);
         game.hud.toast(`Guild founded: ${m.name}!`); game.sfx('quest');
       } else if (m.t === 'invite') this.showInvite(m);
-      else if (m.t === 'notice') game.log.add(m.text, 'system');
+      else if (m.t === 'notice') { game.log.add(m.text, 'system'); if (m.toast) game.hud.toast(m.text); }
       else if (m.t === 'pinfo') {
         const who = G.Net.players.get(m.id);
         if (who) { who.party = m.party; who.guild = m.guild; }

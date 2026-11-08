@@ -14,6 +14,7 @@ const crypto = require('crypto');
 const vm = require('vm');
 const { Pool } = require('pg');
 const { WebSocketServer } = require('ws');
+const { World } = require('./world.js');
 
 const ROOT = path.resolve(__dirname, '..');
 const PORT = Number(process.env.PORT) || 3000;
@@ -148,7 +149,7 @@ async function saveCharacter(charId, accountId, d) {
 async function api(req, res, url) {
   const ip = req.socket.remoteAddress || '?';
   const m = (re) => re.exec(url.pathname);
-  if (url.pathname === '/api/health') return send(res, 200, { ok: true, online: online.size });
+  if (url.pathname === '/api/health') return send(res, 200, { ok: true, online: online.size, maps: World.sims.size });
   /* ---- map editor: edited maps and uploaded 3D models ---- */
   if (url.pathname === '/api/me') {
     const acct = await requireAccount(req, res); if (!acct) return;
@@ -165,6 +166,7 @@ async function api(req, res, url) {
     if (req.method === 'DELETE') {
       await pool.query('DELETE FROM custom_maps WHERE id = $1', [id]);
       await Ref.syncCustomShops();
+      World.mapUpdated(id, null);
       for (const [ws] of online) if (ws.readyState === 1) ws.send(JSON.stringify({ t: 'map_updated', id, data: null }));
       return send(res, 200, { ok: true });
     }
@@ -179,6 +181,7 @@ async function api(req, res, url) {
     await pool.query('INSERT INTO custom_maps (id, data, updated_by, updated_at) VALUES ($1, $2, $3, now()) ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data, updated_by = EXCLUDED.updated_by, updated_at = now()', [id, JSON.stringify(data), acct.id]);
     if (data.rules && data.rules.pvp) pvpMaps.add(id); else pvpMaps.delete(id);
     await Ref.syncCustomShops();
+    World.mapUpdated(id, data);
     // Everyone online gets the new version straight away.
     for (const [ws] of online) if (ws.readyState === 1) ws.send(JSON.stringify({ t: 'map_updated', id, data }));
     return send(res, 200, { ok: true });
@@ -348,22 +351,8 @@ const cleanLook = (l) => {
   return out;
 };
 
-/* Shared monsters: one player per map (the earliest to arrive) runs that map's
-   monsters with the game's own AI and sends snapshots; the server keeps the
-   latest state, relays it to everyone else, and passes their hits to the host. */
-const hosts = new Map();      // map -> ws
-const mobCache = new Map();   // map -> Map(id -> state)
-const onMap = (map) => [...online].filter(([, s]) => s.map === map);
-function electHost(map) {
-  const players = onMap(map);
-  const cur = hosts.get(map);
-  if (!players.length) { hosts.delete(map); mobCache.delete(map); return; }
-  if (cur && online.has(cur) && online.get(cur).map === map) return;
-  const next = players[0][0];
-  hosts.set(map, next);
-  for (const [ws] of players) if (ws.readyState === 1) ws.send(JSON.stringify({ t: 'host', map, isHost: ws === next }));
-}
-const cachedMobs = (map) => [...((mobCache.get(map) || new Map()).values())];
+/* Monsters live on the server (server/world.js): it runs every map that has
+   players, sends everyone the same snapshots, and takes their hits. */
 const wsOfChar = (id) => { for (const [ws, s] of online) if (s.charId === id) return ws; return null; };
 
 const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 64 * 1024 });
@@ -395,10 +384,9 @@ wss.on('connection', (ws) => {
       if (me.partyId) Social.refreshParty(me.partyId).catch(() => {});
       if (me.guild) Social.refreshGuild(me.guild.id).catch(() => {});
       const ts = Trade.sessions.get(me.charId); if (ts) Trade.close(ts, `${me.name} left.`);
-      ws.send(JSON.stringify({ t: 'welcome', map: me.map, you: me.charId, players: [...online.values()].filter((s) => s !== me && s.map === me.map).map(publicState), online: online.size, mobs: cachedMobs(me.map), ground: Ground.list(me.map) }));
+      ws.send(JSON.stringify({ t: 'welcome', map: me.map, you: me.charId, players: [...online.values()].filter((s) => s !== me && s.map === me.map).map(publicState), online: online.size, mobs: World.snapshot(me.map), ground: Ground.list(me.map) }));
       Chars.push(st);
       broadcast(me.map, { t: 'join', p: publicState(me) }, ws);
-      electHost(me.map);
       return;
     }
     if (me.gone) return;
@@ -410,13 +398,12 @@ wss.on('connection', (ws) => {
         const old = me.map;
         const ts = Trade.sessions.get(me.charId); if (ts) Trade.close(ts, 'The trade ended: a player left the map.');
         broadcast(old, { t: 'leave', id: me.charId }, ws);
+        World.leave(me, old);
         me.map = map;
-        if (hosts.get(old) === ws) hosts.delete(old);
-        electHost(old);
-        ws.send(JSON.stringify({ t: 'players', map, players: [...online.values()].filter((s) => s !== me && s.map === map).map(publicState), mobs: cachedMobs(map), ground: Ground.list(map) }));
+        ws.send(JSON.stringify({ t: 'players', map, players: [...online.values()].filter((s) => s !== me && s.map === map).map(publicState), mobs: World.snapshot(map), ground: Ground.list(map) }));
         Object.assign(me, { x: num(msg.x, 0), z: num(msg.z, 0) });
         broadcast(map, { t: 'join', p: publicState(me) }, ws);
-        electHost(map);
+        World.join(me);
         return;
       }
       Object.assign(me, { x: num(msg.x, me.x), z: num(msg.z, me.z), facing: num(msg.facing, me.facing), moving: !!msg.moving });
@@ -424,6 +411,8 @@ wss.on('connection', (ws) => {
       const int = (v, hi) => (Number.isFinite(Number(v)) ? Math.max(0, Math.min(hi, Math.round(Number(v)))) : null);
       me.hp = int(msg.hp, 1e7); me.maxHp = int(msg.maxHp, 1e7);
       me.sp = int(msg.sp, 1e7); me.maxSp = int(msg.maxSp, 1e7);
+      // The server's monsters see where you are (you join them on your first update).
+      if (!me.placed) { me.placed = true; World.join(me); } else World.move(me);
       // HP goes to everyone on the map; SP only to members of the same party.
       const base = { t: 'state', map: me.map, id: me.charId, x: me.x, z: me.z, facing: me.facing, moving: me.moving, hp: me.hp, maxHp: me.maxHp };
       const plain = JSON.stringify(base), withSp = JSON.stringify(Object.assign({}, base, { sp: me.sp, maxSp: me.maxSp }));
@@ -443,24 +432,9 @@ wss.on('connection', (ws) => {
       if (text.startsWith('%') && me.partyId) Social.toParty(me.partyId, { t: 'chat', id: me.charId, from: me.name, text: text.slice(1).trim(), channel: 'party' });
       else if (text.startsWith('$') && me.guild) Social.toGuild(me.guild.id, { t: 'chat', id: me.charId, from: me.name, text: text.slice(1).trim(), channel: 'guild' });
       else if (text) broadcast(me.map, { t: 'chat', id: me.charId, from: me.name, text });
-    } else if (msg.t === 'mobs') {
-      // Snapshot from the map's host (and only for the map it is hosting).
-      if (hosts.get(me.map) !== ws || !Array.isArray(msg.list) || msg.map !== me.map) return;
-      if (!mobCache.has(me.map)) mobCache.set(me.map, new Map());
-      const cache = mobCache.get(me.map);
-      for (const m of msg.list.slice(0, 400)) if (m && Number.isInteger(m.i)) cache.set(m.i, m);
-      broadcast(me.map, { t: 'mobs', map: me.map, list: msg.list.slice(0, 400) }, ws);
     } else if (msg.t === 'mob') {
-      if (msg.map !== me.map) return;   // sent just before a map change: drop it
-      const host = hosts.get(me.map);
-      if (['dmg', 'status', 'knock'].includes(msg.op)) {
-        // A player's hit on a monster: the host applies it.
-        if (host && host !== ws && host.readyState === 1) host.send(JSON.stringify(Object.assign({}, msg, { from: me.charId })));
-      } else if (host === ws && ['attack', 'hurt', 'killed'].includes(msg.op)) {
-        // The host's verdicts go to whoever they concern.
-        const target = wsOfChar(Number(msg.to));
-        if (target && target.readyState === 1 && online.get(target).map === me.map) target.send(JSON.stringify(msg));
-      }
+      // A player's hit, status or knockback on a monster: the server's monster takes it.
+      if (['dmg', 'status', 'knock'].includes(msg.op)) World.hit(me, msg);
     } else if (msg.t === 'fx') {
       // Cast bars and spell effects, for everyone else on the map to see.
       broadcast(me.map, Object.assign({}, msg, { from: me.charId, map: me.map }), ws);
@@ -497,8 +471,7 @@ wss.on('connection', (ws) => {
       online.delete(ws); broadcast(me.map, { t: 'leave', id: me.charId });
       if (me.partyId) Social.refreshParty(me.partyId).catch(() => {});
       if (me.guild) Social.refreshGuild(me.guild.id).catch(() => {});
-      if (hosts.get(me.map) === ws) hosts.delete(me.map);
-      electHost(me.map);
+      World.leave(me);
     }
     const st = me && Chars.mem.get(me.charId);
     if (st && st.ws === ws) Chars.release(st, ws).catch((e) => console.error(e));
@@ -1488,6 +1461,9 @@ async function start() {
   if (ADMINS.size) await pool.query('UPDATE accounts SET is_admin = true WHERE lower(username) = ANY($1)', [[...ADMINS]]);
   for (const r of (await pool.query("SELECT id FROM custom_maps WHERE data->'rules'->>'pvp' = 'true'")).rows) pvpMaps.add(r.id);
   const n = await seedGameData(G);
+  // The server's world: monsters on every map that has players.
+  World.init({ broadcast, send: (charId, msg) => { const w = wsOfChar(charId); if (w && w.readyState === 1) w.send(JSON.stringify(msg)); } },
+    Object.fromEntries((await pool.query('SELECT id, data FROM custom_maps')).rows.map((r) => [r.id, r.data])));
   await Ref.load();
   await Ref.syncCustomShops();
   server.listen(PORT, () => console.log(`Willowmere server on http://localhost:${PORT}  (${Object.keys(items).length} items, ${Object.keys(mons).length} monsters, ${n.drops} drops, ${n.jobs} jobs, ${n.skills} skills, ${n.shops} shops, ${n.quests} quests in the database)`));

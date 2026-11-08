@@ -6,6 +6,14 @@
   const h = G.h;
 
   const PATCHES = [
+    { v: '0.36', date: '2026-11-12T12:00', title: 'Trustworthy server, part 2: monsters live on the server', notes: [
+      'Online, the server now runs the monsters on every map that has players: where they spawn, how they wander, chase and attack, boss slams and respawns. Everyone on a map sees exactly the same monsters.',
+      'No more “map host”: monsters no longer freeze, jump or reset when the first player on a map lags or leaves.',
+      'The server uses the game’s own maps and monster behaviour (including your map-editor edits), so monsters walk where they always did. Editing a map updates its monsters straight away.',
+      'A monster killed by poison now counts for the player who poisoned it.',
+      'Offline play is unchanged: monsters run in your game as before.',
+      'Coming next: the server works out hits and damage.',
+    ] },
     { v: '0.35', date: '2026-11-11T12:00', title: 'Trustworthy server, part 1: the server keeps your character', notes: [
       'Online, the server now owns your items, equipment, cart, storage, Zeny, EXP, levels, job and stats. Your game still shows everything instantly, but each action (buying, selling, equipping, refining, trading, dropping, picking up, raising stats, changing job, turning in quests) is checked by the server, and it corrects your game if something doesn’t add up.',
       'Refining online: the server rolls the success chance.',

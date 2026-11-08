@@ -202,7 +202,7 @@
       const game = this.game;
       // Anything tagged with another map is left over from before a map change.
       if (m.map && m.map !== game.mapId && ['mobs', 'mob', 'state', 'join', 'players', 'welcome', 'action', 'fx', 'look', 'host'].includes(m.t)) return;
-      if (m.t === 'host' || m.t === 'mobs' || m.t === 'mob') { G.MobSync.handle(m); return; }
+      if (m.t === 'mobs' || m.t === 'mob') { G.MobSync.handle(m); return; }
       if (m.t === 'char' || m.t === 'op_res') { G.Ledger.handle(m); return; }
       if (['party', 'guild', 'guild_created', 'invite', 'notice', 'pinfo', 'gainexp', 'loot_gift', 'guild_summon'].includes(m.t)) { G.Social.handle(m); return; }
       if (/^(trade_|inspect_)/.test(m.t)) { G.Trade.handle(m); return; }

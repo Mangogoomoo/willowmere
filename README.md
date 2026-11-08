@@ -290,6 +290,18 @@ database, and you see other players move, change gear and chat (press
 Enter). See `server/README.md` for setup. Opened any other way (a file or
 the published page), Willowmere stays single-player with browser saves.
 
+## Stage 9: trustworthy server (in progress)
+
+- **Phase 1 – the server keeps your character:** online, items, equipment,
+  cart, storage, Zeny, EXP, levels, job and stats change only through actions
+  the server checks (buy, sell, equip, refine, trade, drop, pick up...). Game
+  data (drops, jobs, skills, shops, quests) is in database tables too.
+- **Phase 2 – monsters live on the server:** the server runs every map that has
+  players (spawns, wandering, chasing, attacking, bosses, respawns) with the
+  game's own monster code and navigation, so map hosts are gone and everyone
+  sees the same monsters. Damage and rewards are still worked out by each
+  player's game until phases 3 and 4. Offline, monsters run in your game.
+
 ## Stage 7: full pre-renewal skill trees and class looks
 
 - **Every class has its classic skill tree**, with the original max levels and
@@ -393,7 +405,8 @@ Possible next steps: party play, monster skills, ammunition, more dungeons.
     js/ui/extras.js            debug tools, auto-loot, trial tracker, buffs
     js/ui/minimap.js           minimap and world map
     js/net/online.js           online mode: API, login/register, other players, chat
-    server/                    Node.js game server (Neon Postgres + WebSockets)
+    server/                    Node.js game server (Neon Postgres + WebSockets);
+                               server/world.js runs the monsters online
     js/entities/npc.js         NPC entities
     js/game.js                 renderer, lights, world assembly, main loop
     js/main.js                 boot + loading screen

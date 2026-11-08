@@ -1,44 +1,20 @@
-/* Shared monsters (online). One player per map is the "host": their game runs
-   the monsters with the normal AI and sends snapshots through the server.
-   Everyone else shows "puppet" monsters that follow those snapshots, and
-   sends their hits, statuses and knockbacks to the host. When the host
-   leaves, the next player takes over from the last snapshot.
-   Rewards stay personal: whoever lands the killing blow gets the EXP, the
-   drops and the quest progress on their own game. */
+/* Shared monsters (online). The server runs every map's monsters (Stage 9:
+   server/world.js) and sends snapshots; your game shows "puppet" monsters
+   that follow them, and sends your hits, statuses and knockbacks to the
+   server. When a monster attacks you, the server says so and your game works
+   out the hit; when your blow kills one, the server tells you, and the EXP,
+   drops and quest progress are yours. Offline, monsters run in your game. */
 (function (G) {
   'use strict';
   const M = G.Monster.prototype, MM = G.MonsterManager.prototype;
   const Sync = {
-    isHost: false,
     online() { return !!(G.Net && G.Net.ws && G.Net.ws.readyState === 1); },
-    puppet() { return this.online() && !this.isHost; },
-    sentT: 0, fullT: 0, last: new Map(),
+    puppet() { return this.online(); },
   };
   G.MobSync = Sync;
   const net = () => G.Net;
 
-  /* ---------------- snapshots (host) ---------------- */
-  function stateOf(m) {
-    const st = {};
-    for (const k in m.status) st[k] = Math.max(0, +(m.status[k].until - m.game.time).toFixed(1));
-    return { i: m.id, x: +m.position.x.toFixed(2), z: +m.position.z.toFixed(2), hx: +m.home.x.toFixed(2), hz: +m.home.z.toFixed(2), f: +m.facing.toFixed(2), hp: Math.round(m.hp), a: m.alive ? 1 : 0,
-      mv: m.moving ? 1 : 0, sw: m.swingSeq || 0, st, tg: m.aggro ? (m.aggro.isRemote ? m.aggro.id : (net().charId || 0)) : 0 };
-  }
-  function sendSnapshots(mgr, dt) {
-    Sync.sentT -= dt; Sync.fullT -= dt;
-    if (Sync.sentT > 0) return;
-    Sync.sentT = 0.15;
-    const full = Sync.fullT <= 0;
-    if (full) Sync.fullT = 3;
-    const list = [];
-    for (const m of mgr.list) {
-      const s = stateOf(m), key = JSON.stringify(s);
-      if (full || Sync.last.get(m.id) !== key) { Sync.last.set(m.id, key); list.push(s); }
-    }
-    if (list.length) net().send({ t: 'mobs', map: mgr.game.mapId, list });
-  }
-
-  /* ---------------- puppets (everyone else) ---------------- */
+  /* ---------------- puppets ---------------- */
   function applySnapshot(list, map) {
     const game = net().game;
     if (!game || !game.monsters) return;
@@ -49,8 +25,8 @@
       if (!m) continue;
       m.net = s;
       m.hp = s.hp;
-      if (s.hx != null) m.home = { x: s.hx, z: s.hz };   // the host's idea of home is the real one
-      // Statuses as the host sees them.
+      if (s.hx != null) m.home = { x: s.hx, z: s.hz };   // the server's idea of home is the real one
+      // Statuses as the server sees them.
       m.status = {};
       for (const k in s.st || {}) m.status[k] = { until: game.time + s.st[k], tick: 0 };
       m.updateTint();
@@ -94,28 +70,15 @@
   /* ---------------- monster methods, online-aware ---------------- */
   const origUpdateMgr = MM.update;
   MM.update = function (dt, camPos) {
-    if (Sync.puppet()) {
-      for (const m of this.list) m.puppetUpdate(dt);
-      for (const m of this.list) m.syncVisuals(dt, camPos);
-      return;
-    }
-    origUpdateMgr.call(this, dt, camPos);
-    if (!Sync.online()) return;
-    // Aggressive monsters notice other players too.
-    for (const m of this.list) {
-      if (!m.alive || !m.def.aggressive || (m.state !== 'idle' && m.state !== 'wander')) continue;
-      for (const r of net().players.values()) if (m.distanceTo(r) < (m.def.aggroRange || 7)) { m.aggroOn(r); break; }
-    }
-    sendSnapshots(this, dt);
+    if (!Sync.puppet()) { origUpdateMgr.call(this, dt, camPos); return; }
+    for (const m of this.list) m.puppetUpdate(dt);
+    for (const m of this.list) m.syncVisuals(dt, camPos);
   };
-
-  const origStartSwing = M.startSwing;
-  M.startSwing = function () { this.swingSeq = (this.swingSeq || 0) + 1; return origStartSwing.call(this); };
 
   const origTake = M.takeDamage;
   M.takeDamage = function (dmg, attacker) {
     if (!Sync.puppet() || !this.alive) return origTake.call(this, dmg, attacker);
-    // Puppet: show the hit right away, let the host decide what it does.
+    // Show the hit right away; the server's monster takes it for real.
     this.hp = Math.max(1, this.hp - dmg);
     this.lastHurtTime = this.game.time;
     this.sprite.setFlash(1);
@@ -132,53 +95,21 @@
     if (Sync.puppet()) { net().send({ t: 'mob', op: 'knock', map: this.game.mapId, id: this.id, fx, fz, dist }); return; }
     return origKnock.call(this, fx, fz, dist);
   };
-  const origDie = M.die;
-  M.die = function (killer) {
-    if (killer && killer.isRemote) {
-      // Host: another player's kill. The monster dies here; the rewards are theirs.
-      const loot = this.game.loot, roll = loot.rollDrops, ev = this.game.events, emit = ev.emit;
-      loot.rollDrops = () => {};
-      ev.emit = function (n, ...a) { if (n !== 'monsterKilled') return emit.call(this, n, ...a); };
-      try { origDie.call(this, null); } finally { loot.rollDrops = roll; ev.emit = emit; }
-      net().send({ t: 'mob', op: 'killed', map: this.game.mapId, id: this.id, to: killer.id });
-      return;
-    }
-    return origDie.call(this, killer);
-  };
-
-  // Monster attacks on another player: their own game works out the hit.
   const origAttack = G.Combat.monsterAttack;
-  G.Combat.monsterAttack = function (mon, target) {
-    if (target && target.isRemote) { net().send({ t: 'mob', op: 'attack', map: mon.game.mapId, id: mon.id, to: target.id }); return; }
-    return origAttack.call(this, mon, target);
-  };
 
   /* ---------------- messages ---------------- */
   Sync.handle = function (m) {
     const game = net().game;
     const mon = (id) => game.monsters && game.monsters.list.find((x) => x.id === id);
-    if (m.t === 'host') {
-      const was = Sync.isHost;
-      Sync.isHost = !!m.isHost;
-      if (Sync.isHost && !was && game.monsters) {
-        // Take over from the last snapshot: monsters keep their place and health.
-        for (const x of game.monsters.list) { if (x.alive) { x.state = 'idle'; x.path = null; x.aggro = null; } else { x.corpseGone = true; x.respawnT = Math.min(x.respawnT, x.def.respawn); } }
-        Sync.fullT = 0; Sync.sentT = 0; Sync.last.clear();   // everyone re-syncs right away
-      }
-    } else if (m.t === 'mobs') {
-      if (!Sync.isHost) applySnapshot(m.list, m.map);
-    } else if (m.t === 'mob') {
+    if (m.t === 'mobs') applySnapshot(m.list, m.map);
+    else if (m.t === 'mob') {
       if (m.map && m.map !== game.mapId) return;   // meant for another map
       const x = mon(m.id);
       if (!x) return;
-      const from = m.from != null ? net().players.get(m.from) : null;
-      if (m.op === 'dmg' && Sync.isHost && x.alive) origTake.call(x, Number(m.dmg) || 0, from || null);
-      else if (m.op === 'status' && Sync.isHost && x.alive) origStatus.call(x, String(m.name), Number(m.sec) || 1, m.data || undefined);
-      else if (m.op === 'knock' && Sync.isHost && x.alive) origKnock.call(x, Number(m.fx), Number(m.fz), Number(m.dist) || 1);
-      else if (m.op === 'attack') { if (game.player.alive) origAttack.call(G.Combat, x, game.player); }
+      if (m.op === 'attack') { if (game.player.alive) origAttack.call(G.Combat, x, game.player); }
       else if (m.op === 'hurt') { if (game.player.alive) game.player.takeDamage(Math.max(1, Number(m.dmg) || 1), x); }
       else if (m.op === 'killed') {
-        // Our kill, confirmed by the host: EXP, drops and quest progress are ours.
+        // Our kill, confirmed by the server: EXP, drops and quest progress are ours.
         const p = game.player, C = G.Config;
         G.Social.awardKill(p, Math.round(x.def.exp * C.EXP_RATE), Math.round(x.def.jobExp * C.EXP_RATE));
         game.loot.rollDrops(x);
@@ -187,5 +118,5 @@
     }
   };
   Sync.applySnapshot = applySnapshot;
-  Sync.reset = function () { Sync.isHost = false; Sync.last.clear(); Sync.fullT = 0; };
+  Sync.reset = function () {};
 })(window.G = window.G || {});
