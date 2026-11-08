@@ -6,6 +6,11 @@
   const h = G.h;
 
   const PATCHES = [
+    { v: '0.34', date: '2026-11-10T12:00', title: 'PvP and memo', notes: [
+      'PvP: on maps with the new PvP rule, players can attack each other — click another player, or use attack skills on them. Your own DEF still protects you. Defeats are announced to the map, and a warning shows when you enter a PvP area.',
+      'Memo: type /memo to remember the spot you’re standing on for Warp Portal (needs Warp Portal level 2+; up to 3 spots). Warp Portal’s own “Memorise this spot” still works too.',
+      'Map editor: two new map rules — PvP, and No memo (stops /memo and Warp Portal from remembering that map).',
+    ] },
     { v: '0.33', date: '2026-11-09T18:00', title: 'Map editor: NPC roles, indoor rooms, prefabs and faster maps', notes: [
       'NPCs you place can be shopkeepers (choose what they sell), Kafra-style teleporters (destinations with Zeny costs), save points or healers.',
       'Monster spawns: set a respawn time and announce bosses when they appear and when they’re defeated.',

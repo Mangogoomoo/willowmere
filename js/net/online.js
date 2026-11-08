@@ -118,6 +118,9 @@
     constructor(game, p) {
       super(game, RemotePlayer.sheet(p.look), { shadowSize: 1.15, radius: 0.45 });
       this.id = p.id; this.name = p.name; this.look = p.look;
+      // What combat needs from a target (their own game applies their real DEF when hit).
+      this.def = { name: p.name, def: 0, softDef: 0, mdef: 0, flee: 1, hit: 0, element: 'neutral', radius: 0.45, hitRadius: 0.55, height: 1.8, scale: 1, isPlayer: true, exp: 0, jobExp: 0 };
+      this.status = {}; this.provoke = null;
       // Enough of a "player" for monsters to chase and hit.
       this.isRemote = true;
       this.derived = { extra: {}, def: 0, softDef: 0, flee: 0 };
@@ -138,7 +141,12 @@
     }
     setLook(l) { this.look = l; this.sprite.setSheet(RemotePlayer.sheet(l)); this.syncCart(); }
     // A monster on the host hit this player: their own game takes the damage.
-    takeDamage(dmg, mon) { if (mon) Net.send({ t: 'mob', op: 'hurt', map: mon.game.mapId, id: mon.id, to: this.id, dmg: Math.round(dmg) }); }
+    addStatus() { /* statuses on other players are their game's business */ }
+    takeDamage(dmg, src) {
+      // Our hit on another player (PvP maps only): their game applies it.
+      if (src && src === Net.game.player) { if (G.CustomMaps.rule('pvp')) Net.send({ t: 'pvp_hit', map: Net.game.mapId, to: this.id, dmg: Math.round(dmg) }); return; }
+      if (src) Net.send({ t: 'mob', op: 'hurt', map: src.game.mapId, id: src.id, to: this.id, dmg: Math.round(dmg) });
+    }
     // Merchant carts, seen by everyone.
     syncCart() {
       const want = this.look && Number.isInteger(this.look.cart) ? this.look.cart : null;
@@ -206,6 +214,13 @@
         G.GroundSync.load(m.ground, m.map);
         if (m.t === 'welcome') game.log.add(`Connected. ${m.online} player${m.online === 1 ? '' : 's'} online.`, 'system');
       } else if (m.t === 'join') { this.add(m.p); game.log.add(`${m.p.name} arrived.`, 'info'); }
+      else if (m.t === 'pvp_hit') {
+        const p = game.player, foe = this.players.get(m.from);
+        if (!p.alive || !G.CustomMaps.rule('pvp')) return;
+        const D = p.derived, dmg = Math.max(1, Math.round(m.dmg * (1 - Math.min(D.def || 0, 90) / 100) - (D.softDef || 0)));
+        p.takeDamage(dmg, foe || null);
+        if (!p.alive) this.send({ t: 'pvp_kill', by: m.from });
+      }
       else if (m.t === 'map_updated') {
         // An admin saved a map: use the new version, and reload it if we're on it.
         G.CustomMaps.set(m.id, m.data);
@@ -216,7 +231,7 @@
         const r = this.players.get(m.id);
         if (r) {
           r.target.x = m.x; r.target.z = m.z; r.moving = m.moving; if (!m.moving) r.targetFacing = m.facing;
-          if (m.hp != null) { r.hp = m.hp; r.maxHp = m.maxHp; }
+          if (m.hp != null) { r.hp = m.hp; r.maxHp = m.maxHp; r.alive = m.hp > 0; }
           r.sp = m.sp != null ? m.sp : null; r.maxSp = m.maxSp != null ? m.maxSp : null;
         }
       }
@@ -309,7 +324,7 @@
       const input = h('input#chat-input', { type: 'text', maxlength: '120', placeholder: 'Press Enter to chat', autocomplete: 'off', 'aria-label': 'Chat message' });
       input.addEventListener('keydown', (e) => {
         e.stopPropagation();
-        if (e.key === 'Enter') { const text = input.value.trim(); if (text) this.send({ t: 'chat', text }); input.value = ''; input.blur(); }
+        if (e.key === 'Enter') { const text = input.value.trim(); if (text && /^\/memo$/i.test(text)) { G.Memo.save(this.game); input.value = ''; return; } if (text) this.send({ t: 'chat', text }); input.value = ''; input.blur(); }
         else if (e.key === 'Escape') input.blur();
       });
       document.getElementById('log').append(input);

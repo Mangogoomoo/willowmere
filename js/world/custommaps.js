@@ -617,6 +617,7 @@
           if (x < b.minX || x > b.maxX || z < b.minZ || z > b.maxZ) game.nav.blockCircle(x + 0.5, z + 0.5, 0.75);
       }
       this.applyWalk(game, d);
+      if (d.rules && d.rules.pvp) setTimeout(() => game.hud.toast('⚔ PvP area: other players can attack you here.'), 600);
     },
     // While playing, identical objects are drawn together (much faster); split up again for editing.
     batch() {

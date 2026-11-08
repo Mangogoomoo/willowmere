@@ -176,8 +176,9 @@
           else if (other) player.skills.use(id, other);
           return;
         }
-        this.cancelTargeting(!mon);
-        if (mon) player.skills.use(id, mon);
+        const foe = !mon && G.CustomMaps.rule('pvp') && this.pickRemote(this.ray.ray);
+        this.cancelTargeting(!mon && !foe);
+        if (mon) player.skills.use(id, mon); else if (foe) player.skills.use(id, foe);
         return;
       }
       if (npc) {
@@ -185,6 +186,10 @@
         this.holdMove = false;
       } else if (mon) {
         player.attack(mon);
+        this.holdMove = false;
+      } else if (G.CustomMaps.rule('pvp') && this.pickRemote(this.ray.ray)) {
+        // PvP map: clicking another player attacks them.
+        player.attack(this.pickRemote(this.ray.ray));
         this.holdMove = false;
       } else if (loot) {
         player.pickUp(loot);

@@ -929,7 +929,8 @@
       // Map rules.
       const rules = d.rules || (d.rules = {});
       const rule = (key, label) => { const cb = h('input', { type: 'checkbox', checked: !!rules[key], onchange: (e) => { this.snapshot(); rules[key] = e.target.checked; this.changed(); } }); return h('label.ed-rule', null, cb, h('span', { text: label })); };
-      body.append(h('h4', { text: 'Map rules' }), rule('noTeleport', 'No teleporting (Teleport skill, Fly Wings)'), rule('noDrop', 'No dropping items on the ground'), rule('peaceful', 'Peaceful: monsters never attack first'));
+      body.append(h('h4', { text: 'Map rules' }), rule('noTeleport', 'No teleporting (Teleport skill, Fly Wings)'), rule('noDrop', 'No dropping items on the ground'), rule('peaceful', 'Peaceful: monsters never attack first'),
+        rule('pvp', 'PvP: players can attack each other'), rule('noMemo', 'No memo (/memo and Warp Portal can’t remember this map)'));
       const imp = h('input', { type: 'file', accept: '.json,application/json', hidden: true });
       imp.addEventListener('change', () => { const f = imp.files[0]; if (f) this.importMap(f); imp.value = ''; });
       body.append(h('h4', { text: 'Backups' }), h('div.opt-btns', null,

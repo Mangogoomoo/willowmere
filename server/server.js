@@ -199,6 +199,7 @@ async function api(req, res, url) {
     await pool.query('INSERT INTO custom_map_versions (map_id, data, saved_by, saved_at) SELECT id, data, updated_by, updated_at FROM custom_maps WHERE id = $1', [id]);
     await pool.query('DELETE FROM custom_map_versions WHERE map_id = $1 AND id NOT IN (SELECT id FROM custom_map_versions WHERE map_id = $1 ORDER BY saved_at DESC LIMIT 30)', [id]);
     await pool.query('INSERT INTO custom_maps (id, data, updated_by, updated_at) VALUES ($1, $2, $3, now()) ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data, updated_by = EXCLUDED.updated_by, updated_at = now()', [id, JSON.stringify(data), acct.id]);
+    if (data.rules && data.rules.pvp) pvpMaps.add(id); else pvpMaps.delete(id);
     // Everyone online gets the new version straight away.
     for (const [ws] of online) if (ws.readyState === 1) ws.send(JSON.stringify({ t: 'map_updated', id, data }));
     return send(res, 200, { ok: true });
@@ -472,6 +473,17 @@ wss.on('connection', (ws) => {
       const target = wsOfChar(Number(msg.to));
       if (target && target.readyState === 1 && online.get(target).map === me.map)
         target.send(JSON.stringify({ t: 'buff', from: me.charId, fromName: me.name, skill: String(msg.skill || '').slice(0, 40), lv: Math.max(1, Math.min(10, Number(msg.lv) || 1)) }));
+    } else if (msg.t === 'pvp_hit') {
+      // Only on PvP maps, only to someone on the same map, and not too fast.
+      if (!pvpMaps.has(me.map) || msg.map !== me.map) return;
+      const now = Date.now(); me.pvpT = (me.pvpT || []).filter((t) => now - t < 1000); if (me.pvpT.length >= 15) return; me.pvpT.push(now);
+      const o = Social.online(Number(msg.to));
+      if (!o || o[1].map !== me.map || o[1] === me) return;
+      o[0].send(JSON.stringify({ t: 'pvp_hit', from: me.charId, name: me.name, dmg: Math.max(0, Math.min(1e6, Math.round(Number(msg.dmg) || 0))) }));
+    } else if (msg.t === 'pvp_kill') {
+      if (!pvpMaps.has(me.map)) return;
+      const k = Social.online(Number(msg.by));
+      if (k && k[1].map === me.map) broadcast(me.map, { t: 'notice', text: `⚔ ${k[1].name} defeated ${me.name}!` });
     } else if (msg.t === 'drop_spawn' || msg.t === 'pickup') {
       Ground.handle(ws, me, msg);
     } else if (typeof msg.t === 'string' && (msg.t.startsWith('trade_') || msg.t.startsWith('inspect_'))) {
@@ -782,6 +794,8 @@ const Social = {
    Shared by everyone on a map, like the classics: monster drops belong to the
    killer (and their party) for a few seconds, then anyone may take them;
    everything vanishes after a minute. The server decides who gets each item. */
+// Maps where players can fight each other (the map editor's PvP rule).
+const pvpMaps = new Set();
 const Ground = {
   maps: new Map(), next: 1, LIFE: 60000, PRIORITY: 5000,
   on(map) { if (!this.maps.has(map)) this.maps.set(map, new Map()); return this.maps.get(map); },
@@ -932,6 +946,7 @@ async function start() {
   if (G.Maps) for (const [mapId, map] of Object.entries(G.Maps)) for (const sp of map.spawns || []) await pool.query('INSERT INTO monster_spawns (map, monster_id, x, z, r, count) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING', [mapId, sp.type, sp.x, sp.z, sp.r, sp.count]);
   await pool.query('DELETE FROM sessions WHERE expires_at < now()');
   if (ADMINS.size) await pool.query('UPDATE accounts SET is_admin = true WHERE lower(username) = ANY($1)', [[...ADMINS]]);
+  for (const r of (await pool.query("SELECT id FROM custom_maps WHERE data->'rules'->>'pvp' = 'true'")).rows) pvpMaps.add(r.id);
   server.listen(PORT, () => console.log(`Willowmere server on http://localhost:${PORT}  (${Object.keys(items).length} items, ${Object.keys(mons).length} monsters in the database)`));
 }
 start().catch((e) => { console.error('Start-up failed:', e.message); process.exit(1); });

@@ -22,6 +22,18 @@
   shop('weapons', ['slayer', 'claymore', 'violin', 'guitar', 'rope', 'chain']);
   if (!D.empty_bottle.price) D.empty_bottle.price = 3;
 
+  // /memo: remember this spot for Warp Portal (1 to 3 spots, by skill level).
+  G.Memo = {
+    save(game) {
+      const p = game.player, lv = p.skills.level ? p.skills.level('warp_portal') : (p.skillLevels || {}).warp_portal || 0;
+      if (lv < 2) { game.log.add('You need Warp Portal level 2 or higher to memo.', 'warn'); return; }
+      if (G.CustomMaps.rule('noMemo')) { game.log.add('You can’t memo on this map.', 'warn'); return; }
+      const memos = p.extra.memos = p.extra.memos || [];
+      memos.unshift({ map: game.mapId, x: p.position.x, z: p.position.z }); memos.length = Math.min(memos.length, lv - 1);
+      game.save.markDirty(); game.sfx('quest');
+      game.log.add(`Memo saved: ${G.Maps[game.mapId].name} (${Math.round(p.position.x)}, ${Math.round(p.position.z)}). Warp Portal can open a portal here.`, 'system');
+    },
+  };
   G.ItemUse = {
     converter(p, it) { p.skills.addBuff('converter_' + it.use.element, 1, 180); p.game.spells.aura(p, it.icon.color); return true; },
   };
@@ -202,6 +214,7 @@
         const c = await d.choose('Open a portal to…', choices);
         const label = choices[c];
         if (label === 'Cancel') return;
+        if (label === 'Memorise this spot' && G.CustomMaps.rule('noMemo')) { await d.say('This place can’t be memorised.'); return; }
         if (label === 'Memorise this spot') {
           memos.unshift({ map: game.mapId, x: p.position.x, z: p.position.z }); memos.length = Math.min(memos.length, 3);
           await d.say('Memorised. (Warp Portal remembers up to 3 places.)'); return;
