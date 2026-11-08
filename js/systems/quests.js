@@ -55,11 +55,14 @@
     complete() {
       const t = this.trial, p = this.game.player;
       const def = G.Jobs.get(t.job).trial;
-      if (def.zeny) p.zeny -= def.zeny;
-      for (const [id, n] of def.items || []) {
-        let left = n;
-        while (left > 0) { const e = p.inventory.firstOf(id); if (!e) break; left -= p.inventory.remove(e.uid, left); }
-      }
+      // Online the server takes the trial fee itself when the job changes.
+      G.Ledger.quiet(() => {
+        if (def.zeny) p.zeny -= def.zeny;
+        for (const [id, n] of def.items || []) {
+          let left = n;
+          while (left > 0) { const e = p.inventory.firstOf(id); if (!e) break; left -= p.inventory.remove(e.uid, left); }
+        }
+      });
       delete p.extra.trial;
       this.changed();
     }

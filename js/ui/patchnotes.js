@@ -6,6 +6,15 @@
   const h = G.h;
 
   const PATCHES = [
+    { v: '0.35', date: '2026-11-11T12:00', title: 'Trustworthy server, part 1: the server keeps your character', notes: [
+      'Online, the server now owns your items, equipment, cart, storage, Zeny, EXP, levels, job and stats. Your game still shows everything instantly, but each action (buying, selling, equipping, refining, trading, dropping, picking up, raising stats, changing job, turning in quests) is checked by the server, and it corrects your game if something doesn’t add up.',
+      'Refining online: the server rolls the success chance.',
+      'Trades are swapped by the server and saved for both players at once.',
+      'New characters get their starting kit from the server. Your game no longer uploads your whole character when it saves.',
+      'Game data now lives in the database too: monster drops, jobs, skills (SP, cast time, cooldown, damage), shops (including shop NPCs from the map editor) and quests with their rewards.',
+      'While disconnected, shop, storage, cart and refine wait until you’re back online. Debug tools only work online for admins.',
+      'Coming next: monsters, combat and rewards move to the server (until then kill EXP and drops are checked for sense only).',
+    ] },
     { v: '0.34', date: '2026-11-10T12:00', title: 'PvP and memo', notes: [
       'PvP: on maps with the new PvP rule, players can attack each other — click another player, or use attack skills on them. Your own DEF still protects you. Defeats are announced to the map, and a warning shows when you enter a PvP area.',
       'Memo: type /memo to remember the spot you’re standing on for Warp Portal (needs Warp Portal level 2+; up to 3 spots). Warp Portal’s own “Memorise this spot” still works too.',

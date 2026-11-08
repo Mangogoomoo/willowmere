@@ -17,11 +17,12 @@
       const p = () => game.player;
       const baseBtn = h('button.btn.small', { type: 'button', title: 'Hold to keep levelling' }, '+1 Base level');
       const jobBtn = h('button.btn.small', { type: 'button', title: 'Hold to keep levelling' }, '+1 Job level');
-      holdRepeat(baseBtn, () => { const pl = p(); if (pl.baseLevel < G.Config.MAX_LEVEL) pl.gainExp(pl.expToNext - pl.baseExp, 0); });
+      // Online the server only accepts these from admins.
+      holdRepeat(baseBtn, () => { const pl = p(); if (pl.baseLevel < G.Config.MAX_LEVEL) G.Ledger.debug(() => pl.gainExp(pl.expToNext - pl.baseExp, 0)); });
       holdRepeat(jobBtn, () => {
         const pl = p();
         if (pl.jobExpToNext === Infinity) { game.log.add(`Job level is already at the ${pl.jobDef.name} maximum.`, 'info'); return; }
-        pl.gainExp(0, pl.jobExpToNext - pl.jobExp);
+        G.Ledger.debug(() => pl.gainExp(0, pl.jobExpToNext - pl.jobExp));
       });
       this.debugEl.append(h('span.dbg-title', { text: 'Debug' }), baseBtn, jobBtn,
         h('button.x', { type: 'button', 'aria-label': 'Hide debug tools', onclick: () => this.setDebug(false) }, '×'));

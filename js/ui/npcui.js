@@ -78,7 +78,8 @@
     // shopId: key of G.SHOPS (tools, weapons, armor).
     open(mode, shopId) {
       this.mode = mode;
-      this.def = G.SHOPS[shopId || 'tools'];
+      this.shopId = shopId || 'tools';
+      this.def = G.SHOPS[this.shopId];
       this.win.head.firstChild.textContent = this.def.name;
       this.game.windows.open('shop');
       this.render();
@@ -90,9 +91,12 @@
     buy(id, qty) {
       const p = this.game.player, item = G.Items.get(id), cost = this.buyPrice(item) * qty;
       if (p.zeny < cost) { this.game.log.add('You don’t have enough Zeny.', 'warn'); return; }
-      const r = p.inventory.add(id, qty);
+      if (G.Ledger.blocked(this.game)) return;
+      // Online the server sells it to you (and corrects the price if needed); the rest is shown at once.
+      const r = G.Ledger.quiet(() => p.inventory.add(id, qty));
       if (!r.added) { this.game.log.add(r.reason === 'weight' ? 'That would be too heavy to carry.' : 'Your inventory is full.', 'warn'); return; }
-      p.zeny -= cost;
+      G.Ledger.op('buy', { shop: this.shopId, id, qty });
+      G.Ledger.quiet(() => { p.zeny -= cost; });
       this.game.log.add(`Bought ${item.name}${qty > 1 ? ' ×' + qty : ''} for ${cost.toLocaleString()} z.`, 'loot');
       this.render();
     }
@@ -100,8 +104,10 @@
       const p = this.game.player, e = p.inventory.find(uid);
       if (!e) return;
       const item = G.Items.get(e.id);
-      const n = p.inventory.remove(uid, qty), gain = this.sellPrice(item) * n;
-      p.zeny += gain;
+      if (G.Ledger.blocked(this.game)) return;
+      G.Ledger.op('sell', { uid, qty });
+      const n = G.Ledger.quiet(() => p.inventory.remove(uid, qty)), gain = this.sellPrice(item) * n;
+      G.Ledger.quiet(() => { p.zeny += gain; });
       this.game.log.add(`Sold ${item.name}${n > 1 ? ' ×' + n : ''} for ${gain.toLocaleString()} z.`, 'loot');
       this.render();
     }
@@ -171,9 +177,18 @@
       return out;
     }
 
-    doRefine(e) {
+    async doRefine(e) {
       const game = this.game, p = game.player, before = G.Items.displayName(e);
-      const res = G.Refine.attempt(p, e);
+      let res;
+      if (G.Ledger.enabled) {
+        // Online the server rolls the dice; its corrected character arrives first.
+        if (G.Ledger.blocked(game) || this.busy) return;
+        this.busy = true;
+        const r = await G.Ledger.request('refine', { uid: e.uid });
+        this.busy = false;
+        res = r.result;
+        if (r.item) e = r.item;
+      } else res = G.Refine.attempt(p, e);
       this.armed = null;
       if (res === 'success') {
         game.sfx('levelup'); game.effects.levelUp(p);

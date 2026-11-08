@@ -44,8 +44,8 @@
       if (m.t === 'party') { this.party = m.party; game.windows.refresh('party'); }
       else if (m.t === 'guild') { this.guild = m.guild; game.windows.refresh('guild'); }
       else if (m.t === 'guild_created') {
-        const e = game.player.inventory.firstOf('emperium');
-        if (e) game.player.inventory.remove(e.uid, 1);
+        const e = game.player.inventory.firstOf('emperium');   // the server used it up already
+        if (e) G.Ledger.quiet(() => game.player.inventory.remove(e.uid, 1));
         game.save.save(true);
         game.hud.toast(`Guild founded: ${m.name}!`); game.sfx('quest');
       } else if (m.t === 'invite') this.showInvite(m);
@@ -57,10 +57,10 @@
         game.log.add(`Emergency Call! ${m.from} summons the guild.`, 'level'); game.hud.toast(`${m.from} summons you!`);
         if (m.map === game.mapId) game.player.teleport(m.x + 1, m.z); else game.travel(m.map, m.x + 1, m.z);
       } else if (m.t === 'gainexp') {
-        game.player.gainExp(m.base, m.job);
+        G.Ledger.quiet(() => game.player.gainExp(m.base, m.job));   // the server added it already
         if (m.shared) game.log.add(`Party EXP: +${m.base} base, +${m.job} job (shared by ${m.from}).`, 'info');
       } else if (m.t === 'loot_gift') {
-        const r = game.player.inventory.add(m.item, m.qty);
+        const r = G.Ledger.quiet(() => game.player.inventory.add(m.item, m.qty, { ignoreWeight: true }));
         if (r.added) { game.sfx('pickup'); game.log.add(`Party loot: ${G.Items.get(m.item).name}${m.qty > 1 ? ' ×' + m.qty : ''} (from ${m.from}'s kill).`, 'loot'); }
       }
     },

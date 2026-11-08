@@ -100,6 +100,9 @@ const cleanItem = (e) => ({
 const itemOut = (r) => ({ id: r.item_id, qty: r.qty, refine: r.refine, cards: r.cards || [], forgedBy: r.forged_by || undefined, element: r.element || undefined });
 
 async function loadCharacter(charId, accountId, full) {
+  // An online character's live state is written first, so this read is current.
+  const live = Chars.mem.get(Number(charId));
+  if (live && live.accountId === accountId) { live.dirty = true; await Chars.flush(live); }
   const c = (await pool.query('SELECT * FROM characters WHERE id = $1 AND account_id = $2', [charId, accountId])).rows[0];
   if (!c) return null;
   const items = (await pool.query('SELECT * FROM character_items WHERE character_id = $1 ORDER BY sort, id', [charId])).rows;
@@ -122,49 +125,23 @@ async function loadCharacter(charId, accountId, full) {
   });
 }
 
+/* The game's own save holds only what the game still decides: where you are,
+   HP/SP, skills, hotbar, quest progress and preferences. Items, Zeny, EXP,
+   levels, job and stats belong to the server (see Chars) and are ignored here. */
 async function saveCharacter(charId, accountId, d) {
   const num = (v, lo, hi, def) => { const n = Number(v); return Number.isFinite(n) ? Math.max(lo, Math.min(hi, n)) : def; };
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-    const own = await client.query('SELECT id FROM characters WHERE id = $1 AND account_id = $2 FOR UPDATE', [charId, accountId]);
-    if (!own.rows.length) { await client.query('ROLLBACK'); return false; }
-    const extra = Object.assign({}, d.extra || {}); const cart = Array.isArray(extra.cart) ? extra.cart : []; delete extra.cart;
-    const pos = d.position || {};
-    await client.query(`UPDATE characters SET job=$3, base_level=$4, job_level=$5, base_exp=$6, job_exp=$7, zeny=$8, hp=$9, sp=$10,
-      stats=$11, stat_points=$12, appearance=$13, map=$14, x=$15, z=$16, facing=$17, save_point=$18, skills=$19, hotbar=$20, extra=$21,
-      is_new=false, updated_at=now() WHERE id=$1 AND account_id=$2`, [
-      charId, accountId, String(d.job || 'novice').slice(0, 24), num(d.baseLevel, 1, 999, 1), num(d.jobLevel, 1, 999, 1),
-      Math.floor(num(d.baseExp, 0, 1e15, 0)), Math.floor(num(d.jobExp, 0, 1e15, 0)), Math.floor(num(d.zeny, 0, 2147483647, 0)),
-      Math.floor(num(d.hp, 0, 1e7, 1)), Math.floor(num(d.sp, 0, 1e7, 1)), JSON.stringify(d.stats || {}), Math.floor(num(d.statPoints, 0, 1e5, 0)),
-      JSON.stringify((d.character && d.character.appearance) || {}), String(pos.map || 'meadow').slice(0, 24), num(pos.x, -500, 500, 0), num(pos.z, -500, 500, 0),
-      num(pos.facing, -10, 10, 0), d.savePoint ? JSON.stringify(d.savePoint) : null, JSON.stringify(d.skills || {}), JSON.stringify(d.hotbar || []), JSON.stringify(extra),
-    ]);
-    // Items: replace the character's set in one go.
-    await client.query('DELETE FROM character_items WHERE character_id = $1', [charId]);
-    const rows = [];
-    ((d.inventory && d.inventory.items) || []).slice(0, 400).forEach((e, i) => rows.push(['bag', null, cleanItem(e), i]));
-    Object.entries(d.equipment || {}).forEach(([slot, e], i) => { if (e) rows.push(['equip', String(slot).slice(0, 16), cleanItem(e), i]); });
-    cart.slice(0, 100).forEach((e, i) => rows.push(['cart', null, cleanItem(e), i]));
-    for (const [loc, slot, it, sort] of rows) {
-      if (!ITEM_RE.test(it.item_id)) continue;
-      await client.query('INSERT INTO character_items (character_id, location, equip_slot, item_id, qty, refine, cards, forged_by, element, sort) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)',
-        [charId, loc, slot, it.item_id, it.qty, it.refine, it.cards, it.forged_by, it.element, sort]);
-    }
-    // Account storage.
-    if (Array.isArray(d.storage)) {
-      await client.query('DELETE FROM storage_items WHERE account_id = $1', [accountId]);
-      let i = 0;
-      for (const e of d.storage.slice(0, 300)) {
-        const it = cleanItem(e);
-        if (!ITEM_RE.test(it.item_id)) continue;
-        await client.query('INSERT INTO storage_items (account_id, item_id, qty, refine, cards, forged_by, element, sort) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)',
-          [accountId, it.item_id, it.qty, it.refine, it.cards, it.forged_by, it.element, i++]);
-      }
-    }
-    await client.query('COMMIT');
-    return true;
-  } catch (e) { await client.query('ROLLBACK').catch(() => {}); throw e; } finally { client.release(); }
+  const extra = Object.assign({}, d.extra || {}); delete extra.cart; delete extra.statFix;
+  const pos = d.position || {};
+  const r = await pool.query(`UPDATE characters SET hp=$3, sp=$4, appearance=$5, map=$6, x=$7, z=$8, facing=$9, save_point=$10, skills=$11, hotbar=$12,
+    extra = $13::jsonb || CASE WHEN extra ? 'statFix' THEN jsonb_build_object('statFix', extra->'statFix') ELSE '{}'::jsonb END, is_new=false, updated_at=now() WHERE id=$1 AND account_id=$2`, [
+    charId, accountId, Math.floor(num(d.hp, 0, 1e7, 1)), Math.floor(num(d.sp, 0, 1e7, 1)),
+    JSON.stringify((d.character && d.character.appearance) || {}), String(pos.map || 'meadow').slice(0, 24), num(pos.x, -500, 500, 0), num(pos.z, -500, 500, 0),
+    num(pos.facing, -10, 10, 0), d.savePoint ? JSON.stringify(d.savePoint) : null, JSON.stringify(d.skills || {}), JSON.stringify(d.hotbar || []), JSON.stringify(extra),
+  ]);
+  // Learned skills matter to a few server checks (shop discounts, cart, vending).
+  const live = Chars.mem.get(Number(charId));
+  if (live && d.skills && d.skills.levels && typeof d.skills.levels === 'object') live.skills = d.skills.levels;
+  return r.rowCount > 0;
 }
 
 /* ---------------------------------------------------------------- API routes */
@@ -187,6 +164,7 @@ async function api(req, res, url) {
     const id = mapM[1];
     if (req.method === 'DELETE') {
       await pool.query('DELETE FROM custom_maps WHERE id = $1', [id]);
+      await Ref.syncCustomShops();
       for (const [ws] of online) if (ws.readyState === 1) ws.send(JSON.stringify({ t: 'map_updated', id, data: null }));
       return send(res, 200, { ok: true });
     }
@@ -200,6 +178,7 @@ async function api(req, res, url) {
     await pool.query('DELETE FROM custom_map_versions WHERE map_id = $1 AND id NOT IN (SELECT id FROM custom_map_versions WHERE map_id = $1 ORDER BY saved_at DESC LIMIT 30)', [id]);
     await pool.query('INSERT INTO custom_maps (id, data, updated_by, updated_at) VALUES ($1, $2, $3, now()) ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data, updated_by = EXCLUDED.updated_by, updated_at = now()', [id, JSON.stringify(data), acct.id]);
     if (data.rules && data.rules.pvp) pvpMaps.add(id); else pvpMaps.delete(id);
+    await Ref.syncCustomShops();
     // Everyone online gets the new version straight away.
     for (const [ws] of online) if (ws.readyState === 1) ws.send(JSON.stringify({ t: 'map_updated', id, data }));
     return send(res, 200, { ok: true });
@@ -296,8 +275,15 @@ async function api(req, res, url) {
     if (!NAME_RE.test(nm)) return send(res, 400, { error: 'Use 2 to 16 letters or numbers.' });
     const app = {}; for (const k of ['hair', 'outfit', 'eyes', 'style']) if (appearance && typeof appearance[k] === 'string') app[k] = appearance[k].slice(0, 20);
     try {
-      const r = await pool.query('INSERT INTO characters (account_id, slot, name, appearance) VALUES ($1, $2, $3, $4) RETURNING id', [acct.id, s, nm, JSON.stringify(app)]);
-      return send(res, 200, { id: Number(r.rows[0].id) });
+      const st = { stats: { str: 1, agi: 1, vit: 1, int: 1, dex: 1, luk: 1 }, bag: [], equip: {}, cart: [], nextUid: 1 };
+      Chars.giveKit(st);
+      const r = await pool.query(`INSERT INTO characters (account_id, slot, name, appearance, stats, stat_points, zeny, extra) VALUES ($1, $2, $3, $4, $5, $6, $7, '{"statFix":1}') RETURNING id`,
+        [acct.id, s, nm, JSON.stringify(app), JSON.stringify(st.stats), GD.Stats.START_POINTS, st.zeny]);
+      const id = Number(r.rows[0].id);
+      await pool.query(`INSERT INTO character_items (character_id, location, equip_slot, item_id, qty, refine, cards, forged_by, element, sort)
+        SELECT $1, location, equip_slot, item_id, qty, refine, cards, forged_by, element, sort FROM jsonb_to_recordset($2::jsonb)
+        AS x(location text, equip_slot text, item_id text, qty int, refine smallint, cards text[], forged_by text, element text, sort int)`, [id, JSON.stringify(Chars.rows(st))]);
+      return send(res, 200, { id });
     } catch (e) {
       if (e.code === '23505') return send(res, 409, { error: /name/.test(e.constraint || '') ? `The name ${nm} is already taken.` : 'That slot is already used.' });
       throw e;
@@ -394,7 +380,14 @@ wss.on('connection', (ws) => {
       const c = acct && (await pool.query('SELECT id, name, map FROM characters WHERE id = $1 AND account_id = $2', [charId, acct.id])).rows[0];
       if (!c) { ws.send(JSON.stringify({ t: 'error', text: 'Not allowed.' })); return ws.close(); }
       // One character per account online at a time: the newer login wins.
-      for (const [other, s] of online) if (s.accountId === acct.id) { other.send(JSON.stringify({ t: 'kicked', text: 'This account logged in somewhere else.' })); other.close(); }
+      for (const [other, s] of online) if (s.accountId === acct.id) {
+        s.gone = true;   // ignore anything else it sends
+        const old = Chars.mem.get(s.charId); if (old && old.ws === other && s.charId !== Number(c.id)) Chars.flush(old);
+        other.send(JSON.stringify({ t: 'kicked', text: 'This account logged in somewhere else.' })); other.close();
+      }
+      // The server holds the character's items, Zeny, EXP, levels and stats from here on.
+      const st = await Chars.load(Number(c.id), acct.id, ws, !!acct.is_admin || ADMINS.has(acct.username.toLowerCase())).catch((e) => { console.error(e); return null; });
+      if (!st || ws.readyState !== 1) { if (ws.readyState === 1) { ws.send(JSON.stringify({ t: 'error', text: 'Couldn’t load your character. Try again.' })); ws.close(); } return; }
       me = { accountId: acct.id, charId: Number(c.id), name: c.name, map: String(msg.map || c.map), x: 0, z: 0, facing: 0, moving: false, look: cleanLook(msg.look), chatT: 0, level: Number(msg.level) || 1 };
       online.set(ws, me);
       await Social.load(me);
@@ -403,10 +396,13 @@ wss.on('connection', (ws) => {
       if (me.guild) Social.refreshGuild(me.guild.id).catch(() => {});
       const ts = Trade.sessions.get(me.charId); if (ts) Trade.close(ts, `${me.name} left.`);
       ws.send(JSON.stringify({ t: 'welcome', map: me.map, you: me.charId, players: [...online.values()].filter((s) => s !== me && s.map === me.map).map(publicState), online: online.size, mobs: cachedMobs(me.map), ground: Ground.list(me.map) }));
+      Chars.push(st);
       broadcast(me.map, { t: 'join', p: publicState(me) }, ws);
       electHost(me.map);
       return;
     }
+    if (me.gone) return;
+    if (msg.t === 'op') { Chars.op(me, msg); return; }
     if (msg.t === 'state') {
       const map = String(msg.map || me.map).slice(0, 24);
       const num = (v, d) => (Number.isFinite(Number(v)) ? Math.max(-500, Math.min(500, Number(v))) : d);
@@ -487,7 +483,7 @@ wss.on('connection', (ws) => {
     } else if (msg.t === 'drop_spawn' || msg.t === 'pickup') {
       Ground.handle(ws, me, msg);
     } else if (typeof msg.t === 'string' && (msg.t.startsWith('trade_') || msg.t.startsWith('inspect_'))) {
-      Trade.handle(ws, me, msg);
+      await Trade.handle(ws, me, msg).catch((e) => console.error(e));
     } else if (typeof msg.t === 'string' && (msg.t.startsWith('party_') || msg.t.startsWith('guild_') || msg.t === 'pexp' || msg.t === 'ploot' || msg.t === 'gexp')) {
       await Social.handle(ws, me, msg).catch((e) => { console.error(e); ws.send(JSON.stringify({ t: 'notice', text: 'That didn’t work. Try again.' })); });
     } else if (msg.t === 'action') {
@@ -504,6 +500,8 @@ wss.on('connection', (ws) => {
       if (hosts.get(me.map) === ws) hosts.delete(me.map);
       electHost(me.map);
     }
+    const st = me && Chars.mem.get(me.charId);
+    if (st && st.ws === ws) Chars.release(st, ws).catch((e) => console.error(e));
   });
 });
 setInterval(() => { for (const ws of wss.clients) { if (!ws.isAlive) { ws.terminate(); continue; } ws.isAlive = false; ws.ping(); } }, 30_000);
@@ -634,22 +632,30 @@ const Social = {
       }
       case 'pexp': {
         // Even Share: split a kill's EXP among party members on the same map.
-        const st = me.partyId && await Social.partyState(me.partyId);
+        const st = me.partyId && await Social.partyState(me.partyId), mine = Chars.mem.get(me.charId);
         const base = Math.max(0, Math.min(1e8, Math.floor(Number(m.base) || 0))), job = Math.max(0, Math.min(1e8, Math.floor(Number(m.job) || 0)));
+        // One kill's EXP, within reason (rewards move to the server in a later phase).
+        if (!mine || (!mine.admin && (base > Ref.cap.base || job > Ref.cap.job || !Chars.allow(mine, 'exp', 60, 10000)))) return;
         const here = st && st.expShare === 'even' ? st.members.filter((x) => x.online && x.map === me.map) : [];
         const list = here.length ? here : [{ id: me.charId }];
-        for (const x of list) { const o = Social.online(x.id); if (o) Social.sendTo(o[1], { t: 'gainexp', base: Math.floor(base / list.length), job: Math.floor(job / list.length), from: me.name, shared: list.length > 1 }); }
+        for (const x of list) {
+          const o = Social.online(x.id), cs = Chars.mem.get(x.id); if (!o || !cs) continue;
+          const b = Math.floor(base / list.length), j = Math.floor(job / list.length);
+          Chars.addExp(cs, b, j);
+          Social.sendTo(o[1], { t: 'gainexp', base: b, job: j, from: me.name, shared: list.length > 1 });
+        }
         return;
       }
       case 'ploot': {
         // Party Share: each drop goes to a random member on the map.
         const st = me.partyId && await Social.partyState(me.partyId);
         const item = String(m.item || ''), qty = Math.max(1, Math.min(1000, Math.floor(Number(m.qty) || 1)));
-        if (!/^[a-z0-9_]{1,40}$/.test(item)) return;
+        const mine = Chars.mem.get(me.charId);
+        if (!Ref.item(item) || !mine || !Chars.allow(mine, 'gain', 40, 10000)) return;
         const here = st && st.itemShare === 'party' ? st.members.filter((x) => x.online && x.map === me.map) : [];
         const pick = here.length ? here[Math.floor(Math.random() * here.length)] : { id: me.charId };
-        const o = Social.online(pick.id);
-        if (o) Social.sendTo(o[1], { t: 'loot_gift', item, qty, from: me.name });
+        const o = Social.online(pick.id), cs = Chars.mem.get(pick.id);
+        if (o && cs && Chars.add(cs, 'bag', item, qty)) { cs.dirty = true; Chars.push(cs, null, true); Social.sendTo(o[1], { t: 'loot_gift', item, qty, from: me.name }); }
         return;
       }
       /* ---------- guild ---------- */
@@ -657,8 +663,11 @@ const Social = {
         if (me.guild) return Social.notice(me, 'You are already in a guild.');
         const name = String(m.name || '').trim().replace(/\s+/g, ' ');
         if (!Social.NAME.test(name)) return Social.notice(me, 'Guild names are 2 to 24 letters or numbers.');
+        const cs = Chars.mem.get(me.charId);
+        if (!cs || !Chars.count(cs, 'emperium')) return Social.notice(me, 'Founding a guild needs an Emperium.');
         try {
           const r = await pool.query('INSERT INTO guilds (name, master_id) VALUES ($1, $2) RETURNING id', [name, me.charId]);
+          Chars.takeId(cs, 'emperium', 1); cs.dirty = true;
           await pool.query('INSERT INTO guild_members (guild_id, character_id, rank) VALUES ($1, $2, 0)', [r.rows[0].id, me.charId]);
           await Social.load(me);
         } catch (e) { if (e.code === '23505') return Social.notice(me, 'That guild name is taken.'); throw e; }
@@ -810,11 +819,18 @@ const Ground = {
       if (!(id === 'zeny' || /^[a-z0-9_]{1,40}$/.test(id))) return;
       const items = this.on(me.map);
       if (items.size >= 400) return;
-      const it = { gid: this.next++, id, qty: Math.max(1, Math.min(id === 'zeny' ? 1e7 : 30000, Math.floor(Number(m.qty) || 1))),
+      let it = { gid: this.next++, id, qty: Math.max(1, Math.min(id === 'zeny' ? 1e7 : 30000, Math.floor(Number(m.qty) || 1))),
         refine: Math.max(0, Math.min(10, Math.floor(Number(m.refine) || 0))), cards: Array.isArray(m.cards) ? m.cards.slice(0, 4).map(String) : [],
-        forgedBy: m.forgedBy ? String(m.forgedBy).slice(0, 24) : undefined, element: m.element ? String(m.element).slice(0, 12) : undefined,
-        x: num(m.x), z: num(m.z), fx: num(m.fx), fz: num(m.fz), born: now,
-        kill: !!m.kill, owner: m.kill ? me.charId : null, ownerName: me.name, party: m.kill ? me.partyId || null : null, until: m.kill ? now + this.PRIORITY : 0 };
+        forgedBy: m.forgedBy ? String(m.forgedBy).slice(0, 24) : undefined, element: m.element ? String(m.element).slice(0, 12) : undefined };
+      if (!m.kill) {
+        // A player dropping something from their bag: it must really be there, and it leaves the bag here.
+        const st = Chars.mem.get(me.charId), e = st && Chars.find(st, Number(m.uid));
+        if (!e || e.id !== id) { if (st) Chars.push(st, 'That item isn’t in your bag any more.'); return; }
+        const got = Chars.take(st, e.uid, it.qty); st.dirty = true;
+        it = { gid: it.gid, id, qty: got.qty, refine: got.refine || 0, cards: got.cards || [], forgedBy: got.forgedBy, element: got.element };
+      } else if (id !== 'zeny' && !Ref.item(id)) return;   // monster drops: checked properly once rewards move to the server
+      Object.assign(it, { x: num(m.x), z: num(m.z), fx: num(m.fx), fz: num(m.fz), born: now,
+        kill: !!m.kill, owner: m.kill ? me.charId : null, ownerName: me.name, party: m.kill ? me.partyId || null : null, until: m.kill ? now + this.PRIORITY : 0 });
       items.set(it.gid, it);
       broadcast(me.map, { t: 'ground_add', map: me.map, item: this.pub(it, now) });
     } else if (m.t === 'pickup') {
@@ -825,6 +841,12 @@ const Ground = {
       // Auto-loot flies your own drops to you; otherwise you must be close.
       if (!(mine && m.auto) && Math.hypot(me.x - it.x, me.z - it.z) > 4.5) return deny('You need to be closer to pick that up.');
       if (now < it.until && !mine) return deny(`That belongs to ${it.ownerName} for a moment longer.`);
+      // The item goes straight into the server's copy of your character.
+      const st = Chars.mem.get(me.charId);
+      if (!st) return deny('Please wait a moment.');
+      if (it.id === 'zeny') st.zeny = Math.min(2147483647, st.zeny + it.qty);
+      else if (!Chars.add(st, 'bag', it.id, it.qty, it)) return deny('Your inventory is full.');
+      st.dirty = true; Chars.push(st, null, true);
       items.delete(it.gid);
       ws.send(JSON.stringify({ t: 'ground_take', gid: it.gid, item: this.pub(it, now) }));
       broadcast(me.map, { t: 'ground_remove', map: me.map, gid: it.gid }, ws);
@@ -857,7 +879,7 @@ const Trade = {
       refine: Math.max(0, Math.min(10, Math.floor(Number(it.refine) || 0))), cards: Array.isArray(it.cards) ? it.cards.slice(0, 4).map(String) : [],
       forgedBy: it.forgedBy ? String(it.forgedBy).slice(0, 24) : undefined, element: it.element ? String(it.element).slice(0, 12) : undefined };
   },
-  handle(ws, me, m) {
+  async handle(ws, me, m) {
     const sess = Trade.sessions.get(me.charId);
     switch (m.t) {
       case 'inspect_req': {
@@ -896,11 +918,15 @@ const Trade = {
         if (!sess) return;
         const off = sess.off[me.charId];
         if (off.locked) return;
+        const st = Chars.mem.get(me.charId);
+        if (!st) return;
         if (m.t === 'trade_add') {
-          const it = Trade.cleanItem(m.item);
-          if (!it || off.items.length >= 10 || off.items.some((x) => x.uid === it.uid)) return;
-          off.items.push(it);
-        } else if (m.t === 'trade_zeny') off.zeny = Math.max(0, Math.min(2147483647, Math.floor(Number(m.amount) || 0)));
+          // Only items really in your bag, as the server knows them.
+          const want = Trade.cleanItem(m.item), e = want && Chars.find(st, want.uid);
+          if (!e || e.id !== want.id) { Chars.push(st); return Social.notice(me, 'That item isn’t in your bag any more.'); }
+          if (off.items.length >= 10 || off.items.some((x) => x.uid === e.uid)) return;
+          off.items.push(Object.assign(Chars.out(e), { qty: Math.min(want.qty, e.qty) }));
+        } else if (m.t === 'trade_zeny') off.zeny = Math.max(0, Math.min(st.zeny, Math.floor(Number(m.amount) || 0)));
         else off.locked = true;
         return Trade.push(sess);
       }
@@ -910,10 +936,31 @@ const Trade = {
         if (!mine.locked || !theirs.locked) return;
         mine.ok = true;
         if (!theirs.ok) return Trade.push(sess);
-        // Both sides pressed Trade: each game swaps the goods.
-        for (const id of [sess.a, sess.b]) {
-          Trade.sessions.delete(id);
+        // Both sides pressed Trade: the server checks both offers again and swaps the goods.
+        const A = Chars.mem.get(sess.a), B = Chars.mem.get(sess.b);
+        if (!A || !B) return Trade.close(sess, 'The trade failed: a player left.');
+        const ok = (st, off, other) => off.zeny <= st.zeny && off.items.every((it) => { const e = Chars.find(st, it.uid); return e && e.id === it.id && e.qty >= it.qty; })
+          && other.bag.length + sess.off[st.id].items.length <= BAG_MAX + 10;
+        if (!ok(A, sess.off[sess.a], B) || !ok(B, sess.off[sess.b], A)) return Trade.close(sess, 'The trade failed: an offer changed.');
+        const moved = {};
+        for (const [from, to] of [[A, B], [B, A]]) {
+          const off = sess.off[from.id];
+          moved[from.id] = off.items.map((it) => Chars.take(from, it.uid, it.qty));
+          from.zeny -= off.zeny;
+        }
+        for (const [from, to] of [[A, B], [B, A]]) {
+          for (const it of moved[from.id]) {
+            // Trades always fit (like the game, weight is not checked); a full bag still takes the items.
+            if (!Chars.add(to, 'bag', it.id, it.qty, it)) to.bag.push(Object.assign({}, it, { uid: to.nextUid++ }));
+          }
+          to.zeny = Math.min(2147483647, to.zeny + sess.off[from.id].zeny);
+        }
+        A.dirty = B.dirty = true;
+        for (const id of [sess.a, sess.b]) Trade.sessions.delete(id);
+        await Chars.flush(A, B);
+        for (const [st, id] of [[A, sess.a], [B, sess.b]]) {
           const o = Social.online(id); if (!o) continue;
+          Chars.push(st);
           o[0].send(JSON.stringify({ t: 'trade_done', give: sess.off[id], get: sess.off[Trade.other(sess, id)] }));
         }
         return;
@@ -922,6 +969,447 @@ const Trade = {
     }
   },
 };
+
+/* ---------------------------------------------------------------- reference data (SQL)
+   The game's data files fill these tables on every start (see start()); the
+   server's own rules then read items, jobs, shops and quests from them. */
+let GD = {};   // the game's shared JS, for formulas (stat costs, refine rates, EXP table)
+const Ref = {
+  items: new Map(), jobs: new Map(), shops: new Map(), quests: new Map(), cap: { base: 0, job: 0 },
+  item(id) { return this.items.get(id) || null; },
+  async load() {
+    this.items = new Map((await pool.query('SELECT id, data FROM item_defs')).rows.map((r) => [r.id, r.data]));
+    this.jobs = new Map((await pool.query('SELECT * FROM job_defs')).rows.map((r) => [r.id, r]));
+    const q = (await pool.query('SELECT * FROM quest_defs')).rows, rw = (await pool.query('SELECT * FROM quest_rewards')).rows;
+    this.quests = new Map(q.map((r) => [r.id, Object.assign(r, { rewards: rw.filter((x) => x.quest_id === r.id) })]));
+    // The most EXP one kill can give, doubled to allow for EXP-bonus gear.
+    const m = (await pool.query("SELECT max((data->>'exp')::float) AS b, max((data->>'jobExp')::float) AS j FROM monster_defs")).rows[0] || {};
+    const rate = (GD.Config && GD.Config.EXP_RATE) || 1;
+    this.cap = { base: Math.ceil((m.b || 0) * rate * 2) + 10, job: Math.ceil((m.j || 0) * rate * 2) + 10 };
+    await this.loadShops();
+  },
+  async loadShops() {
+    const rows = (await pool.query('SELECT shop_id, item_id, price FROM shop_items')).rows;
+    this.shops = new Map();
+    for (const r of rows) { if (!this.shops.has(r.shop_id)) this.shops.set(r.shop_id, new Map()); this.shops.get(r.shop_id).set(r.item_id, r.price); }
+  },
+  // Shop NPCs placed with the map editor sell what the editor gave them.
+  async syncCustomShops() {
+    const shops = [], items = [];
+    for (const r of (await pool.query('SELECT data FROM custom_maps')).rows) {
+      for (const e of (r.data && r.data.entities) || []) {
+        if (e.type !== 'npc' || (e.role || 'talk') !== 'shop' || e.u == null) continue;
+        const id = 'custom_' + e.u;
+        if (shops.some((s) => s.id === id)) continue;
+        shops.push({ id, name: String(e.shopName || `${e.name || 'Villager'}’s shop`).slice(0, 60), npc: id });
+        (e.stock || []).forEach((it, i) => { const d = this.item(it); if (d && !items.some((x) => x.shop_id === id && x.item_id === it)) items.push({ shop_id: id, item_id: it, price: Math.max(1, Math.round(d.price || 1)), sort: i }); });
+      }
+    }
+    const c = await pool.connect();
+    try {
+      await c.query('BEGIN');
+      await c.query('DELETE FROM shops WHERE custom');
+      await c.query('INSERT INTO shops (id, name, npc, custom) SELECT id, name, npc, true FROM jsonb_to_recordset($1::jsonb) AS x(id text, name text, npc text) ON CONFLICT (id) DO NOTHING', [JSON.stringify(shops)]);
+      await c.query('INSERT INTO shop_items (shop_id, item_id, price, sort) SELECT shop_id, item_id, price, sort FROM jsonb_to_recordset($1::jsonb) AS x(shop_id text, item_id text, price int, sort int) ON CONFLICT DO NOTHING', [JSON.stringify(items)]);
+      await c.query('COMMIT');
+    } catch (e) { await c.query('ROLLBACK').catch(() => {}); throw e; } finally { c.release(); }
+    await this.loadShops();
+  },
+  // Can this job use gear made for 'jobs'? (Second jobs inherit their first job's gear.)
+  canUse(jobs, jobId) {
+    if (!jobs || jobs === 'all') return true;
+    for (let j = jobId; j && j !== 'novice'; j = (this.jobs.get(j) || {}).from_job) if (jobs.includes(j)) return true;
+    return jobId === 'novice' && jobs.includes('novice');
+  },
+};
+
+/* ---------------------------------------------------------------- character state
+   While a character is online the server holds its bag, equipment, cart,
+   storage, Zeny, EXP, levels, job and stats here. They change only through the
+   operations below (buy, sell, use, equip, refine, trade, drop, pick up...),
+   each checked against the reference data, and are written to the tables in a
+   transaction every few seconds, on logout and straight after a trade. The
+   game sends what it wants to do and gets the corrected character back. */
+const BAG_MAX = 100, CART_MAX = 100, STORAGE_MAX = 300;
+const Chars = {
+  mem: new Map(),        // charId -> state
+  flushing: new Map(),   // accountId -> promise of the last write
+  out: (e) => ({ uid: e.uid, id: e.id, qty: e.qty, refine: e.refine || 0, cards: e.cards || [], forgedBy: e.forgedBy || undefined, element: e.element || undefined }),
+  row: (r, uid) => ({ uid, id: r.item_id, qty: r.qty, refine: r.refine || 0, cards: r.cards || [], forgedBy: r.forged_by || undefined, element: r.element || undefined }),
+
+  async load(charId, accountId, ws, admin) {
+    let st = this.mem.get(charId);
+    if (st) { st.ws = ws; st.admin = admin; return st; }   // a reconnect takes over the live state
+    await this.flushing.get(accountId);
+    const c = (await pool.query('SELECT * FROM characters WHERE id = $1 AND account_id = $2', [charId, accountId])).rows[0];
+    if (!c) return null;
+    const items = (await pool.query('SELECT * FROM character_items WHERE character_id = $1 ORDER BY sort, id', [charId])).rows;
+    const store = (await pool.query('SELECT * FROM storage_items WHERE account_id = $1 ORDER BY sort, id', [accountId])).rows;
+    const quests = (await pool.query('SELECT quest_id FROM character_quests WHERE character_id = $1', [charId])).rows.map((r) => r.quest_id);
+    let uid = 1;
+    st = { id: Number(c.id), accountId, name: c.name, ws, admin, job: c.job, baseLevel: c.base_level, jobLevel: c.job_level, baseExp: Number(c.base_exp), jobExp: Number(c.job_exp),
+      zeny: Number(c.zeny), stats: c.stats || {}, statPoints: c.stat_points, skills: (c.skills && c.skills.levels) || {}, bag: [], equip: {}, cart: [], storage: [],
+      quests: new Set(quests), newQuests: [], seq: 0, dirty: false, rl: {} };
+    for (const r of items) {
+      const e = this.row(r, 0);
+      if (r.location === 'equip' && r.equip_slot) st.equip[r.equip_slot] = e; else (r.location === 'cart' ? st.cart : st.bag).push(e);
+    }
+    // Same numbering as the game's own load: bag first, then equipment.
+    for (const e of st.bag) e.uid = uid++;
+    for (const k in st.equip) st.equip[k].uid = uid++;
+    for (const e of st.cart) e.uid = uid++;
+    st.storage = store.map((r) => this.row(r, uid++));
+    st.nextUid = Math.max(uid, 100);
+    const S = GD.Stats;
+    if (!c.stats || !Object.keys(c.stats).length) {
+      // Never played: the starting stats (and kit, for characters made before the server gave it).
+      st.stats = { str: 1, agi: 1, vit: 1, int: 1, dex: 1, luk: 1 }; st.statPoints = S.START_POINTS; st.dirty = true;
+      if (!items.length) this.giveKit(st);
+    } else if (!(c.extra && c.extra.statFix)) { st.statPoints += Math.max(0, S.totalPoints(st.baseLevel) - S.oldTotalPoints(st.baseLevel)); st.dirty = true; }
+    // Quests finished before the server kept track of them.
+    const old = (c.extra && c.extra.quests && Array.isArray(c.extra.quests.done) ? c.extra.quests.done : []).filter((q) => Ref.quests.has(q) && !st.quests.has(q));
+    for (const q of old) { st.quests.add(q); st.newQuests.push(q); st.dirty = true; }
+    this.mem.set(charId, st);
+    return st;
+  },
+  giveKit(st) {
+    const kit = GD.Config.START_KIT;
+    for (const id of kit.equip) { const d = Ref.item(id); if (d) st.equip[d.slot] = { uid: st.nextUid++, id, qty: 1, refine: 0, cards: [] }; }
+    for (const [id, n] of kit.items) this.add(st, 'bag', id, n);
+    st.zeny = kit.zeny;
+  },
+
+  /* ---- writing to the database ---- */
+  rows(st) {
+    const rows = [];
+    const push = (loc, slot, e, i) => rows.push({ location: loc, equip_slot: slot, item_id: e.id, qty: e.qty, refine: e.refine || 0, cards: e.cards || [], forged_by: e.forgedBy || null, element: e.element || null, sort: i });
+    st.bag.forEach((e, i) => push('bag', null, e, i));
+    Object.entries(st.equip).forEach(([s, e], i) => { if (e) push('equip', s, e, i); });
+    st.cart.forEach((e, i) => push('cart', null, e, i));
+    return rows;
+  },
+  async write(client, st) {
+    const items = JSON.stringify(this.rows(st));
+    const storage = JSON.stringify(st.storage.map((e, i) => ({ item_id: e.id, qty: e.qty, refine: e.refine || 0, cards: e.cards || [], forged_by: e.forgedBy || null, element: e.element || null, sort: i })));
+    const quests = st.newQuests.splice(0);
+    await client.query(`UPDATE characters SET job=$2, base_level=$3, job_level=$4, base_exp=$5, job_exp=$6, zeny=$7, stats=$8, stat_points=$9,
+      extra = extra || '{"statFix":1}'::jsonb, updated_at=now() WHERE id=$1`, [st.id, st.job, st.baseLevel, st.jobLevel, st.baseExp, st.jobExp, st.zeny, JSON.stringify(st.stats), st.statPoints]);
+    await client.query('DELETE FROM character_items WHERE character_id = $1', [st.id]);
+    await client.query(`INSERT INTO character_items (character_id, location, equip_slot, item_id, qty, refine, cards, forged_by, element, sort)
+      SELECT $1, location, equip_slot, item_id, qty, refine, cards, forged_by, element, sort FROM jsonb_to_recordset($2::jsonb)
+      AS x(location text, equip_slot text, item_id text, qty int, refine smallint, cards text[], forged_by text, element text, sort int)`, [st.id, items]);
+    await client.query('DELETE FROM storage_items WHERE account_id = $1', [st.accountId]);
+    await client.query(`INSERT INTO storage_items (account_id, item_id, qty, refine, cards, forged_by, element, sort)
+      SELECT $1, item_id, qty, refine, cards, forged_by, element, sort FROM jsonb_to_recordset($2::jsonb)
+      AS x(item_id text, qty int, refine smallint, cards text[], forged_by text, element text, sort int)`, [st.accountId, storage]);
+    if (quests.length) await client.query('INSERT INTO character_quests (character_id, quest_id) SELECT $1, unnest($2::text[]) ON CONFLICT DO NOTHING', [st.id, quests]);
+  },
+  // Write one or more characters in a single transaction (a trade writes both sides together).
+  flush(...list) {
+    list = list.filter((st) => st && st.dirty);
+    if (!list.length) return Promise.resolve();
+    const prev = Promise.all(list.map((st) => this.flushing.get(st.accountId)));
+    const job = prev.then(async () => {
+      const c = await pool.connect();
+      try {
+        await c.query('BEGIN');
+        for (const st of list) { st.dirty = false; await this.write(c, st); }
+        await c.query('COMMIT');
+      } catch (e) { await c.query('ROLLBACK').catch(() => {}); for (const st of list) st.dirty = true; console.error('Saving characters failed:', e.message); }
+      finally { c.release(); }
+    });
+    for (const st of list) this.flushing.set(st.accountId, job);
+    return job;
+  },
+  // The player left: save, then forget the live state (unless they came straight back).
+  async release(st, ws) {
+    await this.flush(st);
+    if (st.ws === ws && this.mem.get(st.id) === st && ![...online.values()].some((s) => s.charId === st.id)) this.mem.delete(st.id);
+  },
+
+  /* ---- what the game is told ---- */
+  view(st, withStorage) {
+    const v = { seq: st.seq, job: st.job, baseLevel: st.baseLevel, jobLevel: st.jobLevel, baseExp: st.baseExp, jobExp: st.jobExp, zeny: st.zeny,
+      stats: st.stats, statPoints: st.statPoints, bag: st.bag.map(this.out), equip: {}, cart: st.cart.map(this.out) };
+    for (const k in st.equip) if (st.equip[k]) v.equip[k] = this.out(st.equip[k]);
+    if (withStorage) v.storage = st.storage.map(this.out);
+    return v;
+  },
+  // Send the character now (corrections) or shortly (after new items appear).
+  push(st, text, soon) {
+    if (soon) { if (!st.pushT) st.pushT = setTimeout(() => { st.pushT = null; this.push(st); }, 200); return; }
+    if (st.pushT) { clearTimeout(st.pushT); st.pushT = null; }
+    if (st.ws && st.ws.readyState === 1) st.ws.send(JSON.stringify({ t: 'char', s: this.view(st, true), text: text || undefined }));
+  },
+
+  /* ---- item helpers ---- */
+  find(st, uid) { return st.bag.find((e) => e.uid === uid) || null; },
+  firstOf(list, id) { return list.find((e) => e.id === id) || null; },
+  count(st, id) { return st.bag.reduce((n, e) => n + (e.id === id ? e.qty : 0), 0); },
+  // Put items into a list the way the game does: stackables join one stack, gear comes one per entry.
+  add(st, where, id, qty, attrs) {
+    const d = Ref.item(id), list = st[where];
+    if (!d || !(qty > 0)) return false;
+    const max = where === 'bag' ? BAG_MAX : where === 'cart' ? CART_MAX : STORAGE_MAX;
+    attrs = attrs || {};
+    if (d.stack) {
+      const e = this.firstOf(list, id);
+      if (e) { e.qty = Math.min(30000, e.qty + qty); return true; }
+      if (list.length >= max) return false;
+      list.push({ uid: st.nextUid++, id, qty: Math.min(30000, qty), refine: 0, cards: [] });
+      return true;
+    }
+    const n = where === 'bag' ? qty : 1;
+    if (list.length + n > max) return false;
+    for (let i = 0; i < n; i++) list.push({ uid: st.nextUid++, id, qty: where === 'bag' ? 1 : qty, refine: attrs.refine || 0, cards: (attrs.cards || []).slice(0, 4), forgedBy: attrs.forgedBy, element: attrs.element });
+    return true;
+  },
+  // Take qty from one bag entry; returns a copy of what was taken (or null).
+  take(st, uid, qty, list) {
+    list = list || st.bag;
+    const e = list.find((x) => x.uid === uid);
+    if (!e || !(qty > 0)) return null;
+    const n = Math.min(Math.floor(qty), e.qty);
+    e.qty -= n;
+    if (e.qty <= 0) list.splice(list.indexOf(e), 1);
+    return Object.assign({}, e, { qty: n });
+  },
+  takeId(st, id, qty) {
+    if (this.count(st, id) < qty) return false;
+    let left = qty;
+    while (left > 0) { const e = this.firstOf(st.bag, id); left -= this.take(st, e.uid, left).qty; }
+    return true;
+  },
+  // Classic leveling: base levels give stat points, job levels stop at the job's maximum.
+  addExp(st, base, job) {
+    const C = GD.Config, jd = Ref.jobs.get(st.job);
+    if (base > 0 && st.baseLevel < C.MAX_LEVEL) {
+      st.baseExp += base;
+      while (st.baseLevel < C.MAX_LEVEL && st.baseExp >= (C.EXP_TABLE[st.baseLevel] || Infinity)) {
+        st.baseExp -= C.EXP_TABLE[st.baseLevel]; st.baseLevel++; st.statPoints += GD.Stats.pointsForLevel(st.baseLevel);
+      }
+    }
+    if (job > 0 && jd) {
+      st.jobExp += job;
+      const next = () => (st.jobLevel >= jd.max_job_level ? Infinity : (jd.job_exp[st.jobLevel] || Infinity));
+      while (st.jobExp >= next()) { st.jobExp -= next(); st.jobLevel++; if (st.jobLevel >= jd.max_job_level) st.jobExp = 0; }
+    }
+    st.dirty = true;
+  },
+  // Shop price modifiers from the character's learned skills (Discount, Overcharge, Haggle).
+  perk(st, key) {
+    let n = 0;
+    for (const [id, lv] of Object.entries(st.skills || {})) {
+      const s = GD.Skills && GD.Skills.get(id);
+      if (s && s.bonus && lv > 0) { try { n += Number((s.bonus(lv, {}) || {})[key]) || 0; } catch (e) { /* needs a live player: not a shop perk */ } }
+    }
+    return n;
+  },
+  // Simple per-action limits for things the server can't check yet (until combat and rewards move here).
+  allow(st, key, n, ms) {
+    if (st.admin) return true;
+    const now = Date.now(), list = (st.rl[key] = (st.rl[key] || []).filter((t) => now - t < ms));
+    if (list.length >= n) return false;
+    list.push(now); return true;
+  },
+  canEquip(st, d) {
+    if (!d || d.type !== 'equip') return 'That can’t be equipped.';
+    if (st.baseLevel < (d.reqLevel || 1)) return `Requires base level ${d.reqLevel}.`;
+    if (!Ref.canUse(d.jobs, st.job)) return `Your job can’t equip ${d.name}.`;
+    const jd = Ref.jobs.get(st.job);
+    if (d.slot === 'weapon' && jd && !jd.weapons.includes(d.weaponType)) return `Your job can’t use ${d.name}.`;
+    if (d.slot === 'shield') { const w = st.equip.weapon && Ref.item(st.equip.weapon.id); if (w && GD.Items.WEAPON_TYPES[w.weaponType] && GD.Items.WEAPON_TYPES[w.weaponType].twoHanded) return 'Your weapon needs both hands.'; }
+    return null;
+  },
+
+  /* ---- operations from the game ---- */
+  op(me, m) {
+    const st = this.mem.get(me.charId);
+    if (!st) return;
+    const res = this.run(st, m);
+    if (Number.isInteger(m.seq)) st.seq = m.seq;
+    if (res && res.reply && st.ws.readyState === 1) {
+      // Answers (like a refine roll) come after the corrected character.
+      this.push(st);
+      st.ws.send(JSON.stringify(Object.assign({ t: 'op_res', k: m.k, seq: m.seq }, res.reply)));
+      return;
+    }
+    if (res && res.no) return this.push(st, res.no === true ? null : res.no);   // refused: correct the game
+    if (res === 'sync' || (res && res.sync)) return this.push(st);
+    if (res && res.soon) this.push(st, null, true);
+  },
+  run(st, m) {
+    const num = (v, lo, hi) => { const n = Math.floor(Number(v)); return Number.isFinite(n) ? Math.max(lo, Math.min(hi, n)) : lo; };
+    const NO = (text) => ({ no: text || true });
+    if (m.why === 'debug' && !st.admin) return NO('Only admins can use the debug tools online.');
+    switch (m.k) {
+      case 'sync': return 'sync';
+      /* Things the game decides for now (kills, crafting, skills): checked for sense and rate. */
+      case 'gain': {
+        const d = Ref.item(String(m.id || '')), qty = num(m.qty, 0, 30000);
+        if (!d || !qty) return NO();
+        if (!st.admin && (qty > (d.stack ? 500 : 10) || !this.allow(st, 'gain', 40, 10000))) return NO();
+        const attrs = { refine: num(m.refine, 0, 10), cards: Array.isArray(m.cards) ? m.cards.filter((c) => Ref.item(String(c))).map(String) : [],
+          forgedBy: m.forgedBy === st.name ? st.name : undefined, element: ['fire', 'water', 'wind', 'earth'].includes(m.element) ? m.element : undefined };
+        if (!st.admin) { attrs.refine = 0; attrs.cards = []; }
+        if (!this.add(st, 'bag', String(m.id), qty, attrs)) return NO('Your inventory is full.');
+        st.dirty = true; return { soon: true };
+      }
+      case 'take': {
+        if (!this.take(st, num(m.uid, 0, 1e9), num(m.qty, 1, 30000))) return NO();
+        st.dirty = true; return null;
+      }
+      case 'zeny': {
+        const d = num(m.d, -2147483647, 2147483647);
+        if (d < 0) { if (st.zeny + d < 0) return NO(); }
+        else if (!st.admin && (d > 100000 || !this.allow(st, 'zeny', 30, 10000))) return NO();
+        st.zeny = Math.min(2147483647, st.zeny + d); st.dirty = true; return null;
+      }
+      case 'exp': {
+        const b = num(m.base, 0, 1e9), j = num(m.job, 0, 1e9);
+        if (!st.admin && (b > Ref.cap.base || j > Ref.cap.job || !this.allow(st, 'exp', 60, 10000))) return NO();
+        this.addExp(st, b, j); return null;
+      }
+      case 'order': {
+        if (!Array.isArray(m.uids)) return null;
+        const pos = new Map(m.uids.slice(0, 200).map((u, i) => [Number(u), i]));
+        st.bag.sort((a, b) => (pos.has(a.uid) ? pos.get(a.uid) : 1e6) - (pos.has(b.uid) ? pos.get(b.uid) : 1e6));
+        st.dirty = true; return null;
+      }
+      /* Equipment and cards. */
+      case 'equip': {
+        const e = this.find(st, num(m.uid, 0, 1e9)), d = e && Ref.item(e.id);
+        if (!e) return NO();
+        const why = this.canEquip(st, d); if (why) return NO(why);
+        const slot = d.slot !== 'acc' ? d.slot : !st.equip.acc1 ? 'acc1' : !st.equip.acc2 ? 'acc2' : 'acc1';
+        st.bag.splice(st.bag.indexOf(e), 1);
+        if (st.equip[slot]) st.bag.push(st.equip[slot]);
+        const wt = d.weaponType && GD.Items.WEAPON_TYPES[d.weaponType];
+        if (wt && wt.twoHanded && st.equip.shield) { st.bag.push(st.equip.shield); st.equip.shield = null; }
+        st.equip[slot] = e; st.dirty = true; return null;
+      }
+      case 'unequip': {
+        const slot = String(m.slot || ''), e = st.equip[slot];
+        if (!e) return NO();
+        if (st.bag.length >= BAG_MAX) return NO('Your inventory is full.');
+        st.equip[slot] = null; st.bag.push(e); st.dirty = true; return null;
+      }
+      case 'card': {
+        const c = this.find(st, num(m.card, 0, 1e9)), cd = c && Ref.item(c.id);
+        const uid = num(m.target, 0, 1e9), t = this.find(st, uid) || Object.values(st.equip).find((e) => e && e.uid === uid), td = t && Ref.item(t.id);
+        if (!cd || cd.type !== 'card' || !td || td.type !== 'equip') return NO();
+        const fits = (GD.Items.CARD_SLOTS[cd.cardSlot] || { slots: [] }).slots.includes(td.slot) && (td.slots || 0) > (t.cards || []).length;
+        if (!fits) return NO('That card doesn’t fit there.');
+        this.take(st, c.uid, 1); (t.cards = t.cards || []).push(cd.id); st.dirty = true; return null;
+      }
+      /* Stats and jobs. */
+      case 'stat': {
+        const key = String(m.key || ''), v = st.stats[key];
+        if (!GD.Stats.KEYS.includes(key) || !(v < GD.Stats.MAX_STAT)) return NO();
+        const cost = GD.Stats.cost(v);
+        if (st.statPoints < cost) return NO();
+        st.statPoints -= cost; st.stats = Object.assign({}, st.stats, { [key]: v + 1 }); st.dirty = true; return null;
+      }
+      case 'stat_reset': {
+        st.stats = { str: 1, agi: 1, vit: 1, int: 1, dex: 1, luk: 1 }; st.statPoints = GD.Stats.totalPoints(st.baseLevel); st.dirty = true; return null;
+      }
+      case 'job': {
+        const jd = Ref.jobs.get(String(m.job || ''));
+        if (!jd || jd.from_job !== st.job) return NO('You can’t change to that job.');
+        if (st.jobLevel < jd.req_job_level) return NO(`You need job level ${jd.req_job_level} first.`);
+        // Trials that cost items or Zeny are paid here; the other trials are still checked by the game.
+        const tr = jd.trial || {};
+        if (tr.zeny && st.zeny < tr.zeny) return NO(`The trial needs ${tr.zeny} Zeny.`);
+        for (const [id, n] of tr.items || []) if (this.count(st, id) < n) return NO('The trial items are missing.');
+        if (tr.zeny) st.zeny -= tr.zeny;
+        for (const [id, n] of tr.items || []) this.takeId(st, id, n);
+        st.job = jd.id; st.jobLevel = 1; st.jobExp = 0;
+        if (jd.gift) this.add(st, 'bag', jd.gift, 1);
+        st.dirty = true; return { sync: true };
+      }
+      /* Shops, refining, quests. */
+      case 'buy': {
+        const shop = Ref.shops.get(String(m.shop || '')), id = String(m.id || ''), d = Ref.item(id), qty = num(m.qty, 0, 30000);
+        if (!shop || !shop.has(id) || !d || !qty) return NO('That shop doesn’t sell that.');
+        const cost = Math.max(1, Math.ceil(shop.get(id) * (1 - this.perk(st, 'discount') / 100))) * qty;
+        if (st.zeny < cost) return NO('You don’t have enough Zeny.');
+        if (!this.add(st, 'bag', id, qty)) return NO('Your inventory is full.');
+        st.zeny -= cost; st.dirty = true; return { sync: true };
+      }
+      case 'sell': {
+        const e = this.find(st, num(m.uid, 0, 1e9)), d = e && Ref.item(e.id);
+        if (!d) return NO();
+        const got = this.take(st, e.uid, num(m.qty, 1, 30000));
+        st.zeny = Math.min(2147483647, st.zeny + Math.round(d.price / 2 * (1 + this.perk(st, 'overcharge') / 100)) * got.qty);
+        st.dirty = true; return { sync: true };
+      }
+      case 'refine': {
+        const uid = num(m.uid, 0, 1e9), slot = Object.keys(st.equip).find((k) => st.equip[k] && st.equip[k].uid === uid);
+        const e = slot ? st.equip[slot] : this.find(st, uid), d = e && GD.Items.get(e.id), t = d && GD.Refine.table(d);
+        if (!e) return { reply: { result: 'That item is no longer there. Try again.' } };
+        if (!t) return { reply: { result: 'That item can’t be refined.' } };
+        const r = e.refine || 0;
+        if (r >= GD.Refine.MAX) return { reply: { result: `It is already at +${GD.Refine.MAX}.` } };
+        if (!this.firstOf(st.bag, t.mat)) return { reply: { result: `You need a ${(Ref.item(t.mat) || {}).name || t.mat}.` } };
+        if (st.zeny < t.zeny) return { reply: { result: `You need ${t.zeny.toLocaleString()} Zeny.` } };
+        this.takeId(st, t.mat, 1); st.zeny -= t.zeny; st.dirty = true;
+        // The server rolls the dice.
+        if (crypto.randomInt(10000) < t.rates[r] * 100) { e.refine = r + 1; return { reply: { result: 'success', item: this.out(e) } }; }
+        if (slot) st.equip[slot] = null; else st.bag.splice(st.bag.indexOf(e), 1);
+        return { reply: { result: 'broke', item: this.out(e) } };
+      }
+      case 'quest': {
+        const q = Ref.quests.get(String(m.id || ''));
+        if (!q || st.quests.has(q.id)) return NO('That quest is already done.');
+        if (st.baseLevel < q.min_level || !q.req.every((r) => st.quests.has(r))) return NO('That quest isn’t open to you yet.');
+        // Objectives the server can see; kill and visit counts are still kept by the game.
+        for (const o of q.objectives) {
+          if (o.type === 'item' && this.count(st, o.id) < o.count) return NO('Some quest items are missing.');
+          if (o.type === 'baseLevel' && st.baseLevel < o.level) return NO();
+          if (o.type === 'jobLevel' && st.jobLevel < o.level) return NO();
+          if (o.type === 'job' && ((Ref.jobs.get(st.job) || {}).tier || 0) < o.tier) return NO();
+        }
+        for (const o of q.objectives) if (o.type === 'item') this.takeId(st, o.id, o.count);
+        const rate = GD.Config.QUEST_EXP_RATE || 1;
+        let b = 0, j = 0;
+        for (const r of q.rewards) {
+          if (r.kind === 'zeny') st.zeny = Math.min(2147483647, st.zeny + Number(r.qty));
+          else if (r.kind === 'item') this.add(st, 'bag', r.item_id, Number(r.qty));
+          else if (r.kind === 'exp') b += Math.round(Number(r.qty) * rate);
+          else if (r.kind === 'job_exp') j += Math.round(Number(r.qty) * rate);
+        }
+        this.addExp(st, b, j);
+        st.quests.add(q.id); st.newQuests.push(q.id); st.dirty = true; return { sync: true };
+      }
+      /* Storage (shared by the account) and the merchant's cart. */
+      case 'store': case 'cart_in': {
+        const to = m.k === 'store' ? 'storage' : 'cart', e = this.find(st, num(m.uid, 0, 1e9)), d = e && Ref.item(e.id);
+        if (!d) return NO();
+        if (to === 'cart' && !(st.skills.pushcart > 0)) return NO('You need a Pushcart.');
+        const n = d.stack ? Math.min(num(m.qty, 1, 30000), e.qty) : 1;
+        if (to === 'cart' && st.cart.reduce((w, x) => w + ((Ref.item(x.id) || {}).weight || 0) * x.qty, 0) + (d.weight || 0) * n > 8000) return NO('The cart is too heavy (8,000 max).');
+        if (!this.add(st, to, e.id, n, e)) return NO(to === 'storage' ? 'Storage is full.' : 'The cart is full.');
+        this.take(st, e.uid, n); st.dirty = true; return { sync: true };
+      }
+      case 'unstore': case 'cart_out': case 'vend': {
+        const from = m.k === 'unstore' ? st.storage : st.cart, i = num(m.i, 0, 1000), s = from[i];
+        if (!s || s.id !== m.id) return NO();
+        if (m.k === 'vend') {
+          // Vending sells a whole cart stack at the full shop price.
+          const d = Ref.item(s.id);
+          if (!(st.skills.vending > 0) || !d) return NO();
+          from.splice(i, 1); st.zeny = Math.min(2147483647, st.zeny + (d.price || 0) * s.qty); st.dirty = true; return { sync: true };
+        }
+        const n = Math.min(num(m.qty, 1, 30000), s.qty);
+        if (!this.add(st, 'bag', s.id, n, s)) return NO('Your inventory is full.');
+        s.qty -= n; if (s.qty <= 0) from.splice(i, 1);
+        st.dirty = true; return { sync: true };
+      }
+    }
+    return null;
+  },
+};
+setInterval(() => { for (const st of Chars.mem.values()) if (st.dirty) Chars.flush(st); }, 15000);
 
 /* ---------------------------------------------------------------- start-up: schema + reference data */
 function loadGameData() {
@@ -932,14 +1420,66 @@ function loadGameData() {
   sandbox.window.G = {};
   sandbox.G = sandbox.window.G;
   vm.createContext(sandbox);
-  for (const f of ['js/core/utils.js', 'js/core/config.js', 'js/data/items.js', 'js/data/maps.js', 'js/data/content.js']) {
+  for (const f of ['js/core/utils.js', 'js/core/config.js', 'js/data/items.js', 'js/data/jobs.js', 'js/data/jobs2.js', 'js/data/skills.js', 'js/data/skills2.js',
+    'js/data/skilltrees.js', 'js/data/npcs.js', 'js/data/quests.js', 'js/data/maps.js', 'js/data/content.js', 'js/systems/stats.js', 'js/systems/refine.js']) {
     try { vm.runInContext(fs.readFileSync(path.join(ROOT, f), 'utf8'), sandbox, { filename: f }); } catch (e) { console.warn(`(reference data) skipped ${f}: ${e.message}`); }
   }
   return sandbox.window.G;
 }
+// Bulk-replace one reference table's rows (all in one statement).
+async function seedTable(client, table, cols, rows, where) {
+  await client.query(`DELETE FROM ${table}${where ? ' WHERE ' + where : ''}`);
+  if (!rows.length) return;
+  const names = cols.map((c) => c.split(' ')[0]);
+  await client.query(`INSERT INTO ${table} (${names.join(', ')}) SELECT ${names.join(', ')} FROM jsonb_to_recordset($1::jsonb) AS x(${cols.join(', ')}) ON CONFLICT DO NOTHING`, [JSON.stringify(rows)]);
+}
+// Drops, jobs, skills, shops and quests from the game's data files.
+async function seedGameData(G) {
+  const perLevel = (fn, max, round) => { const out = []; for (let l = 1; l <= max; l++) { let v = null; try { v = typeof fn === 'function' ? Number(fn(l)) : fn == null ? null : Number(fn); } catch (e) { v = null; } out.push(Number.isFinite(v) ? (round ? Math.round(v) : +v.toFixed(3)) : 0); } return out; };
+  const drops = [], jobs = [], skills = [], shops = [], shopItems = [], quests = [], rewards = [];
+  for (const [id, m] of Object.entries((G.Config && G.Config.MONSTERS) || {})) (m.drops || []).forEach((d, i) => drops.push({ monster_id: id, sort: i, item_id: d.id, chance: d.chance }));
+  for (const j of Object.values((G.Jobs && G.Jobs.DB) || {})) {
+    // From the Job Master's rules: first jobs need Novice job level 10, second jobs job level 40.
+    const from = j.tier === 1 ? 'novice' : j.from || null;
+    jobs.push({ id: j.id, name: j.name, tier: j.tier, from_job: from, req_job_level: j.tier === 1 ? 10 : j.tier >= 2 ? 40 : 0, max_job_level: j.maxJobLevel,
+      weapons: j.weapons || [], gift: j.gift || null, trial: j.trial || null, job_exp: j.jobExp || [] });
+  }
+  for (const sk of Object.values((G.Skills && G.Skills.DB) || {})) {
+    const fx = sk.fx || {}, max = sk.max || 1;
+    const data = JSON.parse(JSON.stringify({ target: sk.target, range: sk.range, element: sk.element, req: sk.req, granted: sk.granted, quest: sk.quest, catalyst: sk.catalyst, needs: sk.needs, spheres: sk.spheres, effect: sk.effect, fx: fx.kind ? { kind: fx.kind, area: fx.area, knock: fx.knock } : undefined,
+      hp: sk.hp ? perLevel(sk.hp, max, true) : undefined, zeny: sk.zeny ? perLevel(sk.zeny, max, true) : undefined }));
+    skills.push({ id: sk.id, name: sk.name, job: sk.job || null, type: sk.type, max_level: max, sp: perLevel(sk.sp, max, true), cast_time: perLevel(sk.cast, max), cooldown: perLevel(sk.cd, max),
+      damage: fx.mult ? perLevel(fx.mult, max) : null, hits: fx.hits ? perLevel(fx.hits, max, true) : null, data });
+  }
+  for (const [id, sh] of Object.entries(G.SHOPS || {})) {
+    shops.push({ id, name: sh.name, npc: sh.npc || null });
+    (sh.stock || []).forEach((it, i) => { const d = G.Items.get(it); if (d) shopItems.push({ shop_id: id, item_id: it, price: Math.max(1, Math.round(d.price || 1)), sort: i }); });
+  }
+  (G.QUESTS || []).forEach((q, i) => {
+    quests.push({ id: q.id, name: q.name, giver: q.giver || null, min_level: q.minLevel || 1, req: q.req || [], objectives: q.objectives || [], sort: i });
+    const r = q.rewards || {};
+    if (r.exp) rewards.push({ quest_id: q.id, kind: 'exp', item_id: null, qty: r.exp });
+    if (r.jobExp) rewards.push({ quest_id: q.id, kind: 'job_exp', item_id: null, qty: r.jobExp });
+    if (r.zeny) rewards.push({ quest_id: q.id, kind: 'zeny', item_id: null, qty: r.zeny });
+    for (const [it, n] of r.items || []) rewards.push({ quest_id: q.id, kind: 'item', item_id: it, qty: n });
+  });
+  const c = await pool.connect();
+  try {
+    await c.query('BEGIN');
+    await seedTable(c, 'monster_drops', ['monster_id text', 'sort int', 'item_id text', 'chance real'], drops);
+    await seedTable(c, 'job_defs', ['id text', 'name text', 'tier int', 'from_job text', 'req_job_level int', 'max_job_level int', 'weapons text[]', 'gift text', 'trial jsonb', 'job_exp jsonb'], jobs);
+    await seedTable(c, 'skill_defs', ['id text', 'name text', 'job text', 'type text', 'max_level int', 'sp int[]', 'cast_time real[]', 'cooldown real[]', 'damage real[]', 'hits int[]', 'data jsonb'], skills);
+    await seedTable(c, 'shops', ['id text', 'name text', 'npc text'], shops, 'NOT custom');
+    await seedTable(c, 'shop_items', ['shop_id text', 'item_id text', 'price int', 'sort int'], shopItems, 'shop_id IN (SELECT id FROM shops WHERE NOT custom)');
+    await seedTable(c, 'quest_defs', ['id text', 'name text', 'giver text', 'min_level int', 'req text[]', 'objectives jsonb', 'sort int'], quests);
+    await seedTable(c, 'quest_rewards', ['quest_id text', 'kind text', 'item_id text', 'qty bigint'], rewards);
+    await c.query('COMMIT');
+  } catch (e) { await c.query('ROLLBACK').catch(() => {}); throw e; } finally { c.release(); }
+  return { drops: drops.length, jobs: jobs.length, skills: skills.length, shops: shops.length, quests: quests.length };
+}
 async function start() {
   await pool.query(fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8'));
-  const G = loadGameData();
+  const G = GD = loadGameData();
   const items = (G.Items && G.Items.DB) || {}, mons = (G.Config && G.Config.MONSTERS) || {};
   for (const [id, it] of Object.entries(items)) await pool.query('INSERT INTO item_defs (id, name, type, data) VALUES ($1,$2,$3,$4) ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, type = EXCLUDED.type, data = EXCLUDED.data', [id, it.name, it.type, JSON.stringify(it)]);
   for (const [id, m] of Object.entries(mons)) await pool.query('INSERT INTO monster_defs (id, name, level, hp, element, data) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, level = EXCLUDED.level, hp = EXCLUDED.hp, element = EXCLUDED.element, data = EXCLUDED.data', [id, m.name, m.level, m.hp, m.element || 'neutral', JSON.stringify(m)]);
@@ -947,6 +1487,15 @@ async function start() {
   await pool.query('DELETE FROM sessions WHERE expires_at < now()');
   if (ADMINS.size) await pool.query('UPDATE accounts SET is_admin = true WHERE lower(username) = ANY($1)', [[...ADMINS]]);
   for (const r of (await pool.query("SELECT id FROM custom_maps WHERE data->'rules'->>'pvp' = 'true'")).rows) pvpMaps.add(r.id);
-  server.listen(PORT, () => console.log(`Willowmere server on http://localhost:${PORT}  (${Object.keys(items).length} items, ${Object.keys(mons).length} monsters in the database)`));
+  const n = await seedGameData(G);
+  await Ref.load();
+  await Ref.syncCustomShops();
+  server.listen(PORT, () => console.log(`Willowmere server on http://localhost:${PORT}  (${Object.keys(items).length} items, ${Object.keys(mons).length} monsters, ${n.drops} drops, ${n.jobs} jobs, ${n.skills} skills, ${n.shops} shops, ${n.quests} quests in the database)`));
 }
+// Render stops the server with SIGTERM when it redeploys: save everyone first.
+for (const sig of ['SIGTERM', 'SIGINT']) process.on(sig, () => {
+  console.log('Saving characters before shutting down…');
+  Chars.flush(...Chars.mem.values()).finally(() => process.exit(0));
+  setTimeout(() => process.exit(0), 8000).unref();
+});
 start().catch((e) => { console.error('Start-up failed:', e.message); process.exit(1); });

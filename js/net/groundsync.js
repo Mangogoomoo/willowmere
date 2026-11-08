@@ -68,15 +68,13 @@
         const l = find(m.gid); if (l) { l.pending = false; l.auto = false; l.fly = 0; }
         game.log.add(m.text, 'warn');
       } else if (m.t === 'ground_take') {
-        // The server says it's ours.
+        // The server says it's ours (and has already put it in its copy of our character).
         const it = m.item, p = game.player, l = find(m.gid);
         if (it.id === 'zeny') {
-          p.zeny += it.qty; game.sfx('zeny'); game.log.add(`Picked up ${it.qty} Zeny.`, 'loot');
+          G.Ledger.quiet(() => { p.zeny += it.qty; }); game.sfx('zeny'); game.log.add(`Picked up ${it.qty} Zeny.`, 'loot');
           game.overlay.addText(p.position, `+${it.qty} z`, 'zeny');
         } else {
-          const r = p.inventory.add(it.id, it.qty, { cards: it.cards, refine: it.refine, ignoreWeight: true });
-          const e = p.inventory.items[p.inventory.items.length - 1];
-          if (e && e.id === it.id && it.forgedBy) { e.forgedBy = it.forgedBy; e.element = it.element; p.inventory.changed(); }
+          const r = G.Ledger.quiet(() => p.inventory.add(it.id, it.qty, { cards: it.cards, refine: it.refine, forgedBy: it.forgedBy, element: it.element, ignoreWeight: true }));
           const name = G.Items.displayName({ id: it.id, refine: it.refine, cards: it.cards, forgedBy: it.forgedBy, element: it.element });
           game.log.add(`Picked up ${it.qty > 1 ? `${name} ×${it.qty}` : name}.`, 'loot'); game.sfx('pickup');
           if (!r.added) game.log.add('Your bag overflowed!', 'warn');

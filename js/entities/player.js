@@ -4,11 +4,7 @@
   'use strict';
   const C = G.Config, P = C.PLAYER, U = G.Utils;
 
-  const START_KIT = {
-    equip: ['knife', 'cotton_shirt'],
-    items: [['novice_potion', 15], ['red_potion', 3], ['butterfly_wing', 1], ['fly_wing', 2]],
-    zeny: 500,
-  };
+  const START_KIT = C.START_KIT;
 
   class Player extends G.Entity {
     /* data: a save object, or { name, appearance } for a new character. */
@@ -86,6 +82,9 @@
     get maxSp() { return this.derived.maxSp; }
     get level() { return this.baseLevel; }
     get jobDef() { return G.Jobs.get(this.job); }
+    // Zeny changes are reported to the server online (G.Ledger).
+    get zeny() { return this._zeny || 0; }
+    set zeny(v) { const d = v - (this._zeny || 0); this._zeny = v; if (d && G.Ledger) G.Ledger.zeny(d); }
     get expToNext() { return C.EXP_TABLE[this.baseLevel] || Infinity; }
     get jobExpToNext() {
       const j = this.jobDef;
@@ -204,6 +203,8 @@
 
     changeJob(id) {
       const job = G.Jobs.get(id), game = this.game;
+      // Online the server checks the change, takes any trial fee and gives the gift itself.
+      if (G.Ledger) G.Ledger.op('job', { job: id });
       this.jobHistory[this.job] = this.jobLevel;   // remember how many points that job earned
       this.standUp();
       this.job = id;
@@ -216,7 +217,7 @@
       this.recalc();
       this.hp = this.maxHp; this.sp = this.maxSp;
       if (job.gift) {
-        const r = this.inventory.add(job.gift, 1, { ignoreWeight: true });
+        const r = G.Ledger ? G.Ledger.quiet(() => this.inventory.add(job.gift, 1, { ignoreWeight: true })) : this.inventory.add(job.gift, 1, { ignoreWeight: true });
         if (r.added) game.log.add(`The Job Master gives you a ${G.Items.get(job.gift).name}.`, 'loot');
       }
       game.effects.levelUp(this);
@@ -236,6 +237,7 @@
       if (this.statPoints < cost) return false;
       this.statPoints -= cost;
       this.stats[key]++;
+      if (G.Ledger) G.Ledger.op('stat', { key });
       this.recalc();
       this.game.save.markDirty();
       return true;
@@ -243,6 +245,7 @@
     resetStats() {
       for (const k of G.Stats.KEYS) this.stats[k] = 1;
       this.statPoints = G.Stats.totalPoints(this.baseLevel);
+      if (G.Ledger) G.Ledger.op('stat_reset');
       this.recalc();
       this.game.events.emit('levelChanged');
       this.game.log.add('Your stats have been reset. All points are back to spend.', 'system');
@@ -408,6 +411,7 @@
     gainExp(base, job) {
       const game = this.game;
       if (this.derived.extra && this.derived.extra.expBonus) base = Math.round(base * (1 + this.derived.extra.expBonus / 100));
+      if (G.Ledger) G.Ledger.exp(base, job);
       if (this.baseLevel < C.MAX_LEVEL) {
         this.baseExp += base;
         while (this.baseExp >= this.expToNext && this.baseLevel < C.MAX_LEVEL) {

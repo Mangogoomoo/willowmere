@@ -31,6 +31,12 @@
       regenDelay: 4,              // seconds out of combat before HP/SP recover
       respawn: { x: 0, z: -60 },
     },
+    // What a new character starts with (the online server gives the same kit).
+    START_KIT: {
+      equip: ['knife', 'cotton_shirt'],
+      items: [['novice_potion', 15], ['red_potion', 3], ['butterfly_wing', 1], ['fly_wing', 2]],
+      zeny: 500,
+    },
 
     CAMERA: {
       fov: 45,

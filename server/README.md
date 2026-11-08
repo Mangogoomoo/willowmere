@@ -8,6 +8,20 @@ This small Node.js server runs the online version of Willowmere:
   tables filled from the game's data on every start),
 - relays live player movement, looks, attack swings and chat over WebSockets.
 
+**Who decides what (Stage 9).** While a character is online the server holds
+its items, equipment, cart, storage, Zeny, EXP, levels, job and stats in
+memory. The game sends actions (`{ t: 'op', k: 'buy' | 'sell' | 'equip' |
+'refine' | 'store' | ... }`), the server checks each one against the reference
+tables and sends back the corrected character (`{ t: 'char' }`). Characters are
+written to the tables every 15 seconds, on logout, right after a trade and when
+the server is stopped. The game's own save (`PUT /api/characters/:id`) now only
+stores position, HP/SP, skills, hotbar, quest progress and preferences.
+
+Reference tables filled on every start: `item_defs`, `monster_defs`,
+`monster_spawns`, `monster_drops`, `job_defs`, `skill_defs`, `shops` and
+`shop_items` (shop NPCs from the map editor are added when a map is saved),
+`quest_defs` and `quest_rewards`. Finished quests are in `character_quests`.
+
 The database password never reaches the browser: only this server knows
 `DATABASE_URL`.
 

@@ -30,7 +30,9 @@
     firstOf(id) { return this.items.find((e) => e.id === id) || null; }
     count(id) { let n = 0; for (const e of this.items) if (e.id === id) n += e.qty; return n; }
 
-    /* Returns { added, reason }. Never partially adds a stack. */
+    /* Returns { added, reason }. Never partially adds a stack.
+       opts: ignoreWeight, cards, refine, forgedBy, element. Online, the
+       server is told (G.Ledger) unless it made the change itself. */
     add(id, qty, opts) {
       opts = opts || {};
       const item = G.Items.get(id);
@@ -44,8 +46,9 @@
         this.items.push({ uid: this.nextUid++, id, qty, cards: [] });
       } else {
         if (this.items.length + qty > this.max) return { added: 0, reason: 'full' };
-        for (let i = 0; i < qty; i++) this.items.push({ uid: this.nextUid++, id, qty: 1, cards: (opts.cards || []).slice(), refine: opts.refine || 0 });
+        for (let i = 0; i < qty; i++) this.items.push({ uid: this.nextUid++, id, qty: 1, cards: (opts.cards || []).slice(), refine: opts.refine || 0, forgedBy: opts.forgedBy, element: opts.element });
       }
+      if (G.Ledger) G.Ledger.gained(id, qty, opts);
       this.changed();
       return { added: qty };
     }
@@ -56,6 +59,7 @@
       const n = Math.min(qty == null ? e.qty : qty, e.qty);
       e.qty -= n;
       if (e.qty <= 0) this.items.splice(this.items.indexOf(e), 1);
+      if (G.Ledger) G.Ledger.removed(uid, n);
       this.changed();
       return n;
     }
@@ -65,6 +69,7 @@
         const ia = G.Items.get(a.id), ib = G.Items.get(b.id);
         return (TYPE_ORDER[ia.type] - TYPE_ORDER[ib.type]) || ia.name.localeCompare(ib.name) || a.uid - b.uid;
       });
+      if (G.Ledger) G.Ledger.op('order', { uids: this.items.map((e) => e.uid) });
       this.changed();
     }
 
@@ -119,6 +124,7 @@
       if (eq[slot]) this.items.push(eq[slot]);
       if (item.weaponType && G.Items.WEAPON_TYPES[item.weaponType].twoHanded && eq.shield) { this.items.push(eq.shield); eq.shield = null; }
       eq[slot] = e;
+      if (G.Ledger) G.Ledger.op('equip', { uid: e.uid });
       this.changed();
       this.player.game.log.add(`Equipped ${G.Items.displayName(e)}.`, 'info');
       return true;
@@ -130,6 +136,7 @@
       if (this.items.length >= this.max) { this.player.game.log.add('Your inventory is full.', 'warn'); return false; }
       this.player.equipment[slot] = null;
       this.items.push(e);
+      if (G.Ledger) G.Ledger.op('unequip', { slot });
       this.changed();
       this.player.game.log.add(`Removed ${G.Items.displayName(e)}.`, 'info');
       return true;
@@ -151,7 +158,7 @@
       if (!c) return false;
       const card = G.Items.get(c.id), item = G.Items.get(target.entry.id);
       if (!this.cardTargets(card).some((t) => t.entry === target.entry)) return false;
-      this.remove(cardUid, 1);
+      if (G.Ledger) { if (G.Ledger.blocked(this.player.game)) return false; G.Ledger.op('card', { card: cardUid, target: target.entry.uid }); G.Ledger.quiet(() => this.remove(cardUid, 1)); } else this.remove(cardUid, 1);
       (target.entry.cards = target.entry.cards || []).push(card.id);
       this.changed();
       this.player.game.log.add(`${card.name} inserted into ${item.name}.`, 'rare');

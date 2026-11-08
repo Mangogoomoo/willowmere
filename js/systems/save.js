@@ -74,12 +74,20 @@
       };
     }
 
+    // Online, the server owns items, Zeny, EXP, levels, job and stats: only the rest is uploaded.
+    soft() {
+      const d = this.serialize();
+      for (const k of ['job', 'baseLevel', 'jobLevel', 'baseExp', 'jobExp', 'stats', 'statPoints', 'zeny', 'inventory', 'equipment', 'storage']) delete d[k];
+      d.extra = Object.assign({}, d.extra); delete d.extra.cart;
+      return d;
+    }
+
     save(silent, closing) {
       if (!this.enabled || !this.game.player) return false;
       // Online: the character lives in the server's database.
       if (G.Online && G.Online.enabled && this.charId) {
         this.dirtyT = -1; this.autoT = 0;
-        fetch(`/api/characters/${this.charId}`, { method: 'PUT', keepalive: !!closing, headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + G.Online.token }, body: JSON.stringify(this.serialize()) })
+        fetch(`/api/characters/${this.charId}`, { method: 'PUT', keepalive: !!closing, headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + G.Online.token }, body: JSON.stringify(this.soft()) })
           .then((r) => { if (!silent) this.game.log.add(r.ok ? 'Game saved to the server.' : 'Couldn’t save to the server.', r.ok ? 'system' : 'warn'); })
           .catch(() => this.game.log.add('Couldn’t reach the server to save. Retrying soon.', 'warn'));
         return true;

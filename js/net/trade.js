@@ -165,16 +165,9 @@
           h('button.btn.small.ghost', { type: 'button', onclick: () => G.Net.send({ t: 'trade_cancel' }) }, 'Cancel')));
     },
     // Both pressed Trade: hand over our offer and take theirs.
-    finish(m) {
-      const game = this.game, p = game.player, inv = p.inventory;
-      for (const it of m.give.items) { const e = inv.find(it.uid); if (e) inv.remove(e.uid, Math.min(e.qty, it.qty)); }
-      p.zeny = Math.max(0, p.zeny - (m.give.zeny || 0)) + (m.get.zeny || 0);
-      for (const it of m.get.items) {
-        inv.add(it.id, it.qty, { cards: it.cards, refine: it.refine, ignoreWeight: true });
-        const e = inv.items[inv.items.length - 1];
-        if (e && e.id === it.id && it.forgedBy) { e.forgedBy = it.forgedBy; e.element = it.element; }
-      }
-      inv.changed();
+    // The server has already swapped the goods; it sends the corrected character first.
+    finish() {
+      const game = this.game;
       this.ending = true; this.state = null; game.windows.close('trade');
       game.sfx('zeny'); game.hud.toast('Trade complete!');
       game.log.add(`Trade with ${this.partner} complete.`, 'level');

@@ -466,14 +466,18 @@
       if (this.weight() + it.weight * qty > 8000) { say(this.game, 'The cart is too heavy (8,000 max).', 'warn'); return; }
       const have = it.stack && this.items.find((x) => x.id === e.id);
       if (!have && this.items.length >= 100) { say(this.game, 'The cart is full.', 'warn'); return; }
-      inv.remove(uid, qty);
-      if (have) have.qty += qty; else this.items.push({ id: e.id, qty, cards: (e.cards || []).slice(), refine: e.refine || 0 });
+      if (G.Ledger.blocked(this.game)) return;
+      G.Ledger.op('cart_in', { uid, qty });
+      G.Ledger.quiet(() => inv.remove(uid, qty));
+      if (have) have.qty += qty; else this.items.push({ id: e.id, qty, cards: (e.cards || []).slice(), refine: e.refine || 0, forgedBy: e.forgedBy, element: e.element });
       this.game.save.markDirty(); this.render();
     }
     take(i, qty) {
       const s = this.items[i]; if (!s) return;
-      const n = Math.min(qty, s.qty), r = this.game.player.inventory.add(s.id, n, { cards: s.cards, refine: s.refine });
+      if (G.Ledger.blocked(this.game)) return;
+      const n = Math.min(qty, s.qty), r = G.Ledger.quiet(() => this.game.player.inventory.add(s.id, n, { cards: s.cards, refine: s.refine, forgedBy: s.forgedBy, element: s.element }));
       if (!r.added) { say(this.game, 'You can\'t carry that.', 'warn'); return; }
+      G.Ledger.op('cart_out', { i, id: s.id, qty: r.added });
       s.qty -= r.added; if (s.qty <= 0) this.items.splice(i, 1);
       this.game.save.markDirty(); this.render();
     }
@@ -499,7 +503,7 @@
       this.items.forEach((s, i) => {
         const it = G.Items.get(s.id), full = it.price * s.qty;
         const row = h('div.shop-row', null, h('img', { src: G.Icons.url(s.id), alt: '' }), h('span.sname2', null, G.Items.displayName(s), s.qty > 1 ? h('small', { text: ` ×${s.qty}` }) : null), h('span'),
-          this.vend ? h('button.btn.small', { type: 'button', onclick: () => { p.zeny += full; this.items.splice(i, 1); this.vend.left--; this.game.sfx('zeny'); say(this.game, `Sold ${it.name} ×${s.qty} for ${full.toLocaleString()} z.`, 'loot'); if (this.vend.left <= 0) { this.vend = null; say(this.game, 'Your stall sold out.'); } this.render(); } }, `Sell ${full.toLocaleString()} z`)
+          this.vend ? h('button.btn.small', { type: 'button', onclick: () => { if (G.Ledger.blocked(this.game)) return; G.Ledger.op('vend', { i, id: s.id }); G.Ledger.quiet(() => { p.zeny += full; }); this.items.splice(i, 1); this.vend.left--; this.game.sfx('zeny'); say(this.game, `Sold ${it.name} ×${s.qty} for ${full.toLocaleString()} z.`, 'loot'); if (this.vend.left <= 0) { this.vend = null; say(this.game, 'Your stall sold out.'); } this.render(); } }, `Sell ${full.toLocaleString()} z`)
             : h('span'),
           h('button.btn.small.ghost', { type: 'button', onclick: () => this.take(i, s.qty) }, 'Take'));
         G.Tooltip.bind(row, () => G.itemTooltip(s, p)); list.append(row);
@@ -594,11 +598,8 @@
       for (const [id, n] of needs) { let left = n; while (left > 0) { const e = inv.firstOf(id); if (!e) break; left -= inv.remove(e.uid, left); } }
       if (Math.random() * 100 < this.chance(r)) {
         if (r.forge) {
-          inv.add(r.makes, 1);
+          inv.add(r.makes, 1, { forgedBy: p.name, element: this.element ? { flame_heart: 'fire', mystic_frozen: 'water', rough_wind: 'wind', great_nature: 'earth' }[this.element] : undefined });
           const e = inv.items[inv.items.length - 1];
-          e.forgedBy = p.name; e.cards = [];
-          if (this.element) e.element = { flame_heart: 'fire', mystic_frozen: 'water', rough_wind: 'wind', great_nature: 'earth' }[this.element];
-          inv.changed();
           say(this.game, `You forged ${G.Items.displayName(e)}!`, 'level');
         } else { inv.add(r.makes, r.qty || 1); say(this.game, `Made ${G.Items.get(r.makes).name}${(r.qty || 1) > 1 ? ' ×' + r.qty : ''}.`, 'loot'); }
         this.game.sfx('levelup'); this.game.effects.levelUp(p);

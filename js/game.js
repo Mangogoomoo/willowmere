@@ -303,7 +303,7 @@
           else if (this.player.zeny >= MAXZ) zreply.message = `${this.player.name} already has the maximum Zeny.`;
           else {
             const given = Math.min(amount, MAXZ - this.player.zeny);
-            this.player.zeny += given;
+            G.Ledger.debug(() => { this.player.zeny += given; });
             this.sfx('zeny');
             this.save.save(true);
             this.log.add(`[DEBUG] Received ${given.toLocaleString()} Zeny.`, 'system');
@@ -322,7 +322,7 @@
         if (!item || !Number.isInteger(qty) || qty < 1 || qty > 30000) {
           reply.message = 'Invalid item or quantity.';
         } else {
-          const result = this.player.inventory.add(itemId, qty, { ignoreWeight: true });
+          const result = G.Ledger.debug(() => this.player.inventory.add(itemId, qty, { ignoreWeight: true }));
           if (result.added === qty) {
             this.save.save(true);
             reply.ok = true;

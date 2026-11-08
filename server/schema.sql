@@ -168,3 +168,74 @@ CREATE TABLE IF NOT EXISTS custom_map_versions (
   saved_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS custom_map_versions_map ON custom_map_versions (map_id, saved_at DESC);
+
+-- Stage 9 (trustworthy server), phase 1: the rest of the game data, filled from
+-- the game's data files on every start (custom shops from the map editor).
+CREATE TABLE IF NOT EXISTS monster_drops (
+  monster_id TEXT NOT NULL,
+  sort       INT  NOT NULL,
+  item_id    TEXT NOT NULL,
+  chance     REAL NOT NULL,            -- 0..1 per kill
+  PRIMARY KEY (monster_id, sort)
+);
+CREATE TABLE IF NOT EXISTS job_defs (
+  id             TEXT PRIMARY KEY,
+  name           TEXT NOT NULL,
+  tier           INT  NOT NULL,
+  from_job       TEXT,                 -- the job you change from (novice for first jobs)
+  req_job_level  INT  NOT NULL DEFAULT 0,
+  max_job_level  INT  NOT NULL,
+  weapons        TEXT[] NOT NULL DEFAULT '{}',
+  gift           TEXT,
+  trial          JSONB,
+  job_exp        JSONB NOT NULL        -- job EXP needed for each job level
+);
+CREATE TABLE IF NOT EXISTS skill_defs (
+  id         TEXT PRIMARY KEY,
+  name       TEXT NOT NULL,
+  job        TEXT,
+  type       TEXT NOT NULL,
+  max_level  INT  NOT NULL,
+  sp         INT[]  NOT NULL DEFAULT '{}',   -- per level (index 0 = level 1)
+  cast_time  REAL[] NOT NULL DEFAULT '{}',   -- seconds
+  cooldown   REAL[] NOT NULL DEFAULT '{}',   -- seconds
+  damage     REAL[],                         -- damage multiplier (1.5 = 150%), when the skill has one
+  hits       INT[],
+  data       JSONB NOT NULL                  -- the rest: target, range, element, prerequisites...
+);
+CREATE TABLE IF NOT EXISTS shops (
+  id      TEXT PRIMARY KEY,
+  name    TEXT NOT NULL,
+  npc     TEXT,
+  custom  BOOLEAN NOT NULL DEFAULT false     -- a shop NPC placed with the map editor
+);
+CREATE TABLE IF NOT EXISTS shop_items (
+  shop_id TEXT NOT NULL REFERENCES shops(id) ON DELETE CASCADE,
+  item_id TEXT NOT NULL,
+  price   INT  NOT NULL,
+  sort    INT  NOT NULL DEFAULT 0,
+  PRIMARY KEY (shop_id, item_id)
+);
+CREATE TABLE IF NOT EXISTS quest_defs (
+  id          TEXT PRIMARY KEY,
+  name        TEXT NOT NULL,
+  giver       TEXT,
+  min_level   INT  NOT NULL DEFAULT 1,
+  req         TEXT[] NOT NULL DEFAULT '{}',
+  objectives  JSONB NOT NULL,
+  sort        INT NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS quest_rewards (
+  quest_id  TEXT NOT NULL REFERENCES quest_defs(id) ON DELETE CASCADE,
+  kind      TEXT NOT NULL CHECK (kind IN ('exp', 'job_exp', 'zeny', 'item')),
+  item_id   TEXT,
+  qty       BIGINT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS quest_rewards_quest ON quest_rewards (quest_id);
+-- Quests each character has finished (the server checks this before giving rewards).
+CREATE TABLE IF NOT EXISTS character_quests (
+  character_id BIGINT NOT NULL REFERENCES characters(id) ON DELETE CASCADE,
+  quest_id     TEXT   NOT NULL,
+  done_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (character_id, quest_id)
+);

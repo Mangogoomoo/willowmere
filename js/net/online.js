@@ -185,6 +185,7 @@
       ws.onmessage = (ev) => { let m; try { m = JSON.parse(ev.data); } catch (e) { return; } this.handle(m); };
       ws.onclose = () => {
         this.clear();
+        G.Ledger.ready = false;   // wait for the server's copy again after reconnecting
         if (this.kicked) return;
         game.log.add('Disconnected from the server. Reconnecting…', 'warn');
         setTimeout(() => { if (this.ws === ws) this.connect(game, charId); }, 3000);
@@ -202,6 +203,7 @@
       // Anything tagged with another map is left over from before a map change.
       if (m.map && m.map !== game.mapId && ['mobs', 'mob', 'state', 'join', 'players', 'welcome', 'action', 'fx', 'look', 'host'].includes(m.t)) return;
       if (m.t === 'host' || m.t === 'mobs' || m.t === 'mob') { G.MobSync.handle(m); return; }
+      if (m.t === 'char' || m.t === 'op_res') { G.Ledger.handle(m); return; }
       if (['party', 'guild', 'guild_created', 'invite', 'notice', 'pinfo', 'gainexp', 'loot_gift', 'guild_summon'].includes(m.t)) { G.Social.handle(m); return; }
       if (/^(trade_|inspect_)/.test(m.t)) { G.Trade.handle(m); return; }
       if (/^ground_/.test(m.t)) { G.GroundSync.handle(m); return; }

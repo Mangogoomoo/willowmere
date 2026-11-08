@@ -83,22 +83,29 @@
     turnIn(id) {
       const st = this.state(), def = this.def(id), p = this.game.player, game = this.game;
       if (!st.active[id] || !this.isComplete(def, st.active[id])) return false;
-      for (const o of def.objectives) if (o.type === 'item') {
-        let left = o.count;
-        while (left > 0) { const e = p.inventory.firstOf(o.id); if (!e) break; left -= p.inventory.remove(e.uid, left); }
-      }
+      if (G.Ledger.blocked(game)) return false;
+      // Online the server checks the quest and hands out the rewards; the same happens here at once.
+      G.Ledger.op('quest', { id });
+      G.Ledger.quiet(() => this.giveRewards(def));
       delete st.active[id];
       st.done.push(id);
-      const r = def.rewards;
-      p.zeny += r.zeny || 0;
-      for (const [iid, n] of r.items || []) p.inventory.add(iid, n, { ignoreWeight: true });
-      if (r.exp || r.jobExp) p.gainExp(Math.round((r.exp || 0) * G.Config.QUEST_EXP_RATE), Math.round((r.jobExp || 0) * G.Config.QUEST_EXP_RATE));
       game.effects.levelUp(p);
       game.hud.toast(`Quest complete: ${def.name}!`);
       game.sfx('quest');
       game.log.add(`Quest complete: ${def.name}. Rewards: ${this.rewardText(def)}.`, 'level');
       this.changed();
       return true;
+    }
+    giveRewards(def) {
+      const p = this.game.player;
+      for (const o of def.objectives) if (o.type === 'item') {
+        let left = o.count;
+        while (left > 0) { const e = p.inventory.firstOf(o.id); if (!e) break; left -= p.inventory.remove(e.uid, left); }
+      }
+      const r = def.rewards;
+      p.zeny += r.zeny || 0;
+      for (const [iid, n] of r.items || []) p.inventory.add(iid, n, { ignoreWeight: true });
+      if (r.exp || r.jobExp) p.gainExp(Math.round((r.exp || 0) * G.Config.QUEST_EXP_RATE), Math.round((r.jobExp || 0) * G.Config.QUEST_EXP_RATE));
     }
 
     abandon(id) { delete this.state().active[id]; this.changed(); }
@@ -141,15 +148,18 @@
       const inv = this.game.player.inventory, e = inv.find(uid);
       if (!e) return;
       const item = G.Items.get(e.id);
+      if (G.Ledger.blocked(this.game)) return;
       if (item.stack) {
         const have = this.items.find((s) => s.id === e.id);
         if (!have && this.items.length >= this.max) { this.game.log.add('Storage is full.', 'warn'); return; }
-        const n = inv.remove(uid, qty);
+        G.Ledger.op('store', { uid, qty });
+        const n = G.Ledger.quiet(() => inv.remove(uid, qty));
         if (have) have.qty += n; else this.items.push({ id: e.id, qty: n, cards: [] });
       } else {
         if (this.items.length >= this.max) { this.game.log.add('Storage is full.', 'warn'); return; }
-        inv.remove(uid, 1);
-        this.items.push({ id: e.id, qty: 1, cards: (e.cards || []).slice(), refine: e.refine || 0 });
+        G.Ledger.op('store', { uid, qty: 1 });
+        G.Ledger.quiet(() => inv.remove(uid, 1));
+        this.items.push({ id: e.id, qty: 1, cards: (e.cards || []).slice(), refine: e.refine || 0, forgedBy: e.forgedBy, element: e.element });
       }
       this.game.save.markDirty();
       this.render();
@@ -158,7 +168,9 @@
       const s = this.items[index];
       if (!s) return;
       const n = Math.min(qty, s.qty);
-      const r = this.game.player.inventory.add(s.id, n, { cards: s.cards, refine: s.refine });
+      if (G.Ledger.blocked(this.game)) return;
+      const r = G.Ledger.quiet(() => this.game.player.inventory.add(s.id, n, { cards: s.cards, refine: s.refine, forgedBy: s.forgedBy, element: s.element }));
+      if (r.added) G.Ledger.op('unstore', { i: index, id: s.id, qty: n });
       if (!r.added) { this.game.log.add(r.reason === 'weight' ? 'That would be too heavy to carry.' : 'Your inventory is full.', 'warn'); return; }
       s.qty -= n;
       if (s.qty <= 0) this.items.splice(index, 1);
