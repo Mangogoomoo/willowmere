@@ -30,6 +30,7 @@
         const geo = new THREE.PlaneGeometry(3.4, 3.4); geo.rotateX(-Math.PI / 2);
         const mat = new THREE.MeshBasicMaterial({ map: TEX, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false });
         const disc = new THREE.Mesh(geo, mat);
+        if (def.invisible) disc.visible = false;   // a door: no swirl
         // Sit just above the highest ground under the whole disc so it never clips.
         let top = -Infinity;
         for (let a = 0; a < 16; a++) for (const r of [0, 0.9, 1.7]) top = Math.max(top, G.Terrain.surfaceHeight(def.x + Math.cos(a / 16 * Math.PI * 2) * r, def.z + Math.sin(a / 16 * Math.PI * 2) * r));

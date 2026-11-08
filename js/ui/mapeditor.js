@@ -85,6 +85,7 @@
     open() {
       this.active = true; this.game.editing = true;
       document.body.classList.add('editing'); this.keybar.hidden = false;
+      CM().unbatch();
       this.ensureData();
       this.game.scene.add(this.markers); this.rebuildMarkers();
       this.game.windows.open('mapeditor'); this.render(); this.refreshAdmin();
@@ -94,6 +95,7 @@
       if (this.dirty && !confirm('You have unsaved map changes. Close the editor anyway? (They stay until you leave this map.)')) return;
       this.active = false; this.game.editing = false;
       document.body.classList.remove('editing'); this.keybar.hidden = true; this.brushRing && this.brushRing.removeFromParent();
+      this.hideWalk(); setTimeout(() => CM().batch(), 0);
       this.cancelPlacing(); this.select(null);
       this.markers.removeFromParent();
       this.game.windows.close('mapeditor'); this.refreshAdmin();
@@ -693,10 +695,26 @@
       this.game.log.add(`Converted ${o.objects.length} objects and ${o.entities.length} entities. Saving…`, 'system');
       await this.save();
     },
-    async newMap(id, name) {
+    async newMap(id, name, indoor) {
       id = String(id || '').toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 40);
       if (!id || G.Maps[id]) { this.game.log.add('Pick a new, unused map id (letters, numbers, _).', 'warn'); return; }
       const d = { id, name: name || id, base: 'blank', bounds: { minX: -50, maxX: 50, minZ: -50, maxZ: 50 }, objects: [], entities: [{ u: uid(), type: 'start', x: 0, z: 0, y: 0 }] };
+      if (indoor) {
+        // A ready-made room: wooden floor, walls, a lamp, and a door back to where you are now.
+        const R = 10, from = this.game.mapId, p = this.game.player.position;
+        Object.assign(d, { bounds: { minX: -R, maxX: R, minZ: -R, maxZ: R }, flat: true, rules: { peaceful: true }, atmo: { preset: 'indoor', custom: {} }, paint: { d: {} } });
+        for (let x = -R - 2; x <= R + 2; x++) for (let z = -R - 2; z <= R + 2; z++) d.paint.d[x + ',' + z] = [12, 255];
+        for (let i = -R + 2; i <= R - 2; i += 4) {
+          d.objects.push({ u: uid(), k: 'wall_wood', x: i, z: -R, y: 0, ry: 0, s: 1 });
+          if (i !== -2 && i !== 2) d.objects.push({ u: uid(), k: 'wall_wood', x: i, z: R, y: 0, ry: Math.PI, s: 1 });
+          d.objects.push({ u: uid(), k: 'wall_wood', x: -R, z: i, y: 0, ry: Math.PI / 2, s: 1 });
+          d.objects.push({ u: uid(), k: 'wall_wood', x: R, z: i, y: 0, ry: -Math.PI / 2, s: 1 });
+        }
+        d.objects.push({ u: uid(), k: 'door', x: 0, z: R, y: 0, ry: Math.PI, s: 1 });
+        d.entities = [{ u: uid(), type: 'start', x: 0, z: R - 2.5, y: 0 },
+          { u: uid(), type: 'warp', x: 0, z: R - 0.6, y: 0, to: from, tx: Math.round(p.x), tz: Math.round(p.z), label: 'Exit', style: 'door' },
+          { u: uid(), type: 'light', x: 0, z: 0, y: 3.5, color: '#ffc98a', intensity: 1.6, range: 22 }];
+      }
       try {
         await G.Online.api(`/api/maps/${id}`, 'PUT', { data: d });
         CM().set(id, d);
@@ -742,6 +760,17 @@
       const n = Object.keys(this.game.env.captured || {}).indexOf(k.slice(4)) + 1;
       return `${kind} (from this map, #${n})`;
     },
+    prefabs() { const d = CM().get('zz_prefabs'); return (d && d.prefabs) || []; },
+    async savePrefab() {
+      if (!this.all().length) { this.game.log.add('Select some things first (Shift+click or Ctrl+drag).', 'warn'); return; }
+      const name = (prompt('Name for this prefab:', 'My prefab') || '').trim().slice(0, 30); if (!name) return;
+      this.copySel();
+      const list = this.prefabs().filter((p) => p.name !== name).concat([{ name, items: this.clip }]);
+      const data = { id: 'zz_prefabs', objects: [], entities: [], prefabs: list };
+      try { await G.Online.api('/api/maps/zz_prefabs', 'PUT', { data }); CM().data.zz_prefabs = data; this.game.log.add(`Prefab “${name}” saved. Find it under Objects → Prefabs.`, 'level'); this.render(); }
+      catch (e) { this.game.log.add('Saving the prefab failed: ' + e.message, 'warn'); }
+    },
+    placePrefab(p) { this.clip = JSON.parse(JSON.stringify(p.items)); this.clipCenter = { x: 0, z: 0 }; this.paste(false); this.game.log.add(`Placed “${p.name}” at the cursor.`, 'system'); },
     renderPlace(body) {
       body.append(h('div.ed-snap', null, h('span', { text: 'Snap to grid:' }), ...[[0, 'Off'], [0.5, '0.5'], [1, '1'], [2, '2'], [4, '4']].map(([v, t]) =>
         h('button.ed-snapbtn' + (this.grid === v ? '.on' : ''), { type: 'button', onclick: () => { this.grid = v; this.render(); } }, t))));
@@ -750,6 +779,9 @@
         body.append(h('h4', { text: c }), h('div.ed-grid', null, ...CM().LIB.filter((l) => l.cat === c).map((l) =>
           this.paletteBtn(l.name, l.icon, this.placing && this.placing.k === l.k, () => this.startPlacing({ kind: 'object', k: l.k })))));
       }
+      const pf = this.prefabs();
+      body.append(h('h4', { text: 'Prefabs' }), pf.length ? h('div.ed-grid', null, ...pf.map((p) => this.paletteBtn(p.name, '🧩', false, () => this.placePrefab(p), `${p.items.length} pieces — placed at your cursor`))) : null,
+        h('button.btn.small.ghost', { type: 'button', onclick: () => this.savePrefab() }, '🧩 Save selection as prefab'));
       const caps = Object.keys(this.game.env.captured || {});
       if (caps.length) body.append(h('h4', { text: 'From this map' }), h('div.ed-grid', null, ...caps.map((key) => {
         const k = 'cap:' + key, c = this.game.env.captured[key];
@@ -802,12 +834,16 @@
         if (mem) body.append(h('button.btn.small', { type: 'button', onclick: () => { this.snapshot(); it.to = mem.map; it.tx = mem.x; it.tz = mem.z; this.applySel(); this.render(); } },
           `Use remembered spot: ${(G.Maps[mem.map] || {}).name} (${mem.x}, ${mem.z})`));
         body.append(this.field('Goes to map', it.to, set('to'), { options: maps }), h('div.ed-xyz', null, this.field('Arrive at X', it.tx, set('tx', 1), { type: 'number' }), this.field('Arrive at Z', it.tz, set('tz', 1), { type: 'number' })),
-          this.field('Label', it.label, set('label')));
+          this.field('Label', it.label, set('label')),
+          this.field('Looks like', it.style || 'swirl', set('style'), { options: [['swirl', 'Swirling portal'], ['door', 'Door (no swirl — put a Door object here)']] }));
       } else if (it.type === 'light') {
         body.append(this.field('Colour', it.color, set('color'), { type: 'color' }), h('div.ed-xyz', null, this.field('Brightness', it.intensity, set('intensity', 1), { type: 'number', step: '0.1' }), this.field('Reach', it.range, set('range', 1), { type: 'number' })));
       } else if (it.type === 'spawn') {
         const mons = Object.entries(G.Config.MONSTERS).sort((a, b) => a[1].level - b[1].level).map(([id, m]) => [id, `${m.name} (lv ${m.level})`]);
-        body.append(this.field('Monster', it.monster, set('monster'), { options: mons }), h('div.ed-xyz', null, this.field('How many', it.count, set('count', 1), { type: 'number' }), this.field('Area radius', it.r, set('r', 1), { type: 'number' })));
+        body.append(this.field('Monster', it.monster, set('monster'), { options: mons }), h('div.ed-xyz', null, this.field('How many', it.count, set('count', 1), { type: 'number' }), this.field('Area radius', it.r, set('r', 1), { type: 'number' })),
+          h('div.ed-xyz', null, this.field('Respawn (seconds, 0 = normal)', it.respawn || 0, set('respawn', 1), { type: 'number' })),
+          h('label.ed-rule', null, h('input', { type: 'checkbox', checked: !!it.announce, onchange: (ev) => { this.snapshot(); it.announce = ev.target.checked; this.changed(); } }), h('span', { text: 'Announce when it appears and when it’s defeated (boss)' })),
+          h('p.hint', { text: 'Spawn changes take effect after saving.' }));
       } else if (it.type === 'fx') {
         const names = { fire: 'Fire', smoke: 'Smoke', fireflies: 'Fireflies', sparkles: 'Sparkles', leaves: 'Falling leaves', fog: 'Ground fog', snow: 'Snowfall',
           sound_water: 'Sound: water', sound_wind: 'Sound: wind', sound_fire: 'Sound: fire crackle', sound_birds: 'Sound: birds' };
@@ -822,7 +858,30 @@
         body.append(this.field('Name', it.name, set('name')), this.field('Title', it.title, set('title')),
           h('div.ed-xyz', null, this.field('Outfit', it.costume, set('costume'), { options: jobs.map((j) => [j, (G.Jobs.get(j) || {}).name || j]) }),
             this.field('Hair', it.style, set('style'), { options: ['short', 'spiky', 'swept', 'messy', 'slick', 'buzz', 'ponytail', 'twintails'].map((x) => [x, x]) })),
-          this.field('Says (one line per message)', (it.lines || []).join('\n'), (v) => { this.snapshot(); it.lines = String(v).split('\n').map((l) => l.trim()).filter(Boolean); this.changed(); }, { area: true }));
+          this.field('Role', it.role || 'talk', (v) => { this.snapshot(); it.role = v; this.changed(); }, { options: [['talk', 'Talks'], ['shop', 'Shopkeeper'], ['kafra', 'Teleporter (Kafra)'], ['save', 'Save point'], ['heal', 'Healer']] }),
+          this.field((it.role || 'talk') === 'talk' ? 'Says (one line per message)' : 'Greeting (first line)', (it.lines || []).join('\n'), (v) => { this.snapshot(); it.lines = String(v).split('\n').map((l) => l.trim()).filter(Boolean); this.changed(); }, { area: true }));
+        if (it.role === 'shop') {
+          const items = Object.values(G.Items.DB).filter((x) => x.price > 0 && x.type !== 'card').sort((a, b) => a.name.localeCompare(b.name));
+          const sel = h('select', { multiple: true, size: '8', 'aria-label': 'Items for sale', onchange: () => { this.snapshot(); it.stock = [...sel.selectedOptions].map((o) => o.value); this.changed(); } },
+            ...items.map((x) => h('option', { value: x.id, text: `${x.name} (${x.price} z)`, selected: (it.stock || []).includes(x.id) })));
+          sel.addEventListener('keydown', (ev) => ev.stopPropagation());
+          body.append(this.field('Shop name', it.shopName || '', (v) => { this.snapshot(); it.shopName = v; this.changed(); }), h('label.ed-field', null, h('span', { text: 'Sells (Ctrl/Shift+click to pick several)' }), sel));
+        }
+        if (it.role === 'kafra') {
+          it.dests = it.dests || [];
+          const maps = Object.keys(G.Maps).map((id) => [id, G.Maps[id].name || id]);
+          body.append(h('h4', { text: 'Destinations' }));
+          it.dests.forEach((dst, i) => {
+            const ds = (k, num) => (v) => { this.snapshot(); dst[k] = num ? Number(v) : v; this.changed(); };
+            body.append(h('div.ed-dest', null, this.field('Name', dst.label || '', ds('label')), this.field('Map', dst.map, ds('map'), { options: maps }),
+              h('div.ed-xyz', null, this.field('X', dst.x, ds('x', 1), { type: 'number' }), this.field('Z', dst.z, ds('z', 1), { type: 'number' }), this.field('Cost (z)', dst.cost || 0, ds('cost', 1), { type: 'number' })),
+              h('button.btn.small.ghost', { type: 'button', onclick: () => { this.snapshot(); it.dests.splice(i, 1); this.changed(); } }, 'Remove')));
+          });
+          const mem = this.remembered;
+          body.append(h('div.opt-btns', null,
+            h('button.btn.small', { type: 'button', onclick: () => { this.snapshot(); it.dests.push({ label: '', map: this.game.mapId, x: 0, z: 0, cost: 0 }); this.changed(); } }, '+ Destination'),
+            mem ? h('button.btn.small.ghost', { type: 'button', onclick: () => { this.snapshot(); it.dests.push({ label: (G.Maps[mem.map] || {}).name, map: mem.map, x: mem.x, z: mem.z, cost: 0 }); this.changed(); } }, `+ Remembered spot (${(G.Maps[mem.map] || {}).name})`) : null));
+        }
       }
       body.append(h('div.opt-btns', null, h('button.btn.small.ghost', { type: 'button', onclick: () => this.duplicateSel() }, 'Duplicate'), h('button.btn.small.ghost', { type: 'button', onclick: () => this.removeSel() }, 'Delete')));
     },
@@ -881,7 +940,10 @@
       body.append(h('h4', { text: 'Go to map' }), h('button.btn.small', { type: 'button', onclick: () => this.openTeleport() }, '🗺 Choose a map…'));
       const nid = h('input.soc-in', { type: 'text', placeholder: 'map_id', maxlength: '40' }), nname = h('input.soc-in', { type: 'text', placeholder: 'Map name', maxlength: '40' });
       for (const i of [nid, nname]) i.addEventListener('keydown', (e) => e.stopPropagation());
-      body.append(h('h4', { text: 'New map' }), h('div.soc-inv', null, nid, nname), h('button.btn.small', { type: 'button', onclick: () => this.newMap(nid.value, nname.value.trim()) }, 'Create and go there'));
+      const indoor = h('input', { type: 'checkbox' });
+      body.append(h('h4', { text: 'New map' }), h('div.soc-inv', null, nid, nname),
+        h('label.ed-rule', null, indoor, h('span', { text: 'Indoor room (floor, walls, a lamp and a door back here)' })),
+        h('button.btn.small', { type: 'button', onclick: () => this.newMap(nid.value, nname.value.trim(), indoor.checked) }, 'Create and go there'));
     },
   };
   G.MapEditor = Ed;

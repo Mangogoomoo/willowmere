@@ -6,6 +6,14 @@
   const h = G.h;
 
   const PATCHES = [
+    { v: '0.33', date: '2026-11-09T18:00', title: 'Map editor: NPC roles, indoor rooms, prefabs and faster maps', notes: [
+      'NPCs you place can be shopkeepers (choose what they sell), Kafra-style teleporters (destinations with Zeny costs), save points or healers.',
+      'Monster spawns: set a respawn time and announce bosses when they appear and when they’re defeated.',
+      'Indoor rooms: create a new map as an “Indoor room” to get a wooden floor, walls, a lamp and a door back to where you were. New objects: door, wooden and stone walls, table, shelf and bed, plus a wooden floor texture.',
+      'Warps can look like a door (no swirling portal).',
+      'Prefabs: save a selection (a campsite, a market corner…) and place it again anywhere from Objects → Prefabs.',
+      'Faster maps: identical objects are drawn together while you play, so heavily edited maps run smoother.',
+    ] },
     { v: '0.32', date: '2026-11-09T12:00', title: 'Map editor: atmosphere, effects, water, walkability and map rules', notes: [
       'Atmosphere per map: Day, Dusk, Night, Misty, Spooky or Dark cave, with your own fog colour, fog distance and light — plus a music track per map.',
       'Effects to place: fire (with flickering light), smoke, fireflies, sparkles, falling leaves, ground fog and snowfall, and ambient sounds (water, wind, fire crackle, birds) that get louder as you come closer.',

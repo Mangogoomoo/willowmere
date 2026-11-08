@@ -174,7 +174,7 @@
   const PAINT = [
     { id: 1, name: 'Grass' }, { id: 2, name: 'Dark grass' }, { id: 3, name: 'Dirt path' }, { id: 4, name: 'Cobblestone' },
     { id: 5, name: 'Sand' }, { id: 6, name: 'Stone tiles' }, { id: 7, name: 'Dead grass' }, { id: 8, name: 'Graveyard soil' },
-    { id: 9, name: 'Cursed ground' }, { id: 10, name: 'Mud' }, { id: 11, name: 'Snow' },
+    { id: 9, name: 'Cursed ground' }, { id: 10, name: 'Mud' }, { id: 11, name: 'Snow' }, { id: 12, name: 'Wooden floor' },
   ];
   let paintBuilds = 0;
   let paintAtlas = null, paintIdxTex = null, paintCovTex = null, paintData = null, paintSize = 0;
@@ -195,6 +195,8 @@
     tile(8, () => { speckle('#2c2433', ['#251f2c', '#352b3e', '#1f1a25'], 380, 3, 11); x.strokeStyle = 'rgba(150,90,200,0.35)'; x.lineWidth = 1.2; for (let k = 0; k < 14; k++) { let px = rng() * T, py = rng() * T; x.beginPath(); x.moveTo(px, py); for (let q = 0; q < 4; q++) { px += (rng() - 0.5) * 40; py += (rng() - 0.5) * 40; x.lineTo(px, py); } x.stroke(); } });
     tile(9, () => { speckle('#5a4632', ['#4f3d2b', '#64503a', '#45362a'], 320, 4, 14); for (let k = 0; k < 18; k++) { x.fillStyle = 'rgba(120,140,150,0.25)'; x.beginPath(); x.ellipse(rng() * T, rng() * T, 6 + rng() * 14, 3 + rng() * 6, rng() * 3, 0, 7); x.fill(); } });
     tile(10, () => { speckle('#eef3f6', ['#e2e9ee', '#f8fbfc', '#d8e2e8'], 300, 3, 12); });
+    tile(11, () => { for (let r = 0; r < 8; r++) { const v = 120 + rng() * 30 | 0; x.fillStyle = `rgb(${v + 30},${v},${v - 40})`; x.fillRect(0, r * 32, T, 32); x.fillStyle = 'rgba(60,35,20,0.6)'; x.fillRect(0, r * 32, T, 2);
+      const off = rng() * T; x.fillRect(off, r * 32, 2, 32); x.fillRect((off + T / 2) % T, r * 32, 2, 32); for (let k = 0; k < 6; k++) { x.fillStyle = 'rgba(70,45,25,0.25)'; x.fillRect(rng() * T, r * 32 + 6 + rng() * 20, 30 + rng() * 40, 1.5); } } });
     paintAtlas = c;
     return c;
   }
@@ -225,7 +227,7 @@
               float w = (ox > 0.5 ? cf.x : 1.0 - cf.x) * (oz > 0.5 ? cf.y : 1.0 - cf.y);
               vec4 cell = texture2D(uPaintIdx, (cb + vec2(ox, oz) + 0.5) / uSize);
               float idx = floor(cell.r * 255.0 + 0.5), cov = cell.g;
-              if (idx > 0.5 && idx < 11.5 && cov > 0.0) {
+              if (idx > 0.5 && idx < 12.5 && cov > 0.0) {
                 float ti = idx - 1.0;
                 vec2 tile = vec2(mod(ti, 4.0), floor(ti / 4.0));
                 acc += pow(texture2D(uAtlas, (tile + tuv) / vec2(4.0, 3.0)).rgb, vec3(2.2)) * w * cov;

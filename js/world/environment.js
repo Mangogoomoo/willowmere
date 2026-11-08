@@ -472,6 +472,7 @@
     }
 
     buildField() {
+      if (this.map.indoor) return;   // indoor rooms (map editor): no outdoor plants, rocks or trees
       // Decorations cover the map's own area (maps can be grown with the map editor).
       const FB = this.map.bounds || { minX: -104, maxX: 104, minZ: -112, maxZ: 106 };
       const areaK = Math.max(1, ((FB.maxX - FB.minX) * (FB.maxZ - FB.minZ)) / (208 * 218));

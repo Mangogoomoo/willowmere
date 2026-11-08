@@ -51,6 +51,7 @@
     }
 
     spawn(initial) {
+      if (!initial && this.spawnArea && this.spawnArea.announce) this.game.hud.toast(`${this.name} has appeared!`);
       const p = this.pickSpawnPoint(initial);
       this.setPosition(p.x, p.z);
       this.home = { x: p.x, z: p.z };
@@ -168,7 +169,8 @@
       this.swinging = false;
       this.aggro = null;
       this.corpseT = 0;
-      this.respawnT = this.def.respawn;
+      this.respawnT = (this.spawnArea && this.spawnArea.respawn) || this.def.respawn;
+      if (this.spawnArea && this.spawnArea.announce && !this.def.mvp) this.game.hud.toast(`${this.name} has been defeated!`);
       this.sprite.play('die', { restart: true });
       const p = this.position;
       this.game.effects.death({ x: p.x, y: p.y, z: p.z }, this.def.deathColor);

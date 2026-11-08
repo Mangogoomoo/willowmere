@@ -239,6 +239,20 @@
     { k: 'water_pond', name: 'Pond (water)', cat: 'Water', icon: '💧', solid: 3.7, build: () => waterMesh(new THREE.CircleGeometry(4, 40)) },
     { k: 'water_pool', name: 'Pool (water)', cat: 'Water', icon: '🟦', solid: 0, rect: [4, 4], build: () => waterMesh(new THREE.PlaneGeometry(8, 8)) },
     { k: 'water_stream', name: 'Stream piece', cat: 'Water', icon: '〰️', solid: 0, rect: [1.6, 4], build: () => waterMesh(new THREE.PlaneGeometry(3.2, 8)) },
+    { k: 'door', name: 'Door', cat: 'Indoor', icon: '🚪', solid: 0, build: (e) => prim([
+      { geo: new THREE.BoxGeometry(1.5, 2.4, 0.12), color: '#7a5236', pos: [0, 1.2, 0] }, { geo: new THREE.BoxGeometry(1.9, 0.22, 0.3), color: '#5a3c26', pos: [0, 2.5, 0] },
+      { geo: new THREE.BoxGeometry(0.2, 2.6, 0.3), color: '#5a3c26', pos: [-0.85, 1.3, 0] }, { geo: new THREE.BoxGeometry(0.2, 2.6, 0.3), color: '#5a3c26', pos: [0.85, 1.3, 0] },
+      { geo: new THREE.SphereGeometry(0.07, 6, 4), color: '#d9b45a', pos: [0.5, 1.15, 0.1] }], e.propMat) },
+    { k: 'wall_wood', name: 'Wooden wall', cat: 'Indoor', icon: '🧱', solid: 0, rect: [2, 0.2], build: (e) => prim([
+      { geo: new THREE.BoxGeometry(4, 3, 0.25), color: '#c9a87a', pos: [0, 1.5, 0] }, { geo: new THREE.BoxGeometry(4, 0.3, 0.32), color: '#7a5236', pos: [0, 0.15, 0] },
+      { geo: new THREE.BoxGeometry(0.25, 3.1, 0.34), color: '#7a5236', pos: [-1.9, 1.55, 0] }], e.propMat) },
+    { k: 'wall_stone', name: 'Stone wall', cat: 'Indoor', icon: '🧱', solid: 0, rect: [2, 0.3], build: (e) => prim([{ geo: new THREE.BoxGeometry(4, 3.2, 0.5, 4, 3, 1), color: '#9c958a', pos: [0, 1.6, 0], jitter: 0.08 }], e.propMat) },
+    { k: 'table', name: 'Table', cat: 'Indoor', icon: '🪵', solid: 0.7, build: (e) => prim([{ geo: new THREE.BoxGeometry(1.8, 0.12, 1), color: '#9a7350', pos: [0, 0.8, 0] },
+      ...[[-0.8, -0.4], [0.8, -0.4], [-0.8, 0.4], [0.8, 0.4]].map(([x, z]) => ({ geo: new THREE.BoxGeometry(0.1, 0.8, 0.1), color: '#7a5236', pos: [x, 0.4, z] }))], e.propMat) },
+    { k: 'shelf', name: 'Shelf', cat: 'Indoor', icon: '📚', solid: 0.5, build: (e) => prim([{ geo: new THREE.BoxGeometry(1.6, 2, 0.45), color: '#7a5236', pos: [0, 1, 0] },
+      ...[0.5, 1.1, 1.6].map((y, i) => ({ geo: new THREE.BoxGeometry(1.3, 0.3, 0.3), color: ['#a8444a', '#4a6aa8', '#5a8a4a'][i], pos: [0, y, 0.06] }))], e.propMat) },
+    { k: 'bed', name: 'Bed', cat: 'Indoor', icon: '🛏️', solid: 0.9, build: (e) => prim([{ geo: new THREE.BoxGeometry(1.2, 0.5, 2.2), color: '#7a5236', pos: [0, 0.25, 0] },
+      { geo: new THREE.BoxGeometry(1.1, 0.2, 2), color: '#e8e2d6', pos: [0, 0.6, 0] }, { geo: new THREE.BoxGeometry(1.1, 0.22, 1.2), color: '#6a8ac8', pos: [0, 0.68, 0.35] }], e.propMat) },
     { k: 'stalagmite', name: 'Stalagmite', cat: 'Props', icon: '🗻', solid: 0.5, build: (e) => prim([{ geo: new THREE.ConeGeometry(0.6, 2.4, 7), color: '#8a7f70', pos: [0, 1.2, 0], jitter: 0.2 }], e.propMat) },
     // Props
     { k: 'barrel', name: 'Barrel', cat: 'Props', icon: '🛢️', solid: 0.4, build: (e) => fromEnv(e, (f, p) => f.barrel(p, 0, 0)) },
@@ -319,6 +333,7 @@
     night: { sky: ['#05070f', '#0d1530', '#1b2648'], fog: '#141c33', near: 25, far: 140, hemi: 0.3, sun: 0.32, ground: '#1c2430' },
     spooky: { sky: ['#0b0a10', '#221d2e', '#3a3346'], fog: '#2a2533', near: 8, far: 70, hemi: 0.3, sun: 0.35, ground: '#2a2a2a' },
     misty: { sky: ['#8fa6b8', '#c9d6dd', '#e4ebee'], fog: '#d8e1e4', near: 12, far: 110, hemi: 0.6, sun: 0.9, ground: '#6b8f45' },
+    indoor: { sky: ['#1a120c', '#2a1d14', '#3a2a1e'], fog: '#2a2018', near: 22, far: 70, hemi: 0.95, sun: 0.75, ground: '#8a6a4a' },
     cave: { sky: ['#020203', '#08080a', '#101014'], fog: '#0c0c10', near: 12, far: 60, hemi: 0.25, sun: 0.2, ground: '#202020' },
   };
   const DAY = { sky: ['#4a98e6', '#9fd0f4', '#dceef5'], fog: '#dceef5', near: 90, far: 300, hemi: 0.62, sun: 1.28, ground: '#6b8f45' };
@@ -533,16 +548,39 @@
       if (map.takeover >= 3) map.noPaths = true;   // paths, plaza and streets are paint now
       map.decks = d.objects.map((o) => { const def = LIB.find((l) => l.k === o.k); if (!def || !def.deck) return null;
         const sc = o.s || 1; return { x: o.x, z: o.z, ry: o.ry || 0, hw: def.deck.hw * sc, hl: def.deck.hl * sc, top: def.deck.top * sc, y: o.y || 0 }; }).filter(Boolean);
-      map.portals = (d.takeover ? [] : base.portals || []).concat(d.entities.filter((e) => e.type === 'warp' && G.Maps[e.to]).map((e) => ({ x: e.x, z: e.z, to: e.to, tx: +e.tx || 0, tz: +e.tz || 0, label: e.label || (G.Maps[e.to] || {}).name })));
-      map.spawns = (d.takeover ? [] : base.spawns || []).concat(d.entities.filter((e) => e.type === 'spawn' && C.MONSTERS[e.monster]).map((e) => ({ type: e.monster, x: e.x, z: e.z, r: Math.max(1, +e.r || 5), count: Math.max(1, Math.min(50, +e.count || 1)) })));
+      map.portals = (d.takeover ? [] : base.portals || []).concat(d.entities.filter((e) => e.type === 'warp' && G.Maps[e.to]).map((e) => ({ x: e.x, z: e.z, to: e.to, tx: +e.tx || 0, tz: +e.tz || 0, label: e.label || (G.Maps[e.to] || {}).name, invisible: e.style === 'door' })));
+      if (d.flat) { map.hills = 0; map.indoor = true; }
+      map.spawns = (d.takeover ? [] : base.spawns || []).concat(d.entities.filter((e) => e.type === 'spawn' && C.MONSTERS[e.monster]).map((e) => ({ type: e.monster, x: e.x, z: e.z, r: Math.max(0.5, +e.r || 5), count: Math.max(1, Math.min(50, +e.count || 1)),
+        respawn: +e.respawn > 0 ? +e.respawn : undefined, announce: !!e.announce })));
       const npcs = d.entities.filter((e) => e.type === 'npc');
       for (const e of npcs) {
         const nid = 'custom_' + e.u;
         G.NPC_DEFS = G.NPC_DEFS.filter((x) => x.id !== nid);
-        const lines = (e.lines || []).filter(Boolean);
+        const lines = (e.lines || []).filter(Boolean), role = e.role || 'talk';
+        if (role === 'shop') G.SHOPS[nid] = { name: e.shopName || `${e.name || 'Villager'}’s shop`, npc: nid, stock: (e.stock || []).filter((id) => G.Items.get(id)) };
         G.NPC_DEFS.push({ id: nid, name: e.name || 'Villager', title: e.title || '', costume: e.costume || 'novice', x: e.x, z: e.z, facing: e.ry || 0,
           appearance: { hair: e.hair || 'chestnut', eyes: 'amber', style: e.style || 'short' },
-          script: async (dlg) => { for (const l of (lines.length ? lines : ['...'])) await dlg.say(l); } });
+          script: async (dlg, game) => {
+            const p = game.player, hello = lines[0] || 'Hello there!';
+            if (role === 'shop') { const c = await dlg.choose(hello, ['Buy', 'Sell', 'Leave']); if (c === 0) game.shop.open('buy', nid); else if (c === 1) game.shop.open('sell', nid); return; }
+            if (role === 'kafra') {
+              const dests = (e.dests || []).filter((x) => G.Maps[x.map]);
+              if (!dests.length) { await dlg.say(hello); return; }
+              const c = await dlg.choose(hello, [...dests.map((x) => `${x.label || G.Maps[x.map].name}${+x.cost ? ` — ${(+x.cost).toLocaleString()} z` : ''}`), 'Cancel']);
+              const dst = dests[c]; if (!dst) return;
+              if (p.zeny < (+dst.cost || 0)) { await dlg.say('Sorry, you don’t have enough Zeny for that.'); return; }
+              p.zeny -= +dst.cost || 0; game.save.markDirty();
+              if (dst.map === game.mapId) p.teleport(+dst.x || 0, +dst.z || 0); else game.travel(dst.map, +dst.x || 0, +dst.z || 0);
+              return;
+            }
+            if (role === 'save') {
+              const c = await dlg.choose(hello, ['Save my position here', 'Leave']);
+              if (c === 0) { p.savePoint = { map: game.mapId, x: p.position.x, z: p.position.z }; game.save.save(true); await dlg.say('Your position has been saved.'); }
+              return;
+            }
+            if (role === 'heal') { p.hp = p.maxHp; p.sp = p.maxSp; game.sfx('heal'); await dlg.say(hello === 'Hello there!' ? 'There you go, all patched up!' : hello); return; }
+            for (const l of (lines.length ? lines : ['...'])) await dlg.say(l);
+          } });
       }
       // Original NPCs: where the editor put them (or gone, if deleted there).
       let own = base.npcs || [];
@@ -561,6 +599,7 @@
       this.game = game;
       this.installRules();
       const d = this.data[game.mapId];
+      this.batches = [];
       if (this.group) { this.group.removeFromParent(); this.group = null; }
       this.clearFx();
       this.objects = []; this.lights = [];
@@ -570,6 +609,7 @@
       for (const e of d.entities) if (e.type === 'light') this.spawnLight(game, e);
       this.clearFx();
       for (const e of d.entities) if (e.type === 'fx') this.spawnFx(game, e);
+      setTimeout(() => this.batch(), 0);
       // Anything outside the map's bounds can't be walked on.
       if (d.bounds) {
         const b = d.bounds, h = game.nav.size / 2;
@@ -577,6 +617,33 @@
           if (x < b.minX || x > b.maxX || z < b.minZ || z > b.maxZ) game.nav.blockCircle(x + 0.5, z + 0.5, 0.75);
       }
       this.applyWalk(game, d);
+    },
+    // While playing, identical objects are drawn together (much faster); split up again for editing.
+    batch() {
+      this.unbatch();
+      if (!this.group || (G.MapEditor && G.MapEditor.active)) return;
+      this.group.updateMatrixWorld(true);
+      const groups = new Map();
+      for (const g of this.objects || []) {
+        const ms = []; g.traverse((o) => { if (o.isMesh && !o.isInstancedMesh) ms.push(o); });
+        if (ms.length !== 1) continue;
+        const m = ms[0], key = m.geometry.uuid + '|' + (Array.isArray(m.material) ? 'multi' : m.material.uuid);
+        if (Array.isArray(m.material)) continue;
+        if (!groups.has(key)) groups.set(key, { m, list: [] });
+        groups.get(key).list.push({ g, m });
+      }
+      this.batches = [];
+      for (const { m, list } of groups.values()) {
+        if (list.length < 4) continue;
+        const im = new THREE.InstancedMesh(m.geometry, m.material, list.length);
+        list.forEach(({ g, m: mm }, i) => { im.setMatrixAt(i, mm.matrixWorld); g.visible = false; });
+        im.castShadow = m.castShadow; im.receiveShadow = true; im.instanceMatrix.needsUpdate = true;
+        this.group.add(im); this.batches.push({ im, list });
+      }
+    },
+    unbatch() {
+      for (const b of this.batches || []) { b.im.removeFromParent(); b.im.dispose(); for (const { g } of b.list) g.visible = true; }
+      this.batches = [];
     },
     makeObject(game, o) {
       const holder = new THREE.Group();
