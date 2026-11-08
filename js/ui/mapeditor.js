@@ -21,6 +21,7 @@
     brush: { tool: 'raise', size: 4, strength: 5, tex: 3 }, cursor: null, remembered: null,
     extra: [], extraBoxes: [], grid: 0, clip: null, testing: false,
     scatter: { items: ['tree', 'pine', 'bush'], density: 3, size: 8 },
+    cover: { mode: 'grass', density: 5 },
     init(game) {
       if (this.game) return;
       this.game = game;
@@ -124,7 +125,9 @@
     undo() {
       const s = this.undoStack.pop(); if (!s) return;
       const d = JSON.parse(s); Object.assign(this.data, d);
+      if (!d.cover) delete this.data.cover;
       CM().data[this.game.mapId] = this.data;
+      this.redrawCover();
       this.sel = null; G.Terrain.refreshGround(0, 0, G.Terrain.HALF + 2);
       CM().build(this.game); this.ensureData(); this.rebuildMarkers(); this.changed();
     },
@@ -345,6 +348,19 @@
       }
       this.dirty = true;
     },
+    // Grass brush: add grass or flowers, or clear them (the map's own too). Stored as brush dabs.
+    coverAt(p) {
+      const d = this.data, R = this.brush.size, C = this.cover, last = (d.cover || [])[(d.cover || []).length - 1];
+      if (last && last.k === C.mode && Math.hypot(last.x - p.x, last.z - p.z) < R * 0.5) return;
+      (d.cover = d.cover || []).push({ x: r2(p.x), z: r2(p.z), r: R, k: C.mode, n: C.density, seed: (Math.random() * 2 ** 31) | 0 });
+      this.dirty = true;
+      const now = Date.now();
+      if (now - (this.coverT || 0) > 150) { this.coverT = now; this.redrawCover(); } else this.coverLate = true;
+    },
+    redrawCover() {
+      const env = this.game.env; if (!env) return;
+      env.map.cover = this.data.cover || []; env.buildCover(); this.coverLate = false;
+    },
     // Walkability paint: blocked or walkable cells, applied straight away.
     walkAt(p) {
       const d = this.data, R = this.brush.size, tool = this.brush.tool;
@@ -382,6 +398,7 @@
     sculptAt(p) {
       if (this.brush.tool.startsWith('walk_')) return this.walkAt(p);
       if (this.brush.tool === 'scatter') return this.scatterAt(p);
+      if (this.brush.tool === 'grass') return this.coverAt(p);
       if (this.brush.tool === 'paint' || this.brush.tool === 'erase') return this.paintAt(p);
       const d = this.data, TR = G.Terrain;
       d.ground = d.ground || { d: {} };
@@ -407,13 +424,14 @@
     endStroke() {
       if (!this.sculpting) return;
       this.sculpting = false;
+      if (this.coverLate) this.redrawCover();
       // Objects and markers settle onto the new ground.
       for (const gObj of CM().objects || []) CM().place(gObj, gObj.userData.obj);
       for (const L of CM().lights || []) { const e = L.userData.ent; L.position.y = G.Terrain.height(e.x, e.z) + (+e.y || 2.5); }
       this.rebuildMarkers(); this.render();
     },
     renderGround(body) {
-      const tools = [['raise', '⬆️', 'Raise'], ['lower', '⬇️', 'Lower'], ['smooth', '〰️', 'Smooth'], ['flatten', '▭', 'Flatten'], ['paint', '🖌️', 'Paint'], ['erase', '🧽', 'Erase paint'], ['scatter', '🌲', 'Scatter'],
+      const tools = [['raise', '⬆️', 'Raise'], ['lower', '⬇️', 'Lower'], ['smooth', '〰️', 'Smooth'], ['flatten', '▭', 'Flatten'], ['paint', '🖌️', 'Paint'], ['erase', '🧽', 'Erase paint'], ['scatter', '🌲', 'Scatter'], ['grass', '🌱', 'Grass brush'],
         ['walk_block', '⛔', 'Block walking'], ['walk_open', '✅', 'Allow walking'], ['walk_clear', '↩️', 'Clear walk paint']];
       body.append(h('h4', { text: 'Shape and paint' }), h('div.ed-grid', null, ...tools.map(([id, ic, name]) => this.paletteBtn(name, ic, this.brush.tool === id, () => { this.brush.tool = id; this.render(); }))));
       if (this.brush.tool === 'scatter') {
@@ -422,6 +440,13 @@
           const i = S.items.indexOf(l.k); if (i >= 0) S.items.splice(i, 1); else S.items.push(l.k); this.render(); }))));
         const out = h('b', { text: String(S.density) });
         body.append(h('label.ed-slider', null, h('span', { text: 'Density' }), h('input', { type: 'range', min: '1', max: '10', value: String(S.density), 'aria-label': 'Scatter density', oninput: (e) => { S.density = Number(e.target.value); out.textContent = e.target.value; } }), out));
+      }
+      if (this.brush.tool === 'grass') {
+        const C = this.cover, modes = [['grass', '🌱', 'Add grass'], ['flowers', '🌸', 'Add flowers'], ['clear', '🧹', 'Clear grass & flowers']];
+        body.append(h('h4', { text: 'Grass and small flowers' }), h('div.ed-grid', null, ...modes.map(([id, ic, name]) => this.paletteBtn(name, ic, C.mode === id, () => { C.mode = id; this.render(); }))));
+        const out = h('b', { text: String(C.density) });
+        if (C.mode !== 'clear') body.append(h('label.ed-slider', null, h('span', { text: 'Density' }), h('input', { type: 'range', min: '1', max: '10', value: String(C.density), 'aria-label': 'Grass density', oninput: (e) => { C.density = Number(e.target.value); out.textContent = e.target.value; } }), out));
+        body.append(h('p.hint', { text: 'Works on the map’s own grass and flowers too: Clear removes them where you brush, then Add grass or Add flowers grows new ones. For single tufts, place Grass tuft or Wildflower from the Objects tab.' }));
       }
       if (this.brush.tool === 'paint') {
         const atlas = G.Terrain.buildPaintAtlas();
@@ -477,6 +502,14 @@
         this.tab = 'selected';
       }
       this.render();
+    },
+    // Rebuild one object (after changing how it looks).
+    rebuildObj(o) {
+      const g = (CM().objects || []).find((x) => x.userData.obj === o);
+      if (g) { g.removeFromParent(); CM().objects.splice(CM().objects.indexOf(g), 1); }
+      CM().spawnObject(this.game, o, false);
+      if (this.box) { this.box.removeFromParent(); this.box = null; }
+      this.applySel(); this.dirty = true;
     },
     objFor(s) {
       if (!s) return null;
@@ -684,10 +717,11 @@
       } catch (e) { this.game.log.add('Import failed: ' + e.message, 'warn'); }
     },
     async takeOver(onlyNew) {
-      if (!confirm(onlyNew ? 'Make the gate, spike wall, bridge, rocks and bushes editable? The map will be saved and reloaded.' : 'Make all of this map’s original objects, spawns, warps and NPCs editable? The map will be saved and reloaded.')) return;
-      const o = CM().originals(this.game, onlyNew), d = this.data;
+      if (!confirm(onlyNew ? 'Make the rest of this map’s original scenery editable (rocks, bushes, logs, pond plants, signposts, crystals, torches and more)? The map will be saved and reloaded.' : 'Make all of this map’s original objects, spawns, warps and NPCs editable? The map will be saved and reloaded.')) return;
+      const o = CM().originals(this.game), d = this.data;
       d.objects = o.objects.concat(d.objects);
-      if (onlyNew) { d.takeover = 2; this.game.log.add(`Converted ${o.objects.length} more objects. Saving…`, 'system'); await this.save(); return; }
+      d.more = 1;
+      if (onlyNew) { d.takeover = Math.max(2, d.takeover === true ? 1 : (d.takeover || 0)); this.game.log.add(`Converted ${o.objects.length} more objects. Saving…`, 'system'); await this.save(); return; }
       d.entities = o.entities.concat(d.entities.filter((e) => !(e.type === 'warp' && o.entities.some((x) => x.type === 'warp' && x.x === e.x && x.z === e.z))));
       d.takeover = 2;
       const pathsToo = !G.Maps[this.game.mapId].cave;
@@ -756,6 +790,7 @@
     },
     capName(k) {
       const c = this.game.env.captured && this.game.env.captured[k.slice(4)];
+      if (c && c.name) return `${c.name} (from this map)`;
       const kind = !c ? 'Decoration' : c.mat === this.game.env.foliageMat ? 'Plant' : 'Rock / prop';
       const n = Object.keys(this.game.env.captured || {}).indexOf(k.slice(4)) + 1;
       return `${kind} (from this map, #${n})`;
@@ -782,10 +817,11 @@
       const pf = this.prefabs();
       body.append(h('h4', { text: 'Prefabs' }), pf.length ? h('div.ed-grid', null, ...pf.map((p) => this.paletteBtn(p.name, '🧩', false, () => this.placePrefab(p), `${p.items.length} pieces — placed at your cursor`))) : null,
         h('button.btn.small.ghost', { type: 'button', onclick: () => this.savePrefab() }, '🧩 Save selection as prefab'));
-      const caps = Object.keys(this.game.env.captured || {});
-      if (caps.length) body.append(h('h4', { text: 'From this map' }), h('div.ed-grid', null, ...caps.map((key) => {
+      const caps = Object.keys(this.game.env.captured || {}), seen = new Set();
+      const kinds = caps.filter((key) => { const n = this.capName('cap:' + key); if (seen.has(n)) return false; seen.add(n); return true; });
+      if (kinds.length) body.append(h('h4', { text: 'From this map' }), h('div.ed-grid', null, ...kinds.map((key) => {
         const k = 'cap:' + key, c = this.game.env.captured[key];
-        return this.paletteBtn(this.capName(k).replace(' (from this map', ' (').replace('#', ''), c.mat === this.game.env.foliageMat ? '🌿' : '🪨', this.placing && this.placing.k === k, () => this.startPlacing({ kind: 'object', k }));
+        return this.paletteBtn(this.capName(k).replace(' (from this map)', ''), c.mat === this.game.env.foliageMat || c.mat === this.game.env.grassMat ? '🌿' : '🪨', this.placing && this.placing.k === k, () => this.startPlacing({ kind: 'object', k }));
       })));
       const file = h('input', { type: 'file', accept: '.glb', hidden: true });
       file.addEventListener('change', () => { if (file.files[0]) this.upload(file.files[0]); file.value = ''; });
@@ -828,6 +864,10 @@
       if (s.kind === 'object') {
         const def = CM().LIB.find((l) => l.k === it.k);
         body.append(this.field('Blocks walking (radius)', it.solid != null ? it.solid : (def ? def.solid : 0), set('solid', 1), { type: 'number', step: '0.1' }));
+        // Colour: original scenery keeps its own tint; some library objects come in a few colours.
+        const recolour = (v) => { this.snapshot(); if (def) it.opts = Object.assign({}, it.opts, { col: v }); else it.c = v; this.rebuildObj(it); this.render(); };
+        if (it.k.startsWith('cap:')) body.append(this.field('Colour', it.c || '#ffffff', recolour, { type: 'color' }));
+        else if (def && def.colors) body.append(this.field('Colour', (it.opts && it.opts.col) || def.colors[0][0], recolour, { options: def.colors }));
       } else if (it.type === 'warp') {
         const maps = Object.keys(G.Maps).map((id) => [id, G.Maps[id].name || id]);
         const mem = this.remembered;
@@ -900,13 +940,14 @@
       if (G.Maps[this.game.mapId] && !G.Maps[this.game.mapId].custom && !d.takeover) {
         body.append(h('h4', { text: 'Original objects' }), h('p.hint', { text: 'Turn this map’s own houses, trees, props, monster spawns (training dummies too), warps and NPCs into editor objects you can move or delete. This saves and reloads the map.' }),
           h('button.btn.small', { type: 'button', onclick: () => this.takeOver() }, 'Make original objects editable'));
-      } else if (d.takeover === true || d.takeover === 1) {
-        body.append(h('h4', { text: 'Original objects' }), h('p.hint', { text: 'Houses, trees and props are editable. Make the rest editable too: the town gate, the spike wall, the bridge, rocks and bushes. This saves and reloads the map.' }),
+      } else if (d.takeover === true || d.takeover === 1 || (d.takeover && !d.more && CM().originals(this.game).objects.length)) {
+        body.append(h('h4', { text: 'Original objects' }), h('p.hint', { text: 'Some of this map’s own scenery isn’t editable yet (such as the town gate, spike wall, bridge, rocks, bushes, fallen logs, lily pads, reeds, signposts, giant mushrooms, cave crystals, torches, rubble and bones). Make it editable too. This saves and reloads the map.' }),
           h('button.btn.small', { type: 'button', onclick: () => this.takeOver(true) }, 'Make remaining originals editable'));
-      } else if (d.takeover === 2) {
+      }
+      if (d.takeover === 2) {
         body.append(h('h4', { text: 'Paths and streets' }), h('p.hint', { text: 'Turn this map’s dirt paths, plaza and streets into ground paint, so you can erase, move or extend them with the Paint tool. This saves and reloads the map.' }),
           h('button.btn.small', { type: 'button', onclick: () => this.bakePaths() }, 'Make paths and streets paintable'));
-      } else if (d.takeover) body.append(h('p.hint', { text: 'Everything on this map is editable: objects, paths and streets (as paint).' }));
+      } else if (d.takeover && d.more) body.append(h('p.hint', { text: 'Everything on this map is editable: objects, paths and streets (as paint). Grass and small flowers: use the Grass brush on the Ground tab.' }));
       // Atmosphere and music.
       const at = d.atmo || (d.atmo = { preset: 'day', custom: {} });
       const applyAtmo = () => {

@@ -6,6 +6,13 @@
   const h = G.h;
 
   const PATCHES = [
+    { v: '0.37', date: '2026-11-13T12:00', title: 'Map editor: all original scenery is editable', notes: [
+      'Fixed: rocks and other converted scenery turned dark (sometimes black) once a map’s originals were made editable. Converted pieces now keep their own colour, shape, tilt, height and how much they block walking. Maps converted earlier are repaired automatically.',
+      'More of each map can be made editable: fallen logs, lily pads, reeds, the signpost by the bridge (which used to vanish), the forest’s giant mushrooms, and in caves the glowing crystals, torches, rubble, bones, mushrooms and gold crystals. On maps you already converted, press “Make remaining originals editable” (Map tab).',
+      'New Grass brush (Ground tab): add grass, add flowers, or clear them, including the map’s own grass.',
+      'New objects: Grass tuft, Wildflower, Lily pad, Reeds, Signpost (arrows), Cave torch, Glowing crystal and Bone. Wildflowers, lily pads and crystals come in several colours, and converted scenery can be recoloured (Selected tab).',
+      'The “From this map” list now names each piece (Rock, Fallen log, Stalagmite…).',
+    ] },
     { v: '0.36', date: '2026-11-12T12:00', title: 'Trustworthy server, part 2: monsters live on the server', notes: [
       'Online, the server now runs the monsters on every map that has players: where they spawn, how they wander, chase and attack, boss slams and respawns. Everyone on a map sees exactly the same monsters.',
       'No more “map host”: monsters no longer freeze, jump or reset when the first player on a map lags or leaves.',

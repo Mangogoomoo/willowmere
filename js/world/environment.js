@@ -7,6 +7,14 @@
 
   const _o = new THREE.Object3D(), _c = new THREE.Color();
   const box = new THREE.BoxGeometry(1, 1, 1);
+  const FLOWER_COLORS = ['#ff6b8b', '#ffd84d', '#ffffff', '#b38cff', '#ff9f43', '#7cc8ff', '#ff5e7a'];
+  let COVER = null, FLAME = null, POND = null;
+  const GLOW = {};
+  // Cave crystals glow in their own colour (shared with the map editor's Glowing crystal).
+  function glowMaterial(col) {
+    return GLOW[col] || (GLOW[col] = new THREE.MeshStandardMaterial({ color: col, flatShading: true, roughness: 0.25, emissive: col, emissiveIntensity: 0.7 }));
+  }
+  const flameTexture = () => FLAME || (FLAME = U.radialTexture(64, 0.15, 1.0));
 
   class Environment {
     constructor(scene, nav, map) {
@@ -83,11 +91,18 @@
 
     build() {
       this.buildSky();
-      if (this.map.cave) { this.buildCave(); return this; }
-      if (this.map.town) this.buildTown();
-      this.buildField();
+      if (this.map.cave) this.buildCave();
+      else {
+        if (this.map.town) this.buildTown();
+        this.buildField();
+      }
+      this.buildCover();
       return this;
     }
+    // Is this kind of original decoration an editable map-editor object now? (Then it isn't drawn
+    // or blocked here; the editor object does both.) 'legacy': rocks, bushes, stalagmites...;
+    // 'more': logs, pond plants, giant mushrooms, cave crystals and floor bits.
+    taken(kind) { return kind === 'more' ? !!this.map.takeMore : this.map.takeover >= 2; }
 
     /* ------------------------------------------------------------ sky */
     buildSky() {
@@ -528,10 +543,10 @@
         if (TR.boundaryAmount(x, z) > 6) continue;
         const big = rng() < 0.3;
         const s = big ? 0.9 + rng() * 0.9 : 0.25 + rng() * 0.35;
-        rocks[i % 3].push({ x, y: TR.height(x, z) + s * 0.05, z, ry: rng() * 6, s: [s * (1 + rng() * 0.4), s, s], color: _c.setHSL(0.1, 0.06, 0.78 + rng() * 0.22).getStyle() });
-        if (big) this.nav.blockCircle(x, z, s * 0.85);
+        rocks[i % 3].push({ x, y: TR.height(x, z) + s * 0.05, z, ry: rng() * 6, s: [s * (1 + rng() * 0.4), s, s], color: _c.setHSL(0.1, 0.06, 0.78 + rng() * 0.22).getStyle(), block: big ? s * 0.85 : 0 });
+        if (big && !this.taken('legacy')) this.nav.blockCircle(x, z, s * 0.85);
       }
-      rocks.forEach((list, k) => this.instanced(rockGeos[k], this.propMat, list, { cast: true }));
+      rocks.forEach((list, k) => this.instanced(rockGeos[k], this.propMat, list, { cast: true, name: 'Rock' }));
 
       // Bushes (decorative, walk-through).
       const ico = (r) => new THREE.IcosahedronGeometry(r, 0);
@@ -554,27 +569,10 @@
         const it = { x, y: TR.height(x, z) - 0.1, z, ry: rng() * 6, s: 0.7 + rng() * 0.6, color: _c.setHSL(0.27, 0.3, 0.85 + rng() * 0.15).getStyle() };
         (rng() < 0.2 ? berries : bushes).push(it);
       }
-      this.instanced(bushGeo, this.foliageMat, bushes, { cast: true });
-      this.instanced(berryGeo, this.foliageMat, berries, { cast: true });
+      this.instanced(bushGeo, this.foliageMat, bushes, { cast: true, name: 'Bush' });
+      this.instanced(berryGeo, this.foliageMat, berries, { cast: true, name: 'Berry bush' });
 
-      // Grass tufts.
-      const grassGeo = (() => {
-        const v = [], c = [];
-        const base = new THREE.Color('#4e8c3a'), tip = new THREE.Color('#b4e27a');
-        for (let k = 0; k < 4; k++) {
-          const a = (k / 4) * Math.PI + 0.3, ox = Math.cos(a) * 0.12, oz = Math.sin(a) * 0.12;
-          const lean = 0.15 * (k % 2 ? 1 : -1), h = 0.45 + (k % 3) * 0.12;
-          v.push(-ox, 0, -oz, ox, 0, oz, lean * Math.cos(a + 1.57), h, lean * Math.sin(a + 1.57));
-          c.push(base.r, base.g, base.b, base.r, base.g, base.b, tip.r, tip.g, tip.b);
-        }
-        const g = new THREE.BufferGeometry();
-        g.setAttribute('position', new THREE.Float32BufferAttribute(v, 3));
-        g.setAttribute('color', new THREE.Float32BufferAttribute(c, 3));
-        g.computeVertexNormals();
-        // Point normals upward so tufts take the ground's lighting.
-        const n = g.attributes.normal; for (let i = 0; i < n.count; i++) n.setXYZ(i, 0, 1, 0);
-        return g;
-      })();
+      // Grass tufts (drawn by buildCover, together with any map-editor brush strokes).
       const grass = [];
       for (let i = 0; i < 14000 && grass.length < 7000; i++) {
         const x = U.randRange(rng, FB.minX, FB.maxX), z = U.randRange(rng, FB.minZ, FB.maxZ);
@@ -587,13 +585,10 @@
         if (TR.paintBare(x, z)) continue;
         grass.push({ x, y: h - 0.02, z, ry: rng() * 6, s: 0.7 + rng() * 0.8, color: _c.setHSL(0.24 + rng() * 0.05, 0.35, 0.8 + rng() * 0.2).getStyle() });
       }
-      this.instanced(grassGeo, this.grassMat, grass, { cast: false });
 
-      // Flowers: stem + coloured head instanced separately.
-      const stemGeo = new THREE.CylinderGeometry(0.02, 0.025, 0.36, 4); stemGeo.translate(0, 0.18, 0);
-      const headGeo = new THREE.IcosahedronGeometry(0.1, 0); headGeo.translate(0, 0.38, 0);
+      // Flowers: stem + coloured head instanced separately (also drawn by buildCover).
       const stems = [], heads = [];
-      const palette = ['#ff6b8b', '#ffd84d', '#ffffff', '#b38cff', '#ff9f43', '#7cc8ff', '#ff5e7a'];
+      const palette = FLOWER_COLORS;
       for (let i = 0; i < 9000 && heads.length < 2200; i++) {
         const x = U.randRange(rng, FB.minX, FB.maxX), z = U.randRange(rng, FB.minZ, FB.maxZ);
         const patch = U.noise2(x * 0.09 + 40, z * 0.09);
@@ -607,10 +602,7 @@
         stems.push({ x, y: h - 0.02, z, ry, s, color: '#5aa043' });
         heads.push({ x, y: h - 0.02, z, ry, s, color: col });
       }
-      const stemMat = new THREE.MeshStandardMaterial({ color: '#ffffff', flatShading: true, roughness: 1 });
-      const headMat = new THREE.MeshStandardMaterial({ color: '#ffffff', flatShading: true, roughness: 0.6, emissive: '#222222' });
-      this.instanced(stemGeo, stemMat, stems);
-      this.instanced(headGeo, headMat, heads);
+      this.coverBase = { grass, stems, heads };
 
       // Mushrooms, fallen logs, signpost, pond details.
       const mushGeo = U.mergeParts([
@@ -627,47 +619,41 @@
         if (TR.paintBare(x, z)) continue;
         mush.push({ x, y: TR.height(x, z) - 0.02, z, ry: rng() * 6, s: 0.8 + rng() * 0.9 });
       }
-      this.instanced(mushGeo, this.propMat, mush);
+      this.instanced(mushGeo, this.propMat, mush, { name: 'Mushrooms' });
 
       const logs = [];
       for (let i = 0; i < 300 && logs.length < 8; i++) {
         const x = U.randRange(rng, -90, 90), z = U.randRange(rng, -10, 100);
         if (!this.canPlace(x, z, { pathClear: 5, spawnClear: 0.8, inner: true })) continue;
         const ry = rng() * Math.PI;
-        logs.push({ x, y: TR.height(x, z) + 0.3, z, rx: 0, ry, rz: Math.PI / 2, s: 1 });
-        this.nav.blockRect(x, z, 0.35, 1.5, ry);
+        logs.push({ x, y: TR.height(x, z) + 0.3, z, rx: 0, ry, rz: Math.PI / 2, s: 1, rect: [0.35, 1.5] });
+        if (!this.taken('more')) this.nav.blockRect(x, z, 0.35, 1.5, ry);
       }
       const logGeo = U.mergeParts([
         { geo: new THREE.CylinderGeometry(0.32, 0.36, 3, 7), color: '#7d532f', jitter: 0.15 },
         { geo: new THREE.CylinderGeometry(0.26, 0.26, 0.04, 7), color: '#d3a46e', pos: [0, 1.51, 0] },
         { geo: new THREE.IcosahedronGeometry(0.2, 0), color: '#58a74a', pos: [0.25, 0.4, 0.2] },
       ]);
-      const logMat = this.propMat;
-      // logs are rotated so their axis lies flat; rotation order matters
-      const lm = new THREE.InstancedMesh(logGeo, logMat, logs.length);
-      logs.forEach((l, i) => {
-        _o.position.set(l.x, l.y, l.z); _o.rotation.set(0, l.ry, Math.PI / 2, 'YXZ'); _o.scale.setScalar(1); _o.updateMatrix();
-        lm.setMatrixAt(i, _o.matrix);
-        lm.setColorAt(i, _c.set('#ffffff'));
-      });
-      lm.castShadow = true; lm.receiveShadow = true; lm.frustumCulled = false;
-      this.scene.add(lm);
-      _o.rotation.order = 'XYZ';
+      // Logs lie on their side (turned about Y, then tipped over about Z).
+      this.instanced(logGeo, this.propMat, logs, { cast: true, key: 'log', name: 'Fallen log' });
 
       if (this.map.forest.giants) this.giantMushrooms();
-      if (!this.map.bridge) { if (TR.POND) this.pondDetails(); return; }
+      if (!this.map.bridge && !this.map.hadBridge) { if (TR.POND) this.pondDetails(); return; }
 
       // Signpost at the meadow side of the bridge.
-      const sp = [], sx = 3.6, sz = TR.BRIDGE_Z + C.BRIDGE.halfLength + 2.5;
-      const add = this.place(sp, sx, sz, 0.2, TR.height(sx, sz));
+      const sp = [], sx = 3.6, sz = TR.streamZ(C.BRIDGE.x) + C.BRIDGE.halfLength + 2.5;
+      this.signpost(sp, sx, sz, 0.2);
+      if (sp.length) this.mesh(sp);
+
+      this.pondDetails();
+    }
+    signpost(parts, x, z, rot) {
+      const add = this.place(parts, x, z, rot, TR.height(x, z));
       add({ geo: box, color: '#7a4c2c', pos: [0, 1.1, 0], scale: [0.16, 2.2, 0.16] });
       add({ geo: box, color: '#c99a62', pos: [0.5, 1.8, 0], rot: [0, 0, 0.05], scale: [1.1, 0.32, 0.08] });
       add({ geo: new THREE.ConeGeometry(0.2, 0.3, 3), color: '#c99a62', pos: [1.18, 1.83, 0], rot: [0, 0, -Math.PI / 2], scale: [1, 1, 0.3] });
       add({ geo: box, color: '#b7884f', pos: [-0.45, 1.4, 0], rot: [0, 0, -0.06], scale: [1.0, 0.3, 0.08] });
-      this.mesh(sp);
-      this.nav.blockCircle(sx, sz, 0.2);
-
-      this.pondDetails();
+      this.nav.blockCircle(x, z, 0.2);
     }
 
     pondDetails() {
@@ -683,15 +669,22 @@
         const x = P.x + Math.cos(a) * r, z = P.z + Math.sin(a) * r;
         reeds.push({ x, y: Math.max(TR.height(x, z), C.WATER_LEVEL) - 0.05, z, ry: rng() * 6, s: [1, 0.7 + rng() * 0.8, 1], color: '#ffffff' });
       }
-      const padGeo = new THREE.CylinderGeometry(0.45, 0.45, 0.04, 8, 1, false, 0.3, Math.PI * 1.8);
-      this.instanced(padGeo, new THREE.MeshStandardMaterial({ color: '#ffffff', flatShading: true, roughness: 0.6 }), pads);
-      const reedGeo = U.mergeParts([
-        { geo: new THREE.CylinderGeometry(0.02, 0.03, 1.4, 4), color: '#6f9f45', pos: [0, 0.7, 0] },
-        { geo: new THREE.CylinderGeometry(0.06, 0.06, 0.3, 5), color: '#7a4a2a', pos: [0, 1.35, 0] },
-        { geo: new THREE.CylinderGeometry(0.02, 0.03, 1.1, 4), color: '#7aac4c', pos: [0.12, 0.55, 0.05], rot: [0, 0, -0.15] },
-      ]);
-      this.instanced(reedGeo, this.grassMat, reeds);
+      const padGeo = this.pondGeos().pad;
+      this.instanced(padGeo, new THREE.MeshStandardMaterial({ color: '#ffffff', flatShading: true, roughness: 0.6 }), pads, { key: 'lily_pad', name: 'Lily pad' });
+      const reedGeo = this.pondGeos().reeds;
+      this.instanced(reedGeo, this.grassMat, reeds, { key: 'reeds', name: 'Reeds' });
       this.landmarks.push({ x: P.x, z: P.z, kind: 'pond' });
+    }
+
+    pondGeos() {
+      return POND || (POND = {
+        pad: new THREE.CylinderGeometry(0.45, 0.45, 0.04, 8, 1, false, 0.3, Math.PI * 1.8),
+        reeds: U.mergeParts([
+          { geo: new THREE.CylinderGeometry(0.02, 0.03, 1.4, 4), color: '#6f9f45', pos: [0, 0.7, 0] },
+          { geo: new THREE.CylinderGeometry(0.06, 0.06, 0.3, 5), color: '#7a4a2a', pos: [0, 1.35, 0] },
+          { geo: new THREE.CylinderGeometry(0.02, 0.03, 1.1, 4), color: '#7aac4c', pos: [0.12, 0.55, 0.05], rot: [0, 0, -0.15] },
+        ]),
+      });
     }
 
     /* ------------------------------------------------------------ caves */
@@ -704,10 +697,10 @@
         const x = U.randRange(rng, -100, 100), z = U.randRange(rng, -100, 100), d = TRd(x, z);
         if (d < 0.2 || d > 3) continue;
         const s = 0.5 + rng() * 1.4, y = TR.height(x, z);
-        stal.push({ x, y: y - 0.1, z, ry: rng() * 6, s: [s * 0.6, s * (1.0 + rng() * 0.9), s * 0.6], color: _c.setHSL(0.07, 0.12, 0.55 + rng() * 0.25).getStyle() });
-        if (d < 0.9) this.nav.blockCircle(x, z, s * 0.35);
+        stal.push({ x, y: y - 0.1, z, ry: rng() * 6, s: [s * 0.6, s * (1.0 + rng() * 0.9), s * 0.6], color: _c.setHSL(0.07, 0.12, 0.55 + rng() * 0.25).getStyle(), block: d < 0.9 ? s * 0.35 : 0 });
+        if (d < 0.9 && !this.taken('legacy')) this.nav.blockCircle(x, z, s * 0.35);
       }
-      this.instanced(U.mergeParts([{ geo: cone, color: '#8a7f70', pos: [0, 0.5, 0], jitter: 0.2 }]), this.propMat, stal, { cast: true });
+      this.instanced(U.mergeParts([{ geo: cone, color: '#8a7f70', pos: [0, 0.5, 0], jitter: 0.2 }]), this.propMat, stal, { cast: true, name: 'Stalagmite' });
 
       // Glowing crystal clusters.
       const oct = new THREE.OctahedronGeometry(1, 0);
@@ -719,20 +712,16 @@
         const g = groups[(rng() * 3) | 0], y = TR.height(x, z);
         for (let k = 0; k < 3; k++) {
           const s = 0.25 + rng() * 0.45;
-          g.push({ geo: oct, color: '#ffffff', pos: [x + (rng() - 0.5) * 0.9, y + s * 1.2, z + (rng() - 0.5) * 0.9], rot: [rng() * 0.6, rng() * 3, rng() * 0.6], scale: [s * 0.55, s * 1.6, s * 0.55] });
+          g.push({ x: x + (rng() - 0.5) * 0.9, y: y + s * 1.2, z: z + (rng() - 0.5) * 0.9, rx: rng() * 0.6, ry: rng() * 3, rz: rng() * 0.6, s: [s * 0.55, s * 1.6, s * 0.55] });
         }
       }
-      // One mesh per colour so each glows in its own hue.
-      groups.forEach((g, i) => {
-        if (!g.length) return;
-        const mat = new THREE.MeshStandardMaterial({ color: cols[i], flatShading: true, roughness: 0.25, emissive: cols[i], emissiveIntensity: 0.7 });
-        this.mesh(g, { mat, cast: false });
-      });
+      // One batch per colour so each glows in its own hue.
+      const octW = U.mergeParts([{ geo: oct, color: '#ffffff' }]);
+      groups.forEach((g, i) => { if (g.length) this.instanced(octW, glowMaterial(cols[i]), g, { key: 'crystal_' + i, name: 'Glowing crystal' }); });
 
       // Torches along the corridors; a few of them cast real light.
-      const flameTex = U.radialTexture(64, 0.15, 1.0);
       this.torches = [];
-      let lights = 0;
+      let lights = 0, torchParts = 0;
       for (const path of this.map.paths) {
         for (let i = 0; i < path.length - 1; i++) {
           const [ax, az] = path[i], [bx, bz] = path[i + 1], len = Math.hypot(bx - ax, bz - az);
@@ -740,41 +729,40 @@
             const k = t / len, x0 = ax + (bx - ax) * k, z0 = az + (bz - az) * k;
             const nx = -(bz - az) / len, nz = (bx - ax) / len, side = (i + t) % 2 ? 1 : -1;
             const x = x0 + nx * side * ((this.map.corridor || 3.4) - 0.5), z = z0 + nz * side * ((this.map.corridor || 3.4) - 0.5);
-            const y = TR.height(x, z);
-            props.push({ geo: new THREE.CylinderGeometry(0.08, 0.12, 2.0, 6), color: '#5a3a22', pos: [x, y + 1.0, z] });
-            props.push({ geo: new THREE.CylinderGeometry(0.18, 0.12, 0.25, 6), color: '#3c414d', pos: [x, y + 2.05, z] });
-            const fl = new THREE.Sprite(new THREE.SpriteMaterial({ map: flameTex, color: '#ffb05a', transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }));
-            fl.position.set(x, y + 2.35, z); fl.scale.set(0.9, 1.2, 1);
-            this.scene.add(fl);
-            let light = null;
-            if (lights < 10) { light = new THREE.PointLight('#ffb366', 1.6, 16, 2); light.position.set(x, y + 2.6, z); this.scene.add(light); lights++; }
-            this.torches.push({ fl, light, phase: rng() * 10 });
-            this.nav.blockCircle(x, z, 0.15);
+            const lit = lights < 10;
+            if (lit) lights++;
+            this.caveTorch(props, x, z, 0, { light: lit, phase: rng() * 10 });
+            torchParts += 2;
           }
         }
       }
-      // Bones, rubble and mushrooms on the floor.
-      const ico = new THREE.IcosahedronGeometry(1, 0);
-      for (let i = 0; i < 4000 && props.length < 600; i++) {
+      // Bones, rubble and mushrooms on the floor (each one a piece the map editor can take over).
+      const ico = new THREE.IcosahedronGeometry(1, 0), MUSH = ['#c96a4a', '#7fe8ff', '#b98cff'];
+      const rubble = [], bones = [], shrooms = MUSH.map(() => []);
+      for (let i = 0; i < 4000 && torchParts + rubble.length + bones.length + 2 * shrooms.flat().length < 600; i++) {
         const x = U.randRange(rng, -100, 100), z = U.randRange(rng, -100, 100), d = TRd(x, z);
         if (d > -0.6 || d < -6) continue;
         const y = TR.height(x, z), r = rng();
-        if (r < 0.4) props.push({ geo: ico, color: '#8a8478', pos: [x, y + 0.1, z], scale: [0.25 + rng() * 0.3, 0.18, 0.25 + rng() * 0.3], jitter: 0.2 });
-        else if (r < 0.6) props.push({ geo: new THREE.CylinderGeometry(0.05, 0.05, 0.7, 5), color: '#efe6d2', pos: [x, y + 0.06, z], rot: [Math.PI / 2, 0, rng() * 3] });
-        else if (r < 0.8) {
-          props.push({ geo: new THREE.CylinderGeometry(0.05, 0.07, 0.22, 5), color: '#f1e6cf', pos: [x, y + 0.11, z] });
-          props.push({ geo: new THREE.SphereGeometry(0.16, 6, 3, 0, Math.PI * 2, 0, Math.PI / 2), color: ['#c96a4a', '#7fe8ff', '#b98cff'][(rng() * 3) | 0], pos: [x, y + 0.2, z] });
-        }
+        if (r < 0.4) rubble.push({ x, y: y + 0.1, z, s: [0.25 + rng() * 0.3, 0.18, 0.25 + rng() * 0.3] });
+        else if (r < 0.6) bones.push({ x, y: y + 0.06, z, rx: Math.PI / 2, rz: rng() * 3 });
+        else if (r < 0.8) shrooms[(rng() * 3) | 0].push({ x, y, z });
       }
+      this.instanced(U.mergeParts([{ geo: ico, color: '#8a8478', jitter: 0.2 }]), this.propMat, rubble, { cast: true, key: 'rubble', name: 'Rubble' });
+      this.instanced(U.mergeParts([{ geo: new THREE.CylinderGeometry(0.05, 0.05, 0.7, 5), color: '#efe6d2' }]), this.propMat, bones, { cast: true, key: 'bone', name: 'Bone' });
+      shrooms.forEach((list, k) => this.instanced(U.mergeParts([
+        { geo: new THREE.CylinderGeometry(0.05, 0.07, 0.22, 5), color: '#f1e6cf', pos: [0, 0.11, 0] },
+        { geo: new THREE.SphereGeometry(0.16, 6, 3, 0, Math.PI * 2, 0, Math.PI / 2), color: MUSH[k], pos: [0, 0.2, 0] },
+      ]), this.propMat, list, { cast: true, key: 'cave_mushroom_' + k, name: 'Cave mushroom' }));
       // A ring of crystals around the boss chamber.
-      const boss = (this.map.rooms || []).slice(-1)[0];
+      const boss = (this.map.rooms || []).slice(-1)[0], gold = [];
       if (boss) for (let i = 0; i < 14; i++) {
         const a = (i / 14) * Math.PI * 2, x = boss.x + Math.cos(a) * (boss.r - 1.2), z = boss.z + Math.sin(a) * (boss.r - 1.2);
-        props.push({ geo: oct, color: '#ffd84a', pos: [x, TR.height(x, z) + 0.9, z], scale: [0.35, 1.2, 0.35] });
+        gold.push({ x, y: TR.height(x, z) + 0.9, z, s: [0.35, 1.2, 0.35] });
       }
-      this.mesh(props);
+      this.instanced(U.mergeParts([{ geo: oct, color: '#ffd84a' }]), this.propMat, gold, { cast: true, key: 'gold_crystal', name: 'Gold crystal' });
+      if (props.length) this.mesh(props);
       this.updaters.push((dt, time) => {
-        for (const t of this.torches) {
+        for (const t of this.torches || []) {
           const f = 0.85 + Math.sin(time * 11 + t.phase) * 0.08 + Math.sin(time * 23 + t.phase * 2) * 0.06;
           t.fl.scale.set(0.9 * f, 1.25 * f, 1);
           if (t.light) t.light.intensity = 1.6 * f;
@@ -784,23 +772,96 @@
 
     // Whisperwood's landmark: oversized glowing mushrooms in the clearings.
     giantMushrooms() {
-      const rng = this.rng, parts = [], glow = [];
-      for (let i = 0; i < 900 && parts.length < 60; i++) {
+      const rng = this.rng, glow = [];
+      let parts = 0;
+      for (let i = 0; i < 900 && parts < 60; i++) {
         const x = U.randRange(rng, -96, 96), z = U.randRange(rng, -100, 100);
         if (!this.canPlace(x, z, { pathClear: 4, spawnClear: 0.85, inner: true })) continue;
         const s = 1.5 + rng() * 2.2, y = TR.height(x, z), caps = ['#e85a7a', '#f2a03c', '#a86ad9', '#5fb8e8'];
         const col = caps[(rng() * caps.length) | 0];
-        parts.push({ geo: new THREE.CylinderGeometry(0.22 * s, 0.3 * s, 1.4 * s, 7), color: '#f1e6cf', pos: [x, y + 0.7 * s, z] });
-        parts.push({ geo: new THREE.SphereGeometry(0.85 * s, 9, 5, 0, Math.PI * 2, 0, Math.PI / 2), color: col, pos: [x, y + 1.35 * s, z], jitter: 0.1 });
+        // Built around its own foot, so the map editor can move it as one piece.
+        const p = [
+          { geo: new THREE.CylinderGeometry(0.22 * s, 0.3 * s, 1.4 * s, 7), color: '#f1e6cf', pos: [0, 0.7 * s, 0] },
+          { geo: new THREE.SphereGeometry(0.85 * s, 9, 5, 0, Math.PI * 2, 0, Math.PI / 2), color: col, pos: [0, 1.35 * s, 0], jitter: 0.1 },
+        ];
         for (let k = 0; k < 4; k++) {
           const a = rng() * Math.PI * 2, r = rng() * 0.5 * s;
-          parts.push({ geo: new THREE.IcosahedronGeometry(0.1 * s, 0), color: '#fff8e8', pos: [x + Math.cos(a) * r, y + 1.35 * s + 0.65 * s * Math.sqrt(1 - (r / (0.85 * s)) ** 2), z + Math.sin(a) * r] });
+          p.push({ geo: new THREE.IcosahedronGeometry(0.1 * s, 0), color: '#fff8e8', pos: [Math.cos(a) * r, 1.35 * s + 0.65 * s * Math.sqrt(1 - (r / (0.85 * s)) ** 2), Math.sin(a) * r] });
         }
+        parts += p.length;
+        this.instanced(U.mergeParts(p), this.propMat, [{ x, y, z, block: 0.3 * s }], { cast: true, key: 'giant_mushroom_' + glow.length, name: 'Giant mushroom' });
         glow.push([x, y + 1.3 * s, z, col]);
-        this.nav.blockCircle(x, z, 0.3 * s);
+        if (!this.taken('more')) this.nav.blockCircle(x, z, 0.3 * s);
       }
-      if (parts.length) this.mesh(parts);
       this.glowSpots = glow;
+    }
+    // A cave torch: a post with a burning bowl; some of them light up the corridor.
+    caveTorch(parts, x, z, rot, o) {
+      o = o || {};
+      const y = TR.height(x, z);
+      parts.push({ geo: new THREE.CylinderGeometry(0.08, 0.12, 2.0, 6), color: '#5a3a22', pos: [x, y + 1.0, z] });
+      parts.push({ geo: new THREE.CylinderGeometry(0.18, 0.12, 0.25, 6), color: '#3c414d', pos: [x, y + 2.05, z] });
+      const fl = new THREE.Sprite(new THREE.SpriteMaterial({ map: flameTexture(), color: '#ffb05a', transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }));
+      fl.position.set(x, y + 2.35, z); fl.scale.set(0.9, 1.2, 1);
+      this.scene.add(fl);
+      let light = null;
+      if (o.light) { light = new THREE.PointLight('#ffb366', 1.6, 16, 2); light.position.set(x, y + 2.6, z); this.scene.add(light); }
+      (this.torches || (this.torches = [])).push({ fl, light, phase: o.phase || 0 });
+      this.nav.blockCircle(x, z, 0.15);
+    }
+
+    /* ------------------------------------------------------------ ground cover */
+    // Grass tufts and small flowers: the map's own layout plus the map editor's grass brush
+    // (add grass, add flowers, or clear). Thousands of pieces, so they stay one batch each.
+    coverGeos() {
+      if (COVER) return COVER;
+      const v = [], c = [];
+      const base = new THREE.Color('#4e8c3a'), tip = new THREE.Color('#b4e27a');
+      for (let k = 0; k < 4; k++) {
+        const a = (k / 4) * Math.PI + 0.3, ox = Math.cos(a) * 0.12, oz = Math.sin(a) * 0.12;
+        const lean = 0.15 * (k % 2 ? 1 : -1), h = 0.45 + (k % 3) * 0.12;
+        v.push(-ox, 0, -oz, ox, 0, oz, lean * Math.cos(a + 1.57), h, lean * Math.sin(a + 1.57));
+        c.push(base.r, base.g, base.b, base.r, base.g, base.b, tip.r, tip.g, tip.b);
+      }
+      const grass = new THREE.BufferGeometry();
+      grass.setAttribute('position', new THREE.Float32BufferAttribute(v, 3));
+      grass.setAttribute('color', new THREE.Float32BufferAttribute(c, 3));
+      grass.computeVertexNormals();
+      // Point normals upward so tufts take the ground's lighting.
+      const n = grass.attributes.normal; for (let i = 0; i < n.count; i++) n.setXYZ(i, 0, 1, 0);
+      const stem = new THREE.CylinderGeometry(0.02, 0.025, 0.36, 4); stem.translate(0, 0.18, 0);
+      const head = new THREE.IcosahedronGeometry(0.1, 0); head.translate(0, 0.38, 0);
+      COVER = { grass, stem, head,
+        stemMat: new THREE.MeshStandardMaterial({ color: '#ffffff', flatShading: true, roughness: 1 }),
+        headMat: new THREE.MeshStandardMaterial({ color: '#ffffff', flatShading: true, roughness: 0.6, emissive: '#222222' }) };
+      return COVER;
+    }
+    buildCover() {
+      for (const m of this.coverMeshes || []) { this.scene.remove(m); m.dispose(); }
+      this.coverMeshes = [];
+      const b = this.coverBase || { grass: [], stems: [], heads: [] }, strokes = this.map.cover || [];
+      if (!b.grass.length && !b.heads.length && !strokes.length) return;
+      let grass = b.grass, flowers = b.heads.map((h, i) => [b.stems[i], h]);
+      for (const k of strokes) {
+        const inside = (it) => Math.hypot(it.x - k.x, it.z - k.z) <= k.r;
+        if (k.k === 'clear') { grass = grass.filter((it) => !inside(it)); flowers = flowers.filter(([st]) => !inside(st)); continue; }
+        // A brush dab: tufts or flowers spread over its circle, the same every time the map loads.
+        const r = U.mulberry32(k.seed >>> 0), per = k.k === 'flowers' ? 0.025 : 0.06, n = Math.min(400, Math.round(Math.PI * k.r * k.r * per * (k.n || 5)));
+        const add = [];
+        for (let i = 0; i < n; i++) {
+          const a = r() * Math.PI * 2, d = Math.sqrt(r()) * k.r, x = k.x + Math.cos(a) * d, z = k.z + Math.sin(a) * d;
+          const ry = r() * 6, s = 0.7 + r() * 0.8, t = r(), col = FLOWER_COLORS[(r() * FLOWER_COLORS.length) | 0];
+          if (TR.isWater(x, z)) continue;
+          const y = TR.height(x, z) - 0.02;
+          if (k.k === 'flowers') add.push([{ x, y, z, ry, s, color: '#5aa043' }, { x, y, z, ry, s, color: col }]);
+          else add.push({ x, y, z, ry, s, color: _c.setHSL(0.24 + t * 0.05, 0.35, 0.8 + r() * 0.2).getStyle() });
+        }
+        if (k.k === 'flowers') flowers = flowers.concat(add); else grass = grass.concat(add);
+      }
+      const g = this.coverGeos(), keep = (m) => { if (m) this.coverMeshes.push(m); };
+      keep(this.instanced(g.grass, this.grassMat, grass, { cast: false }));
+      keep(this.instanced(g.stem, g.stemMat, flowers.map((f) => f[0])));
+      keep(this.instanced(g.head, g.headMat, flowers.map((f) => f[1])));
     }
 
     update(dt, time) {
@@ -809,5 +870,7 @@
     }
   }
 
+  Environment.glowMaterial = glowMaterial;   // the map editor's Glowing crystal and Cave torch use these too
+  Environment.flameTexture = flameTexture;
   G.Environment = Environment;
 })(window.G = window.G || {});

@@ -133,6 +133,33 @@
     return prim(parts, env.propMat);
   }
   const prim = (parts, mat) => { const g = U.mergeParts(parts); const m = new THREE.Mesh(g, mat); m.castShadow = true; m.receiveShadow = true; return m; };
+  // An original decoration as an editor object: its spot, turn, size, stretch, tilt, height above the
+  // ground, own colour and how much it blocks walking (all as the scenery placed it).
+  function capLook(it) {
+    const TR = G.Terrain, r2 = (v) => Math.round(v * 100) / 100, r3 = (v) => Math.round(v * 1000) / 1000;
+    const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(it.rx || 0, it.ry || 0, it.rz || 0, 'XYZ'));
+    const e = new THREE.Euler().setFromQuaternion(q, 'YXZ'), s = it.s[1] || 1, ground = TR.height(it.x, it.z);
+    const o = { x: r2(it.x), z: r2(it.z), y: r2((it.y != null ? it.y : ground) - ground), ry: r3(e.y), s: r3(s) };
+    if (Math.abs(e.x) > 1e-3 || Math.abs(e.z) > 1e-3) o.tilt = [r3(e.x), r3(e.z)];
+    const ax = it.s[0] / s, az = it.s[2] / s;
+    if (Math.abs(ax - 1) > 0.005 || Math.abs(az - 1) > 0.005) o.st = [r3(ax), r3(az)];
+    o.c = '#' + new THREE.Color(it.color || '#ffffff').getHexString();
+    o.solid = r3((it.block || 0) / s);
+    if (it.rect) o.rect = [r3(it.rect[0] / s), r3(it.rect[1] / s)];
+    return o;
+  }
+  // Drawn as a one-piece batch with its own colour, the way the scenery draws it. (Batches always get
+  // a colour: three r149 reuses a shader between batches with and without colours, reading black.)
+  function capMesh(geo, mat, o, cast) {
+    const m = new THREE.InstancedMesh(geo, mat, 1);
+    m.setMatrixAt(0, new THREE.Matrix4()); m.setColorAt(0, new THREE.Color(o.c || '#ffffff'));
+    m.instanceMatrix.needsUpdate = true; m.instanceColor.needsUpdate = true;
+    if (o.st) m.scale.set(o.st[0], 1, o.st[1]);
+    if (o.tilt) m.rotation.set(o.tilt[0], 0, o.tilt[1]);
+    m.castShadow = !!cast; m.receiveShadow = true; m.userData.cap = true;
+    return m;
+  }
+  const col = (o, def) => (o && o.opts && o.opts.col) || def;
   const LIB = [
     // Nature
     { k: 'tree', name: 'Tree', cat: 'Nature', icon: '🌳', solid: 0.45, build: (e) => new THREE.Mesh(e.treeGeometries().round, e.foliageMat) },
@@ -274,22 +301,45 @@
       { geo: new THREE.BoxGeometry(1.4, 0.08, 0.08), color: '#7a5a3e', pos: [1.4, 0.75, 0.3] }, { geo: new THREE.BoxGeometry(1.4, 0.08, 0.08), color: '#7a5a3e', pos: [1.4, 0.75, -0.3] }], e.propMat) },
     { k: 'tent', name: 'Tent', cat: 'Props', icon: '⛺', solid: 1.4, build: (e) => prim([{ geo: new THREE.ConeGeometry(1.8, 2.2, 4), color: '#d9c8a0', pos: [0, 1.1, 0], rot: [0, Math.PI / 4, 0] }, { geo: new THREE.BoxGeometry(0.6, 1, 0.05), color: '#5a4030', pos: [0, 0.5, 1.15] }], e.propMat) },
     { k: 'tombstone', name: 'Gravestone', cat: 'Props', icon: '🪦', solid: 0.35, build: (e) => prim([{ geo: new THREE.BoxGeometry(0.7, 1, 0.22), color: '#8d8a84', pos: [0, 0.5, 0], jitter: 0.15 }], e.propMat) },
+    // The scenery's own pieces (v0.37): the same shapes the maps are built from.
+    { k: 'grass_tuft', name: 'Grass tuft', cat: 'Nature', icon: '🌱', solid: 0, build: (e) => { const m = new THREE.Mesh(e.coverGeos().grass, e.grassMat); m.receiveShadow = true; return wrap(m); } },
+    { k: 'wildflower', name: 'Wildflower', cat: 'Flowers', icon: '🌸', solid: 0, colors: [['#ff6b8b', 'Pink'], ['#ffd84d', 'Yellow'], ['#ffffff', 'White'], ['#b38cff', 'Purple'], ['#ff9f43', 'Orange'], ['#7cc8ff', 'Blue'], ['#ff5e7a', 'Red']],
+      build: (e, o) => { const g = e.coverGeos(); return prim([{ geo: g.stem.clone(), color: '#5aa043' }, { geo: g.head.clone(), color: col(o, '#ff6b8b') }], e.propMat); } },
+    { k: 'lily_pad', name: 'Lily pad', cat: 'Water', icon: '🪷', solid: 0, colors: [['#4f9e46', 'Green'], ['#ff9ec2', 'Pink']],
+      build: (e, o) => prim([{ geo: e.pondGeos().pad.clone(), color: col(o, '#4f9e46'), pos: [0, 0.02, 0] }], e.propMat) },
+    { k: 'reeds', name: 'Reeds', cat: 'Water', icon: '🌾', solid: 0, build: (e) => { const m = new THREE.Mesh(e.pondGeos().reeds, e.grassMat); m.castShadow = true; m.receiveShadow = true; return wrap(m); } },
+    { k: 'signpost_arrows', name: 'Signpost (arrows)', cat: 'Town', icon: '🪧', solid: 0.2, build: (e) => fromEnv(e, (f, p) => f.signpost(p, 0, 0, 0)) },
+    { k: 'cave_torch', name: 'Cave torch', cat: 'Props', icon: '🔥', solid: 0.15, light: { color: '#ffb366', intensity: 1.6, range: 16, y: 2.6 }, lightIf: (o) => !o.opts || o.opts.light !== false,
+      build: (e) => fromEnv(e, (f, p) => f.caveTorch(p, 0, 0, 0, {})) },
+    { k: 'glow_crystal', name: 'Glowing crystal', cat: 'Props', icon: '🔮', solid: 0, colors: [['#7fe8ff', 'Cyan'], ['#b98cff', 'Violet'], ['#ff9ad6', 'Pink'], ['#ffd84a', 'Gold']],
+      build: (e, o) => { const m = new THREE.Mesh(U.mergeParts([[0, 0.35, 0, 0.1, 0.4, 0.05, 0.3], [0.32, 0.25, 0.15, 0.4, 2.1, 0.3, 0.22], [-0.25, 0.22, -0.2, 0.3, 4, 0.5, 0.2]].map(([x, y, z, rx, ry, rz, s]) =>
+        ({ geo: new THREE.OctahedronGeometry(1, 0), color: '#ffffff', pos: [x, y + s * 1.2, z], rot: [rx, ry, rz], scale: [s * 0.55, s * 1.6, s * 0.55] }))), G.Environment.glowMaterial(col(o, '#7fe8ff'))); return wrap(m); } },
+    { k: 'bone', name: 'Bone', cat: 'Props', icon: '🦴', solid: 0, build: (e) => prim([{ geo: new THREE.CylinderGeometry(0.05, 0.05, 0.7, 5), color: '#efe6d2', pos: [0, 0.06, 0], rot: [Math.PI / 2, 0, 0.4] }], e.propMat) },
   ];
   /* Original props: recorded while a map is built, so they can be turned into
      editable objects; once a map's originals are "taken over", they're skipped
      here and come back as editor objects instead. */
-  const REC = { house: 'house', fountain: 'fountain', stall: 'stall_blue', lamp: 'lamp', bench: 'bench', planter: 'planter', barrel: 'barrel', crate: 'crate', noticeBoard: 'board', gate: 'gate', palisade: 'spike_wall' };
-  // Batched decorations (rocks, boulders, bushes, mushrooms, stalagmites...) are captured
-  // item by item while these builders run; grass tufts and small flowers stay as ground cover.
+  const REC = { house: 'house', fountain: 'fountain', stall: 'stall_blue', lamp: 'lamp', bench: 'bench', planter: 'planter', barrel: 'barrel', crate: 'crate', noticeBoard: 'board', gate: 'gate', palisade: 'spike_wall',
+    signpost: 'signpost_arrows', caveTorch: 'cave_torch' };
+  // Which take-over step makes each recorded kind editable: 1 houses, trees and props; 2 the gate and
+  // spike wall; 'more' the bridge signpost and cave torches (added in v0.37).
+  const REC_STEP = { gate: 2, palisade: 2, signpost: 'more', caveTorch: 'more' };
+  // Batched decorations (rocks, bushes, mushrooms, stalagmites, logs, pond plants, giant mushrooms,
+  // cave crystals and floor bits) are captured item by item while these builders run. Grass tufts and
+  // small flowers stay ground cover (thousands per map), edited with the map editor's grass brush.
   const CAPTURE = ['buildField', 'buildCave', 'giantMushrooms', 'pondDetails'];
   if (G.Environment) {
     const P = G.Environment.prototype, inst = P.instanced;
     P.instanced = function (geo, mat, list, opts) {
-      if (this._capCtx && !this._lib && (mat === this.propMat || mat === this.foliageMat) && list.length && list.length <= 800) {
-        const key = this._capCtx + '#' + (this._capN = (this._capN || 0) + 1);
-        (this.captured || (this.captured = {}))[key] = { geo, mat, n: geo.attributes.position.count };
-        (this.capturedItems || (this.capturedItems = [])).push(...list.map((it) => ({ key, x: it.x, z: it.z, ry: it.ry || 0, s: Array.isArray(it.s) ? it.s[1] : (it.s || 1) })));
-        if (this.map && this.map.takeover >= 2) return null;
+      opts = opts || {};
+      // The first kinds were numbered in build order; kinds added later have their own names (opts.key).
+      const named = !!opts.key, old = !named && (mat === this.propMat || mat === this.foliageMat) && list.length <= 800;
+      if (this._capCtx && !this._lib && list.length && (named || old)) {
+        const key = named ? this._capCtx + ':' + opts.key : this._capCtx + '#' + (this._capN = (this._capN || 0) + 1);
+        (this.captured || (this.captured = {}))[key] = { geo, mat, n: geo.attributes.position.count, name: opts.name, cast: !!opts.cast };
+        (this.capturedItems || (this.capturedItems = [])).push(...list.map((it) => ({ key, x: it.x, y: it.y, z: it.z, rx: it.rx || 0, ry: it.ry || 0, rz: it.rz || 0,
+          s: Array.isArray(it.s) ? it.s : [it.s || 1, it.s || 1, it.s || 1], color: it.color, block: it.block || 0, rect: it.rect })));
+        if (this.map && this.taken(named ? 'more' : 'legacy')) return null;
       }
       return inst.call(this, geo, mat, list, opts);
     };
@@ -307,8 +357,8 @@
     G.Environment.prototype[fn] = function (...a) {
       if (this._lib || this._inRec) return orig.apply(this, a);
       (this.recorded || (this.recorded = [])).push({ fn, a: fn === 'treeAt' ? a.slice(0, 4) : a.slice(1) });
-      const v2only = fn === 'gate' || fn === 'palisade';
-      if (this.map && this.map.takeover && (!v2only || this.map.takeover >= 2)) return fn === 'treeAt' ? true : undefined;
+      const step = REC_STEP[fn] || 1, map = this.map;
+      if (map && (step === 'more' ? map.takeMore : map.takeover >= step)) return fn === 'treeAt' ? true : undefined;
       this._inRec = true;
       try { return orig.apply(this, a); } finally { this._inRec = false; }
     };
@@ -478,12 +528,12 @@
       g.travel(g.mapId, p.x, p.z, true);
     },
     // Everything a built-in map came with, as editor objects and entities.
-    originals(game, onlyNew) {
-      const base = G.Maps[game.mapId], out = { objects: [], entities: [] };
-      const NEW = { gate: 1, palisade: 1 };
+    originals(game) {
+      const base = G.Maps[game.mapId], map = game.map || {}, out = { objects: [], entities: [] };
+      const done = (step) => (step === 'more' ? !!map.takeMore : (map.takeover || 0) >= step);
       const u = () => Math.random().toString(36).slice(2, 9), r2 = (v) => Math.round(v * 100) / 100;
       for (const r of game.env.recorded || []) {
-        if (onlyNew && !NEW[r.fn]) continue;
+        if (done(REC_STEP[r.fn] || 1)) continue;
         if (r.fn === 'treeAt') {
           const [kind, x, z, sc] = r.a;
           out.objects.push({ u: u(), k: { round: 'tree', pine: 'pine', blossom: 'blossom' }[kind] || 'tree', x: r2(x), z: r2(z), y: 0, ry: 0, s: r2(sc || 1) });
@@ -512,11 +562,12 @@
         const o = { u: u(), k: REC[r.fn], x: r2(x), z: r2(z), y: 0, ry: typeof rot === 'number' ? r2(rot) : 0, s: 1 };
         if (r.fn === 'house' && extra) o.opts = { w: extra.w, d: extra.d, h: extra.h, wall: extra.wall, roof: extra.roof, trim: extra.trim };
         if (r.fn === 'stall' && Array.isArray(extra)) o.opts = extra.slice(0, 2);
+        if (r.fn === 'caveTorch' && extra) o.opts = { light: !!extra.light };
         out.objects.push(o);
       }
-      for (const it of game.env.capturedItems || []) out.objects.push({ u: u(), k: 'cap:' + it.key, x: r2(it.x), z: r2(it.z), y: 0, ry: r2(it.ry), s: r2(it.s) });
-      if (base.bridge && G.Terrain.BRIDGE_Z > -9000) out.objects.push({ u: u(), k: 'bridge_wood', x: C.BRIDGE.x, z: r2(G.Terrain.BRIDGE_Z), y: 0, ry: 0, s: 1 });
-      if (onlyNew) return out;
+      for (const it of game.env.capturedItems || []) if (!done(it.key.includes(':') ? 'more' : 2)) out.objects.push(Object.assign({ u: u(), k: 'cap:' + it.key }, capLook(it)));
+      if (!done(2) && base.bridge && G.Terrain.BRIDGE_Z > -9000) out.objects.push({ u: u(), k: 'bridge_wood', x: C.BRIDGE.x, z: r2(G.Terrain.BRIDGE_Z), y: 0, ry: 0, s: 1 });
+      if (map.takeover) return out;   // spawns, warps and NPCs were taken over the first time
       for (const sp of base.spawns || []) out.entities.push({ u: u(), type: 'spawn', monster: sp.type, x: sp.x, z: sp.z, y: 0, ry: 0, r: sp.r || 0.5, count: sp.count || 1 });
       for (const pt of base.portals || []) out.entities.push({ u: u(), type: 'warp', to: pt.to, tx: pt.tx, tz: pt.tz, label: pt.label || '', x: pt.x, z: pt.z, y: 0, ry: 0 });
       for (const id of base.npcs || []) {
@@ -546,6 +597,9 @@
       map.takeover = d.takeover === true ? 1 : (d.takeover || 0);
       if (map.takeover >= 2) map.bridge = false;   // the bridge is an editor object now
       if (map.takeover >= 3) map.noPaths = true;   // paths, plaza and streets are paint now
+      map.takeMore = !!d.more;                     // logs, pond plants, signpost, giant mushrooms, cave pieces (v0.37)
+      map.hadBridge = !!base.bridge;               // its signpost stays even when the bridge is an editor object
+      if (d.cover && d.cover.length) map.cover = d.cover;   // grass brush strokes
       map.decks = d.objects.map((o) => { const def = LIB.find((l) => l.k === o.k); if (!def || !def.deck) return null;
         const sc = o.s || 1; return { x: o.x, z: o.z, ry: o.ry || 0, hw: def.deck.hw * sc, hl: def.deck.hl * sc, top: def.deck.top * sc, y: o.y || 0 }; }).filter(Boolean);
       map.portals = (d.takeover ? [] : base.portals || []).concat(d.entities.filter((e) => e.type === 'warp' && G.Maps[e.to]).map((e) => ({ x: e.x, z: e.z, to: e.to, tx: +e.tx || 0, tz: +e.tz || 0, label: e.label || (G.Maps[e.to] || {}).name, invisible: e.style === 'door' })));
@@ -604,6 +658,7 @@
       this.clearFx();
       this.objects = []; this.lights = [];
       if (!d) return;
+      this.repairCaps(game, d);
       this.group = new THREE.Group(); game.mapRoot.add(this.group);
       for (const o of d.objects) this.spawnObject(game, o, true);
       for (const e of d.entities) if (e.type === 'light') this.spawnLight(game, e);
@@ -626,8 +681,10 @@
       this.group.updateMatrixWorld(true);
       const groups = new Map();
       for (const g of this.objects || []) {
-        const ms = []; g.traverse((o) => { if (o.isMesh && !o.isInstancedMesh) ms.push(o); });
-        if (ms.length !== 1) continue;
+        // Only plain one-mesh objects (a torch's flame sprite would be hidden with it).
+        const ms = []; let other = false;
+        g.traverse((o) => { if (o.isMesh && (!o.isInstancedMesh || o.userData.cap)) ms.push(o); else if (o.isSprite || o.isPoints || o.isLine) other = true; });
+        if (ms.length !== 1 || other) continue;
         const m = ms[0], key = m.geometry.uuid + '|' + (Array.isArray(m.material) ? 'multi' : m.material.uuid);
         if (Array.isArray(m.material)) continue;
         if (!groups.has(key)) groups.set(key, { m, list: [] });
@@ -636,9 +693,13 @@
       this.batches = [];
       for (const { m, list } of groups.values()) {
         if (list.length < 4) continue;
-        const im = new THREE.InstancedMesh(m.geometry, m.material, list.length);
-        list.forEach(({ g, m: mm }, i) => { im.setMatrixAt(i, mm.matrixWorld); g.visible = false; });
-        im.castShadow = m.castShadow; im.receiveShadow = true; im.instanceMatrix.needsUpdate = true;
+        const im = new THREE.InstancedMesh(m.geometry, m.material, list.length), col = new THREE.Color();
+        list.forEach(({ g, m: mm }, i) => {
+          im.setMatrixAt(i, mm.matrixWorld); g.visible = false;
+          if (mm.isInstancedMesh && mm.instanceColor) mm.getColorAt(0, col); else col.set('#ffffff');
+          im.setColorAt(i, col);
+        });
+        im.castShadow = m.castShadow; im.receiveShadow = true; im.instanceMatrix.needsUpdate = true; im.instanceColor.needsUpdate = true;
         this.group.add(im); this.batches.push({ im, list });
       }
     },
@@ -653,7 +714,7 @@
         this.loadModel(id).then((m) => { holder.add(m.clone()); }).catch((e) => console.warn('Model', id, e.message));
       } else if (o.k.startsWith('cap:')) {
         const c = game.env.captured && game.env.captured[o.k.slice(4)];
-        if (c) { const m = new THREE.Mesh(c.geo, c.mat); m.castShadow = true; m.receiveShadow = true; holder.add(m); }
+        if (c) holder.add(capMesh(c.geo, c.mat, o, c.cast));
       } else {
         // Each kind of object is built once per map and shared by all its copies.
         const key = o.k + (o.opts ? JSON.stringify(o.opts) : '');
@@ -664,6 +725,20 @@
       }
       return holder;
     },
+    // Pieces converted before v0.37 lost their colour and shape (which made rocks look dark). Give each
+    // one the colour, stretch and blocking of an original piece of the same kind and a similar size.
+    repairCaps(game, d) {
+      const items = game.env.capturedItems || [];
+      for (const o of d.objects) {
+        if (!o.k.startsWith('cap:') || o.c) continue;
+        const key = o.k.slice(4), size = o.s || 1;
+        const near = items.filter((x) => x.key === key).sort((a, b) => Math.abs(a.s[1] - size) - Math.abs(b.s[1] - size)).slice(0, 5);
+        const hash = [...String(o.u)].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) >>> 0, 7);
+        const it = near[hash % (near.length || 1)];
+        const look = it ? capLook(it) : { c: '#ffffff', solid: o.solid != null ? o.solid : 0.4 };
+        for (const k of ['c', 'st', 'tilt', 'solid', 'rect']) if (look[k] != null && o[k] == null) o[k] = look[k];
+      }
+    },
     spawnObject(game, o, block) {
       const g = this.makeObject(game, o);
       g.userData.obj = o;
@@ -673,6 +748,7 @@
       const def = LIB.find((l) => l.k === o.k);
       const solid = o.solid != null ? o.solid : (def ? def.solid : (o.k.startsWith('cap:') ? 0.4 : 0));
       if (block && solid > 0) game.nav.blockCircle(o.x, o.z, solid * (o.s || 1));
+      if (block && o.rect) game.nav.blockRect(o.x, o.z, o.rect[0] * (o.s || 1), o.rect[1] * (o.s || 1), o.ry || 0);
       if (block && def && def.rect) { const [hw, hd] = typeof def.rect === 'function' ? def.rect(o) : def.rect; game.nav.blockRect(o.x, o.z, hw * (o.s || 1), hd * (o.s || 1), o.ry || 0); }
       if (block && def && def.deck && def.rails) {
         // Railings along both sides of a bridge.
@@ -680,7 +756,7 @@
         for (const sx of [-1, 1]) { const px = sx * hw * c, pz = -sx * hw * sn, ax = hl * sn, az = hl * c;
           game.nav.blockSegment(o.x + px - ax, o.z + pz - az, o.x + px + ax, o.z + pz + az, 0.25); }
       }
-      if (def && def.light) this.spawnLight(game, Object.assign({ x: o.x, z: o.z, y: (o.y || 0) + 1.9, u: o.u + '_l', fromObject: true }, def.light));
+      if (def && def.light && (!def.lightIf || def.lightIf(o))) this.spawnLight(game, Object.assign({ x: o.x, z: o.z, y: (o.y || 0) + 1.9, u: o.u + '_l', fromObject: true }, def.light));
       return g;
     },
     place(g, o) {
