@@ -289,6 +289,7 @@
       this.cursor = p;
       if (this.tab === 'ground') {
         this.showBrush(p);
+        if (this.brush.tool.startsWith('walk_')) this.showWalk(p); else this.hideWalk();
         if (this.sculpting && Date.now() - this.lastSculpt > 35) { this.lastSculpt = Date.now(); this.sculptAt(p); }
         return;
       }
@@ -342,7 +343,42 @@
       }
       this.dirty = true;
     },
+    // Walkability paint: blocked or walkable cells, applied straight away.
+    walkAt(p) {
+      const d = this.data, R = this.brush.size, tool = this.brush.tool;
+      d.walk = d.walk || { d: {} };
+      for (let x = Math.floor(p.x - R); x <= Math.ceil(p.x + R); x++) for (let z = Math.floor(p.z - R); z <= Math.ceil(p.z + R); z++) {
+        if (Math.hypot(x + 0.5 - p.x, z + 0.5 - p.z) > R) continue;
+        const key = x + ',' + z;
+        if (tool === 'walk_clear') { delete d.walk.d[key]; continue; }
+        const v = tool === 'walk_block' ? 1 : 2;
+        d.walk.d[key] = v; CM().setWalkCell(this.game.nav, x, z, v);
+      }
+      this.dirty = true; this.showWalk(p, true);
+    },
+    // Red tiles: ground nobody can walk on (around the cursor).
+    showWalk(p, force) {
+      const now = Date.now(); if (!force && now - (this.walkT || 0) < 300) return; this.walkT = now;
+      const nav = this.game.nav, R = 18, cell = nav.cell, max = Math.ceil((2 * R) / cell) ** 2;
+      if (!this.walkMesh || this.walkMesh.count0 < max) {
+        if (this.walkMesh) this.walkMesh.removeFromParent();
+        const geo = new THREE.PlaneGeometry(cell * 0.92, cell * 0.92); geo.rotateX(-Math.PI / 2);
+        this.walkMesh = new THREE.InstancedMesh(geo, new THREE.MeshBasicMaterial({ color: 0xff3b3b, transparent: true, opacity: 0.38, depthWrite: false }), max);
+        this.walkMesh.count0 = max; this.walkMesh.renderOrder = 15; this.walkMesh.frustumCulled = false;
+      }
+      if (!this.walkMesh.parent) this.game.scene.add(this.walkMesh);
+      const m = new THREE.Matrix4(); let n = 0;
+      for (let cz = nav.toCell(p.z - R); cz <= nav.toCell(p.z + R); cz++) for (let cx = nav.toCell(p.x - R); cx <= nav.toCell(p.x + R); cx++) {
+        if (!nav.inBounds(cx, cz) || !nav.blocked[nav.idx(cx, cz)]) continue;
+        const x = nav.center(cx), z = nav.center(cz);
+        m.makeTranslation(x, G.Terrain.surfaceHeight(x, z) + 0.12, z); this.walkMesh.setMatrixAt(n++, m);
+      }
+      this.walkMesh.count = n; this.walkMesh.instanceMatrix.needsUpdate = true;
+    },
+    hideWalk() { if (this.walkMesh) this.walkMesh.removeFromParent(); },
+    rebuildFx() { CM().clearFx(); if (!CM().group) return; for (const e of this.data.entities) if (e.type === 'fx') CM().spawnFx(this.game, e); },
     sculptAt(p) {
+      if (this.brush.tool.startsWith('walk_')) return this.walkAt(p);
       if (this.brush.tool === 'scatter') return this.scatterAt(p);
       if (this.brush.tool === 'paint' || this.brush.tool === 'erase') return this.paintAt(p);
       const d = this.data, TR = G.Terrain;
@@ -375,7 +411,8 @@
       this.rebuildMarkers(); this.render();
     },
     renderGround(body) {
-      const tools = [['raise', '⬆️', 'Raise'], ['lower', '⬇️', 'Lower'], ['smooth', '〰️', 'Smooth'], ['flatten', '▭', 'Flatten'], ['paint', '🖌️', 'Paint'], ['erase', '🧽', 'Erase paint'], ['scatter', '🌲', 'Scatter']];
+      const tools = [['raise', '⬆️', 'Raise'], ['lower', '⬇️', 'Lower'], ['smooth', '〰️', 'Smooth'], ['flatten', '▭', 'Flatten'], ['paint', '🖌️', 'Paint'], ['erase', '🧽', 'Erase paint'], ['scatter', '🌲', 'Scatter'],
+        ['walk_block', '⛔', 'Block walking'], ['walk_open', '✅', 'Allow walking'], ['walk_clear', '↩️', 'Clear walk paint']];
       body.append(h('h4', { text: 'Shape and paint' }), h('div.ed-grid', null, ...tools.map(([id, ic, name]) => this.paletteBtn(name, ic, this.brush.tool === id, () => { this.brush.tool = id; this.render(); }))));
       if (this.brush.tool === 'scatter') {
         const S = this.scatter, pick = CM().LIB.filter((l) => ['Nature', 'Trees', 'Flowers', 'Props'].includes(l.cat) && !l.deck);
@@ -421,6 +458,7 @@
         if (sp.type === 'start') this.data.entities = this.data.entities.filter((x) => x.type !== 'start');
         this.data.entities.push(e);
         if (e.type === 'light') CM().spawnLight(this.game, e);
+        if (e.type === 'fx') this.rebuildFx();
         this.rebuildMarkers(); this.select({ kind: 'entity', item: e }, true);
       }
       this.changed();
@@ -447,6 +485,7 @@
     applySel() {
       const s = this.sel; if (!s) return;
       if (s.kind === 'object') { const g = this.objFor(s); if (g) CM().place(g, s.item); }
+      else if (s.item.type === 'fx') { this.rebuildFx(); this.rebuildMarkers(); }
       else {
         if (s.item.type === 'npcref' || s.item.type === 'npc') {
           const id = s.item.type === 'npcref' ? s.item.ref : 'custom_' + s.item.u;
@@ -544,7 +583,7 @@
         pole.position.y = 1.1; g.add(pole);
         const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.28, 12, 8), new THREE.MeshBasicMaterial({ color: e.type === 'light' ? (e.color || def.color) : def.color }));
         bulb.position.y = e.type === 'light' ? (+e.y || 2.5) : 2.3; g.add(bulb);
-        const text = e.type === 'warp' ? `Warp → ${(G.Maps[e.to] || {}).name || e.to}` : e.type === 'spawn' ? `${(G.Config.MONSTERS[e.monster] || {}).name || e.monster} ×${e.count}` : (e.type === 'npc' || e.type === 'npcref') ? e.name : def.name;
+        const text = e.type === 'warp' ? `Warp → ${(G.Maps[e.to] || {}).name || e.to}` : e.type === 'spawn' ? `${(G.Config.MONSTERS[e.monster] || {}).name || e.monster} ×${e.count}` : (e.type === 'npc' || e.type === 'npcref') ? e.name : e.type === 'fx' ? '✨ ' + String(e.effect).replace('sound_', 'sound: ') : def.name;
         const lab = this.label(text, def.color); lab.position.y = 3.1; g.add(lab);
         if (e.type === 'npc' || e.type === 'npcref') {
           // An arrow on the ground pointing where the NPC looks.
@@ -676,6 +715,7 @@
           h('button.btn.small.ghost', { type: 'button', title: 'Play the map as a normal player (Ctrl+P)', onclick: () => this.testPlay() }, '▶ Test play')));
       const tabs = [['place', 'Objects'], ['entities', 'Entities'], ['ground', 'Ground'], ['selected', 'Selected'], ['map', 'Map']];
       if (this.tab !== 'ground' && this.brushRing) this.brushRing.removeFromParent();
+      if (this.tab !== 'ground' || !this.brush.tool.startsWith('walk_')) this.hideWalk();
       b.append(h('div.ed-tabs', { role: 'tablist' }, ...tabs.map(([id, t]) => h('button.ed-tab' + (this.tab === id ? '.on' : ''), { type: 'button', role: 'tab', 'aria-selected': String(this.tab === id), onclick: () => { this.tab = id; this.render(); } }, t))));
       const body = h('div.ed-body'); b.append(body);
       if (this.tab === 'place') this.renderPlace(body);
@@ -768,6 +808,13 @@
       } else if (it.type === 'spawn') {
         const mons = Object.entries(G.Config.MONSTERS).sort((a, b) => a[1].level - b[1].level).map(([id, m]) => [id, `${m.name} (lv ${m.level})`]);
         body.append(this.field('Monster', it.monster, set('monster'), { options: mons }), h('div.ed-xyz', null, this.field('How many', it.count, set('count', 1), { type: 'number' }), this.field('Area radius', it.r, set('r', 1), { type: 'number' })));
+      } else if (it.type === 'fx') {
+        const names = { fire: 'Fire', smoke: 'Smoke', fireflies: 'Fireflies', sparkles: 'Sparkles', leaves: 'Falling leaves', fog: 'Ground fog', snow: 'Snowfall',
+          sound_water: 'Sound: water', sound_wind: 'Sound: wind', sound_fire: 'Sound: fire crackle', sound_birds: 'Sound: birds' };
+        const fxset = (k, num) => (v) => { this.snapshot(); it[k] = num ? Number(v) : v; this.rebuildFx(); this.rebuildMarkers(); this.dirty = true; this.render(); };
+        body.append(this.field('Effect', it.effect, fxset('effect'), { options: CM().FX.map((f) => [f, names[f] || f]) }),
+          h('div.ed-xyz', null, this.field('Size', it.size || 1, fxset('size', 1), { type: 'number', step: '0.1' })),
+          h('p.hint', { text: 'Sounds get louder as players come closer (reach grows with Size).' }));
       } else if (it.type === 'npcref') {
         body.append(h('p.hint', { text: `${it.name} is one of the map’s own NPCs: move, turn or delete them here; their shop, quests and dialog stay the same.` }));
       } else if (it.type === 'npc') {
@@ -801,6 +848,29 @@
         body.append(h('h4', { text: 'Paths and streets' }), h('p.hint', { text: 'Turn this map’s dirt paths, plaza and streets into ground paint, so you can erase, move or extend them with the Paint tool. This saves and reloads the map.' }),
           h('button.btn.small', { type: 'button', onclick: () => this.bakePaths() }, 'Make paths and streets paintable'));
       } else if (d.takeover) body.append(h('p.hint', { text: 'Everything on this map is editable: objects, paths and streets (as paint).' }));
+      // Atmosphere and music.
+      const at = d.atmo || (d.atmo = { preset: 'day', custom: {} });
+      const applyAtmo = () => {
+        const g = this.game; g.map.atmosphere = Object.assign({}, CM().ATMOS[at.preset] || CM().DAY, at.custom || {});
+        g.applyAtmosphere(g.map); this.changed();
+      };
+      const presets = [['day', '☀️ Day'], ['dusk', '🌇 Dusk'], ['night', '🌙 Night'], ['misty', '🌫️ Misty'], ['spooky', '👻 Spooky'], ['cave', '🕳️ Dark cave']];
+      const cur = Object.assign({}, CM().ATMOS[at.preset] || CM().DAY, at.custom || {});
+      body.append(h('h4', { text: 'Atmosphere' }), h('div.ed-snap', null, ...presets.map(([id, t]) => h('button.ed-snapbtn' + (at.preset === id ? '.on' : ''), { type: 'button', onclick: () => { this.snapshot(); at.preset = id; at.custom = {}; applyAtmo(); } }, t))),
+        h('div.ed-xyz', null,
+          this.field('Fog colour', cur.fog, (v) => { this.snapshot(); at.custom.fog = v; applyAtmo(); }, { type: 'color' }),
+          this.field('Fog starts', cur.near, (v) => { this.snapshot(); at.custom.near = Number(v); applyAtmo(); }, { type: 'number' }),
+          this.field('Fog ends', cur.far, (v) => { this.snapshot(); at.custom.far = Number(v); applyAtmo(); }, { type: 'number' })),
+        h('div.ed-xyz', null,
+          this.field('Sunlight', cur.sun, (v) => { this.snapshot(); at.custom.sun = Number(v); applyAtmo(); }, { type: 'number', step: '0.05' }),
+          this.field('Sky light', cur.hemi, (v) => { this.snapshot(); at.custom.hemi = Number(v); applyAtmo(); }, { type: 'number', step: '0.05' }),
+          this.field('Music', d.music || '', (v) => { this.snapshot(); d.music = v || undefined; this.game.map.music = d.music; this.changed(); },
+            { options: [['', 'Automatic'], ['town', 'Town'], ['meadow', 'Meadow'], ['forest', 'Forest'], ['dungeon', 'Dungeon']] })),
+        h('p.hint', { text: 'Fog, light and music change right away; the sky colours change after saving.' }));
+      // Map rules.
+      const rules = d.rules || (d.rules = {});
+      const rule = (key, label) => { const cb = h('input', { type: 'checkbox', checked: !!rules[key], onchange: (e) => { this.snapshot(); rules[key] = e.target.checked; this.changed(); } }); return h('label.ed-rule', null, cb, h('span', { text: label })); };
+      body.append(h('h4', { text: 'Map rules' }), rule('noTeleport', 'No teleporting (Teleport skill, Fly Wings)'), rule('noDrop', 'No dropping items on the ground'), rule('peaceful', 'Peaceful: monsters never attack first'));
       const imp = h('input', { type: 'file', accept: '.json,application/json', hidden: true });
       imp.addEventListener('change', () => { const f = imp.files[0]; if (f) this.importMap(f); imp.value = ''; });
       body.append(h('h4', { text: 'Backups' }), h('div.opt-btns', null,

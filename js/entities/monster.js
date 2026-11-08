@@ -236,7 +236,7 @@
       const nav = this.game.nav;
 
       // Aggressive monsters attack anyone who wanders close (unless hidden or playing dead).
-      if (def.aggressive && (this.state === 'idle' || this.state === 'wander') && player && player.alive && !player.hidden && !player.playingDead && !player.cloaked
+      if (def.aggressive && !(G.CustomMaps && G.CustomMaps.rule('peaceful')) && (this.state === 'idle' || this.state === 'wander') && player && player.alive && !player.hidden && !player.playingDead && !player.cloaked
           && !(player.derived.extra && player.derived.extra.gangster && !player.moving && !player.attacking)
           && this.distanceTo(player) < (def.aggroRange || 7)) {
         this.aggroOn(player);

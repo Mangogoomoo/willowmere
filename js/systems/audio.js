@@ -192,7 +192,8 @@
       if (!game.player) return;
       this.listener = game.player.position;
       const p = game.player.position, C = G.Config;
-      const theme = game.map.cave ? 'dungeon' : game.mapId === 'forest' ? 'forest'
+      // A map can choose its own music in the map editor.
+      const theme = (game.map.music && THEMES[game.map.music]) ? game.map.music : game.map.cave ? 'dungeon' : game.mapId === 'forest' ? 'forest'
         : (game.map.town && Math.hypot(p.x - C.TOWN.cx, p.z - C.TOWN.cz) < C.TOWN.radius + 4) ? 'town' : 'meadow';
       this.setTheme(theme);
     }

@@ -179,6 +179,7 @@
     },
     elemental_change(sys, lv, t) { t.elementOverride = 'earth'; const at = t.position.clone(); at.y += t.def.height; sys.game.overlay.addText(at, 'Earth!', 'debuff'); },
     teleportation(sys, lv) {
+      if (G.CustomMaps && G.CustomMaps.rule('noTeleport')) { sys.game.log.add('You can’t teleport on this map.', 'warn'); return false; }
       const game = sys.game, p = sys.player;
       const random = () => {
         for (let i = 0; i < 300; i++) {

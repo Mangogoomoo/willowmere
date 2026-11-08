@@ -37,6 +37,7 @@
         e.preventDefault();
         const { uid } = JSON.parse(data);
         if (this.game.windows.isOpen('storage')) { this.game.log.add('Close your storage before dropping items on the ground.', 'warn'); return; }
+        if (G.CustomMaps && G.CustomMaps.rule('noDrop')) { this.game.log.add('You can’t drop items on this map.', 'warn'); return; }
         const entry = this.game.player.inventory.find(uid);
         if (entry) this.game.inventoryWin.dropSelected(uid, entry.qty);
       });

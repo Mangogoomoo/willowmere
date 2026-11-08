@@ -423,6 +423,7 @@
       this.loot.update(dt, this.time);
       this.save.update(dt);
       this.env.update(dt, this.time);
+      G.CustomMaps.update(dt, this.time, this);   // map editor effects and sounds
       this.terrain.waterTex.offset.set(this.time * 0.012, this.time * 0.007);
       this.effects.ambient(dt, f, this.env.fountainPos, this.map);
       this.effects.update(dt, this.time);

@@ -790,3 +790,6 @@ body.editing #hotbar, body.editing #status, body.editing #debug, body.editing #b
 .ed-snapbtn.on { background: #fff4cc; border-color: #e0b84a; color: #1a2030; }
 .ed-back { position: fixed; top: 12px; left: 50%; transform: translateX(-50%); z-index: 45; padding: 8px 16px; border-radius: 10px; border: 0; background: #d9822b; color: #fff; font: 700 13px var(--font); cursor: pointer; box-shadow: var(--shadow); }
 .ed-back[hidden] { display: none; }
+
+.ed-rule { display: flex; gap: 8px; align-items: center; font-size: 12.5px; color: var(--ink); margin: 4px 0; cursor: pointer; }
+.ed-rule input { width: 16px; height: 16px; }

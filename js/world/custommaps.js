@@ -110,6 +110,13 @@
     for (const ch of g.children) { ch.position.y -= box.min.y; if (center) { ch.position.x -= c.x; ch.position.z -= c.z; } }
     return g;
   }
+  let waterMat = null;
+  function waterMesh(geo) {
+    if (!waterMat) waterMat = new THREE.MeshStandardMaterial({ color: '#2f6f9e', roughness: 0.12, metalness: 0.15, transparent: true, opacity: 0.86, depthWrite: false });
+    geo.rotateX(-Math.PI / 2); geo.translate(0, 0.06, 0);
+    const m = new THREE.Mesh(geo, waterMat); m.receiveShadow = true; m.renderOrder = 2;
+    return m;
+  }
   const wrap = (m) => { const g = new THREE.Group(); g.add(m); return g; };
   const tintMats = {};
   function tinted(env, kind, color) {
@@ -229,6 +236,9 @@
     { k: 'boardwalk', name: 'Boardwalk / dock', cat: 'Bridges', icon: '🛶', solid: 0, deck: { hw: 1.6, hl: 4, top: 0.4 }, rails: false, build: (e) => prim([
       ...Array.from({ length: 10 }, (_, i) => ({ geo: new THREE.BoxGeometry(3.2, 0.1, 0.75), color: i % 2 ? '#a77c55' : '#94704b', pos: [0, 0.35, -3.6 + i * 0.8] })),
       ...[-1, 1].flatMap((sx) => [-1, 0, 1].map((sz) => ({ geo: new THREE.CylinderGeometry(0.13, 0.15, 2, 6), color: '#6e4c30', pos: [sx * 1.45, -0.6, sz * 3.6] })))], e.propMat) },
+    { k: 'water_pond', name: 'Pond (water)', cat: 'Water', icon: '💧', solid: 3.7, build: () => waterMesh(new THREE.CircleGeometry(4, 40)) },
+    { k: 'water_pool', name: 'Pool (water)', cat: 'Water', icon: '🟦', solid: 0, rect: [4, 4], build: () => waterMesh(new THREE.PlaneGeometry(8, 8)) },
+    { k: 'water_stream', name: 'Stream piece', cat: 'Water', icon: '〰️', solid: 0, rect: [1.6, 4], build: () => waterMesh(new THREE.PlaneGeometry(3.2, 8)) },
     { k: 'stalagmite', name: 'Stalagmite', cat: 'Props', icon: '🗻', solid: 0.5, build: (e) => prim([{ geo: new THREE.ConeGeometry(0.6, 2.4, 7), color: '#8a7f70', pos: [0, 1.2, 0], jitter: 0.2 }], e.propMat) },
     // Props
     { k: 'barrel', name: 'Barrel', cat: 'Props', icon: '🛢️', solid: 0.4, build: (e) => fromEnv(e, (f, p) => f.barrel(p, 0, 0)) },
@@ -297,11 +307,125 @@
     { type: 'spawn', name: 'Monster spawn', icon: '👾', color: '#ff7a7a', defaults: { monster: 'poring', count: 5, r: 6 } },
     { type: 'npc', name: 'NPC', icon: '🧑', color: '#9cff8a', defaults: { name: 'Villager', title: '', costume: 'novice', hair: 'chestnut', style: 'short', lines: ['Hello there, traveller!'] } },
     { type: 'start', name: 'Player start', icon: '🚩', color: '#ffffff', defaults: {} },
+    { type: 'fx', name: 'Effect / sound', icon: '✨', color: '#ff9de2', defaults: { effect: 'fire', size: 1, y: 0 } },
     // A map's own NPCs once its originals are editable (they keep their shops, quests and dialog).
     { type: 'npcref', name: 'NPC (original)', icon: '🧑', color: '#c6f5a8', hidden: true, defaults: {} },
   ];
 
+  // Looks for a map: sky (top, middle, horizon), fog, light.
+  const ATMOS = {
+    day: null,
+    dusk: { sky: ['#3b2f5c', '#c96b4a', '#f2b27a'], fog: '#d9a07a', near: 40, far: 200, hemi: 0.45, sun: 0.85, ground: '#5a4a3a' },
+    night: { sky: ['#05070f', '#0d1530', '#1b2648'], fog: '#141c33', near: 25, far: 140, hemi: 0.3, sun: 0.32, ground: '#1c2430' },
+    spooky: { sky: ['#0b0a10', '#221d2e', '#3a3346'], fog: '#2a2533', near: 8, far: 70, hemi: 0.3, sun: 0.35, ground: '#2a2a2a' },
+    misty: { sky: ['#8fa6b8', '#c9d6dd', '#e4ebee'], fog: '#d8e1e4', near: 12, far: 110, hemi: 0.6, sun: 0.9, ground: '#6b8f45' },
+    cave: { sky: ['#020203', '#08080a', '#101014'], fog: '#0c0c10', near: 12, far: 60, hemi: 0.25, sun: 0.2, ground: '#202020' },
+  };
+  const DAY = { sky: ['#4a98e6', '#9fd0f4', '#dceef5'], fog: '#dceef5', near: 90, far: 300, hemi: 0.62, sun: 1.28, ground: '#6b8f45' };
+  const FX = ['fire', 'smoke', 'fireflies', 'sparkles', 'leaves', 'fog', 'snow', 'sound_water', 'sound_wind', 'sound_fire', 'sound_birds'];
+
+  /* Effects: small particle systems (and ambient sounds) for 'fx' entities. */
+  const glowTex = (() => { let t = null; return () => { if (t) return t; const c = document.createElement('canvas'); c.width = c.height = 64; const x = c.getContext('2d');
+    const g = x.createRadialGradient(32, 32, 0, 32, 32, 32); g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(0.4, 'rgba(255,255,255,0.5)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+    x.fillStyle = g; x.fillRect(0, 0, 64, 64); t = new THREE.CanvasTexture(c); return t; }; })();
+  const FXDEF = {
+    fire: { n: 40, color: '#ff8a2a', size: 0.55, add: true, life: [0.5, 1.1], vel: [0, 1.6, 0], spread: 0.35, light: '#ff9a4a' },
+    smoke: { n: 30, color: '#8a8580', size: 1.4, add: false, life: [2, 3.5], vel: [0, 0.9, 0], spread: 0.5, opacity: 0.35 },
+    fireflies: { n: 26, color: '#d9ff7a', size: 0.25, add: true, life: [3, 6], vel: [0, 0.1, 0], spread: 5, wander: 0.8, blink: true },
+    sparkles: { n: 30, color: '#ffffff', size: 0.22, add: true, life: [0.6, 1.5], vel: [0, 0.3, 0], spread: 1.6, blink: true },
+    leaves: { n: 24, color: '#d99a3a', size: 0.3, add: false, life: [4, 7], vel: [0.2, -0.6, 0.1], spread: 4, height: 5, wander: 0.6 },
+    fog: { n: 18, color: '#e8eef2', size: 4, add: false, life: [6, 10], vel: [0.25, 0, 0.1], spread: 6, opacity: 0.22, height: 0.6 },
+    snow: { n: 60, color: '#ffffff', size: 0.18, add: false, life: [5, 8], vel: [0.1, -0.7, 0.05], spread: 6, height: 8, wander: 0.3 },
+  };
+  function makeFx(e, group) {
+    const d = FXDEF[e.effect]; if (!d) return null;
+    const sz = +e.size || 1, n = d.n, pos = new Float32Array(n * 3), geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    const mat = new THREE.PointsMaterial({ color: d.color, size: d.size * sz, map: glowTex(), transparent: true, depthWrite: false, opacity: d.opacity || 0.9,
+      blending: d.add ? THREE.AdditiveBlending : THREE.NormalBlending, sizeAttenuation: true });
+    const pts = new THREE.Points(geo, mat); pts.frustumCulled = false;
+    const base = new THREE.Vector3(e.x, G.Terrain.surfaceHeight(e.x, e.z) + (+e.y || 0), e.z);
+    pts.position.copy(base); group.add(pts);
+    const ps = Array.from({ length: n }, () => ({ age: Math.random() * d.life[1], life: d.life[0], x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0 }));
+    const fx = { e, d, sz, pts, ps, pos };
+    if (d.light) { fx.light = new THREE.PointLight(d.light, 1.3 * sz, 9 * sz, 1.8); fx.light.position.copy(base).add(new THREE.Vector3(0, 0.8, 0)); group.add(fx.light); }
+    return fx;
+  }
+  function stepFx(fx, dt, t) {
+    const { d, sz, ps, pos } = fx;
+    for (let i = 0; i < ps.length; i++) {
+      const p = ps[i]; p.age += dt;
+      if (p.age > p.life) {
+        p.age = 0; p.life = d.life[0] + Math.random() * (d.life[1] - d.life[0]);
+        const a = Math.random() * Math.PI * 2, r = Math.sqrt(Math.random()) * d.spread * sz;
+        p.x = Math.cos(a) * r; p.z = Math.sin(a) * r; p.y = (d.height || 0) * Math.random() * sz;
+        p.vx = d.vel[0] * (0.5 + Math.random()); p.vy = d.vel[1] * (0.6 + Math.random() * 0.8) * sz; p.vz = d.vel[2] * (0.5 + Math.random());
+      }
+      if (d.wander) { p.vx += (Math.random() - 0.5) * d.wander * dt * 4; p.vz += (Math.random() - 0.5) * d.wander * dt * 4; }
+      p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt;
+      if (d.height && p.y < 0) p.age = p.life + 1;
+      pos[i * 3] = p.x; pos[i * 3 + 1] = p.y; pos[i * 3 + 2] = p.z;
+    }
+    fx.pts.geometry.attributes.position.needsUpdate = true;
+    if (d.blink) fx.pts.material.opacity = 0.6 + 0.35 * Math.sin(t * 6 + fx.e.x);
+    if (fx.light) fx.light.intensity = (1.1 + Math.sin(t * 13) * 0.15 + Math.sin(t * 7.3) * 0.12) * sz;
+  }
+  /* Ambient sounds: soft filtered noise (water, wind, fire) or birdsong, louder as you get close. */
+  function makeSound(e, game) {
+    const A = game.audio, ctx = A && A.ctx; if (!ctx) return null;
+    const kind = e.effect.slice(6), out = ctx.createGain(); out.gain.value = 0; out.connect(A.sfxGain || A.master || ctx.destination);
+    const s = { e, out, kind, range: 14 * (+e.size || 1) };
+    if (kind === 'birds') { s.next = 0; return s; }
+    const buf = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate), ch = buf.getChannelData(0);
+    let last = 0; for (let i = 0; i < ch.length; i++) { const w = Math.random() * 2 - 1; last = kind === 'water' ? (last + 0.02 * w) / 1.02 : w; ch[i] = kind === 'water' ? last * 3.5 : w; }
+    const src = ctx.createBufferSource(); src.buffer = buf; src.loop = true;
+    const f = ctx.createBiquadFilter(); f.type = kind === 'wind' ? 'bandpass' : 'lowpass'; f.frequency.value = kind === 'water' ? 900 : kind === 'wind' ? 500 : 2200; f.Q.value = kind === 'wind' ? 0.8 : 0.5;
+    src.connect(f); f.connect(out); src.start(); s.src = src; s.filter = f;
+    return s;
+  }
+  function stepSound(s, game, t) {
+    const A = game.audio, ctx = A.ctx, p = game.player.position;
+    const dist = Math.hypot(p.x - s.e.x, p.z - s.e.z), vol = Math.max(0, 1 - dist / s.range);
+    const k = { water: 0.35, wind: 0.25, fire: 0.18, birds: 0.18 }[s.kind] || 0.2;
+    s.out.gain.setTargetAtTime(vol * k, ctx.currentTime, 0.3);
+    if (s.kind === 'wind' && s.filter) s.filter.frequency.setTargetAtTime(400 + 250 * Math.sin(t * 0.4), ctx.currentTime, 0.5);
+    if (s.kind === 'fire' && s.filter && Math.random() < 0.08) s.out.gain.setValueAtTime(vol * k * 2.2, ctx.currentTime);
+    if (s.kind === 'birds' && vol > 0 && t > s.next) {
+      s.next = t + 1.2 + Math.random() * 3;
+      const o = ctx.createOscillator(), g = ctx.createGain(), f0 = 2200 + Math.random() * 1500, t0 = ctx.currentTime;
+      o.frequency.setValueAtTime(f0, t0); o.frequency.exponentialRampToValueAtTime(f0 * 1.4, t0 + 0.08); o.frequency.exponentialRampToValueAtTime(f0 * 0.9, t0 + 0.16);
+      g.gain.setValueAtTime(0, t0); g.gain.linearRampToValueAtTime(vol * k, t0 + 0.02); g.gain.linearRampToValueAtTime(0, t0 + 0.18);
+      o.connect(g); g.connect(s.out); s.out.gain.value = 1; o.start(t0); o.stop(t0 + 0.2);
+    }
+  }
+
   const CustomMaps = {
+    ATMOS, DAY, FX,
+    rule(name) { const g = this.game, d = g && this.data[g.mapId]; return !!(d && d.rules && d.rules[name]); },
+    // Effects and sounds tick every frame.
+    update(dt, t, game) {
+      this.game = game;
+      // Every couple of seconds: is this map missing its saved edits? (e.g. it was built for the title screen)
+      const now = performance.now();
+      if (now - (this.healAt || 0) > 2000) { this.healAt = now; this.healCurrent(); }
+      for (const fx of this.fx || []) stepFx(fx, dt, t);
+      if (game && game.player) for (const s of this.sounds || []) stepSound(s, game, t);
+    },
+    clearFx() { for (const s of this.sounds || []) { try { if (s.src) s.src.stop(); s.out.disconnect(); } catch (e) { /* ignore */ } } this.fx = []; this.sounds = []; },
+    spawnFx(game, e) {
+      if (e.effect && e.effect.startsWith('sound_')) { const s = makeSound(e, game); if (s) this.sounds.push(s); return; }
+      const fx = makeFx(e, this.group); if (fx) this.fx.push(fx);
+    },
+    // Painted walkability: 1 = blocked, 2 = walkable (applied on top of everything else).
+    applyWalk(game, d) {
+      const w = d && d.walk && d.walk.d; if (!w) return;
+      const nav = game.nav;
+      for (const [k, v] of Object.entries(w)) { const [x, z] = k.split(',').map(Number); this.setWalkCell(nav, x, z, v); }
+    },
+    setWalkCell(nav, x, z, v) {
+      const c0 = nav.toCell(x), c1 = nav.toCell(x + 0.999), r0 = nav.toCell(z), r1 = nav.toCell(z + 0.999);
+      for (let cz = r0; cz <= r1; cz++) for (let cx = c0; cx <= c1; cx++) if (nav.inBounds(cx, cz)) nav.blocked[nav.idx(cx, cz)] = v === 1 ? 1 : 0;
+    },
     LIB, ENTITIES, DEFAULT_BOUNDS, parseGLB,
     data: {},              // map id -> map data
     assets: [],            // uploaded models [{id, name, size}]
@@ -331,7 +455,7 @@
     },
     // If the map we're on was built before its saved edits arrived, rebuild it with them.
     healCurrent() {
-      const g = window.game;
+      const g = this.game;
       if (!g || !g.mapId || !g.player || g.traveling) return;
       if ((this.used || {})[g.mapId] === (this.data[g.mapId] || null)) return;
       if (G.MapEditor && G.MapEditor.dirty) return;
@@ -401,6 +525,8 @@
       if (d.bounds) { map.bounds = d.bounds; map.worldSize = this.worldSizeFor(d.bounds); C.WORLD_SIZE = map.worldSize; }
       if (d.ground) map.ground = d.ground;
       if (d.paint) map.paint = d.paint;
+      if (d.atmo) map.atmosphere = Object.assign({}, ATMOS[d.atmo.preset] || base.atmosphere || DAY, d.atmo.custom || {});
+      if (d.music) map.music = d.music;
       // Take-over 1: houses, trees and props; 2: also the gate, spike wall, bridge, rocks and bushes.
       map.takeover = d.takeover === true ? 1 : (d.takeover || 0);
       if (map.takeover >= 2) map.bridge = false;   // the bridge is an editor object now
@@ -432,19 +558,25 @@
     },
     // Objects, lights and the map's edges, after the map itself is built.
     build(game) {
+      this.game = game;
+      this.installRules();
       const d = this.data[game.mapId];
       if (this.group) { this.group.removeFromParent(); this.group = null; }
+      this.clearFx();
       this.objects = []; this.lights = [];
       if (!d) return;
       this.group = new THREE.Group(); game.mapRoot.add(this.group);
       for (const o of d.objects) this.spawnObject(game, o, true);
       for (const e of d.entities) if (e.type === 'light') this.spawnLight(game, e);
+      this.clearFx();
+      for (const e of d.entities) if (e.type === 'fx') this.spawnFx(game, e);
       // Anything outside the map's bounds can't be walked on.
       if (d.bounds) {
         const b = d.bounds, h = game.nav.size / 2;
         for (let x = -h; x < h; x += 1) for (let z = -h; z < h; z += 1)
           if (x < b.minX || x > b.maxX || z < b.minZ || z > b.maxZ) game.nav.blockCircle(x + 0.5, z + 0.5, 0.75);
       }
+      this.applyWalk(game, d);
     },
     makeObject(game, o) {
       const holder = new THREE.Group();
@@ -501,6 +633,17 @@
       if (!this.modelCache.has(id)) this.modelCache.set(id, fetch(`/api/assets/${id}`).then((r) => { if (!r.ok) throw new Error('missing'); return r.arrayBuffer(); }).then(parseGLB));
       return this.modelCache.get(id);
     },
+  };
+  // Map rule: no teleporting (Fly Wings too). Attached once the inventory exists.
+  CustomMaps.installRules = function () {
+    if (this.rulesOn || !G.Inventory || !G.Inventory.prototype.use) return;
+    this.rulesOn = true;
+    const use = G.Inventory.prototype.use;
+    G.Inventory.prototype.use = function (uid, ...a) {
+      const e = this.find && this.find(uid);
+      if (e && e.id === 'fly_wing' && CustomMaps.rule('noTeleport')) { if (CustomMaps.game) CustomMaps.game.log.add('You can’t teleport on this map.', 'warn'); return false; }
+      return use.call(this, uid, ...a);
+    };
   };
   G.CustomMaps = CustomMaps;
 })(window.G = window.G || {});

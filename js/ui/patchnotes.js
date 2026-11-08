@@ -6,6 +6,14 @@
   const h = G.h;
 
   const PATCHES = [
+    { v: '0.32', date: '2026-11-09T12:00', title: 'Map editor: atmosphere, effects, water, walkability and map rules', notes: [
+      'Atmosphere per map: Day, Dusk, Night, Misty, Spooky or Dark cave, with your own fog colour, fog distance and light — plus a music track per map.',
+      'Effects to place: fire (with flickering light), smoke, fireflies, sparkles, falling leaves, ground fog and snowfall, and ambient sounds (water, wind, fire crackle, birds) that get louder as you come closer.',
+      'Water to place: ponds, pools and stream pieces.',
+      'Walkability brush (Ground tab): block or allow walking anywhere; red tiles show ground nobody can walk on.',
+      'Map rules: no teleporting, no dropping items, and peaceful maps where monsters never attack first.',
+      'Fixed: a map you had edited could still show its old version after logging in (the title screen had already built it). The game now notices and rebuilds it within a couple of seconds.',
+    ] },
     { v: '0.31', date: '2026-11-08T22:00', title: 'Map editor: selection, copy/paste, scatter brush, backups', notes: [
       'Select several things: Shift+click adds or removes, Ctrl+drag selects a box. Arrow keys, Page Up/Down, Q/E (turns the group around its centre), Delete and Ctrl+D work on all of them.',
       'Copy and paste: Ctrl+C copies the selection, Ctrl+V pastes it at the cursor — on any map.',

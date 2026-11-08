@@ -106,6 +106,7 @@
       const p = game.player, e = p.inventory.find(uid);
       if (!e) return;
       if (game.windows.isOpen('storage')) { game.log.add('Close your storage before dropping items on the ground.', 'warn'); return; }
+      if (G.CustomMaps && G.CustomMaps.rule('noDrop')) { game.log.add('You can’t drop items on this map.', 'warn'); return; }
       const n = p.inventory.remove(uid, qty);
       game.loot.nextAttrs = { refine: e.refine || 0, cards: e.cards || [], forgedBy: e.forgedBy, element: e.element };
       game.loot.spawn(e.id, n, p.position.x, p.position.z);
