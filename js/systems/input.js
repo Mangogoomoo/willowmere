@@ -115,7 +115,7 @@
       const action = G.Keybinds.match(e);
       if (!action) return;
       e.preventDefault();
-      const hot = /^hot(\d)$/.exec(action);
+      const hot = /^hot(\d+)$/.exec(action);
       if (hot) { g.hotbar.trigger(parseInt(hot[1], 10) - 1); return; }
       switch (action) {
         case 'status': case 'inventory': case 'equipment': case 'skills': case 'quests': case 'worldmap': case 'options': case 'party': case 'guild':

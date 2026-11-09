@@ -146,8 +146,10 @@
       const side = (title, off, mine) => {
         const grid = h('div.trade-grid');
         for (const e of off.items) {
-          const cell = h('div.cell', { tabindex: '0', 'aria-label': `${G.Items.displayName(e)} ×${e.qty}` }, h('img', { src: G.Icons.url(e.id), alt: '' }), e.qty > 1 ? h('span.qty', { text: String(e.qty) }) : null, e.refine ? h('span.refbadge', { text: '+' + e.refine }) : null);
-          G.Tooltip.bind(cell, () => G.itemTooltip(e, p));
+          // Your own offer: right-click takes an item back out (until you lock the trade).
+          const back = mine && !off.locked ? (ev) => { ev.preventDefault(); G.Tooltip.hide(); G.Net.send({ t: 'trade_remove', uid: e.uid }); } : null;
+          const cell = h('div.cell', { tabindex: '0', 'aria-label': `${G.Items.displayName(e)} ×${e.qty}`, oncontextmenu: back || ((ev) => ev.preventDefault()) }, h('img', { src: G.Icons.url(e.id), alt: '' }), e.qty > 1 ? h('span.qty', { text: String(e.qty) }) : null, e.refine ? h('span.refbadge', { text: '+' + e.refine }) : null);
+          G.Tooltip.bind(cell, () => G.itemTooltip(e, p, back ? { hint: 'Right-click to take it back out of the trade.' } : undefined));
           grid.append(cell);
         }
         for (let k = off.items.length; k < 10; k++) grid.append(h('div.cell.empty'));

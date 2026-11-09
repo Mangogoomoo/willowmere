@@ -1,30 +1,38 @@
-/* Hotbar: nine shortcut slots (F1–F9, or 1–9). Drag an item from the
-   inventory onto a slot; press the key or click the slot to use it.
-   Right-click a slot to clear it. Slots store { type, id } so skills can
-   share the bar in Stage 3.
+/* Hotbar (action bar): up to four rows of nine shortcut slots. Row 1 uses
+   F1–F9 or 1–9; the other rows' keys are set in Key bindings. A hidden +
+   at the bar's right end (shown on hover) adds a row, and after four goes
+   back to one. Drag an item or skill onto a slot; press the key or click the
+   slot to use it. Right-click a slot to clear it. With the bar locked
+   (Options), moving or clearing slots needs Shift held.
 
    Log: the scrolling system message box (loot, level ups, warnings). */
 (function (G) {
   'use strict';
   const h = G.h;
+  const ROWS = 4, PER = 9, SLOTS = ROWS * PER;
 
   class Hotbar {
     constructor(game) {
       this.game = game;
-      this.slots = new Array(9).fill(null);
+      this.slots = new Array(SLOTS).fill(null);
       this.el = document.getElementById('hotbar');
-      this.cells = [];
-      for (let i = 0; i < 9; i++) {
+      this.cells = []; this.rowEls = [];
+      const prefs = G.SaveSystem.prefs();
+      this.rows = Math.max(1, Math.min(ROWS, prefs.hotbarRows || 1));
+      this.locked = !!prefs.hotbarLock;
+      for (let r = 0; r < ROWS; r++) { const row = h('div.hrow'); this.rowEls.push(row); this.el.append(row); }   // row 1 sits at the bottom
+      for (let i = 0; i < SLOTS; i++) {
         const cell = h('button.hslot', {
-          type: 'button', 'aria-label': `Hotbar slot ${i + 1}`,
+          type: 'button', 'aria-label': `Action bar ${Math.floor(i / PER) + 1}, slot ${(i % PER) + 1}`,
           onclick: () => this.trigger(i),
-          oncontextmenu: (e) => { e.preventDefault(); this.set(i, null); },
+          oncontextmenu: (e) => { e.preventDefault(); if (this.locked && !e.shiftKey) { this.lockHint(); return; } this.set(i, null); },
           ondragover: (e) => {
             const t = e.dataTransfer.types;
             if (t.includes('text/x-item') || t.includes('text/x-skill') || t.includes('text/x-hotslot')) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; cell.classList.add('over'); }
           },
           ondragstart: (e) => {
             if (!this.slots[i]) { e.preventDefault(); return; }
+            if (this.locked && !e.shiftKey) { e.preventDefault(); this.lockHint(); return; }
             e.dataTransfer.setData('text/x-hotslot', String(i));
             e.dataTransfer.effectAllowed = 'move';
             this.dragFrom = i; this.dropped = false;
@@ -63,17 +71,40 @@
         }, h('kbd'), h('span.cd'));
         G.Tooltip.bind(cell, () => this.tip(i));
         this.cells.push(cell);
-        this.el.append(cell);
+        this.rowEls[Math.floor(i / PER)].append(cell);
       }
+      this.more = h('button.hotbar-more', { type: 'button', onclick: () => this.cycleRows() });
+      this.el.append(this.more);
+      this.showRows();
+    }
+
+    // The hidden + : one more row (up to four), then back to one.
+    cycleRows() {
+      this.rows = this.rows >= ROWS ? 1 : this.rows + 1;
+      G.SaveSystem.setPrefs({ hotbarRows: this.rows });
+      this.showRows();
+    }
+    showRows() {
+      this.rowEls.forEach((r, i) => { r.hidden = i >= this.rows; });
+      const back = this.rows >= ROWS;
+      this.more.textContent = back ? '−' : '+';
+      this.more.title = back ? 'Back to one action bar row' : 'Add an action bar row';
+      this.more.setAttribute('aria-label', this.more.title);
+    }
+    setLocked(on) { this.locked = !!on; G.SaveSystem.setPrefs({ hotbarLock: this.locked }); }
+    lockHint() {
+      const now = Date.now();
+      if (now - (this.hintT || 0) > 4000) { this.hintT = now; this.game.log.add('The action bar is locked: hold Shift to move or remove things (Options).', 'info'); }
     }
 
     tip(i) {
       const s = this.slots[i];
       if (!s) return '<div class="tt-desc">Drag a potion, piece of gear or skill here.</div>';
       const p = this.game.player;
-      if (s.type === 'skill') return G.skillTooltip(G.Skills.get(s.id), p, this.slotLevel(s), true) + `<div class="tt-hint">${this.keyLabel(i)} to use at level ${this.slotLevel(s)}. Drag to another slot to move it, or off the bar to remove it. For another level, pick it in the skills window and drag the skill here again.</div>`;
+      const move = this.locked ? 'Hold Shift and drag to move it, or off the bar to remove it (the bar is locked).' : 'Drag to another slot to move it, or off the bar to remove it.';
+      if (s.type === 'skill') return G.skillTooltip(G.Skills.get(s.id), p, this.slotLevel(s), true) + `<div class="tt-hint">${this.keyLabel(i)} to use at level ${this.slotLevel(s)}. ${move} For another level, pick it in the skills window and drag the skill here again.</div>`;
       const have = p.inventory.count(s.id);
-      return G.itemTooltip({ id: s.id, qty: have }, p, { hint: `${this.keyLabel(i)} to use. Drag to another slot to move it, or off the bar to remove it.` });
+      return G.itemTooltip({ id: s.id, qty: have }, p, { hint: `${this.keyLabel(i)} to use. ${move}` });
     }
 
     // The level a skill slot casts at: its own, or the highest learned.
@@ -91,7 +122,7 @@
 
     trigger(i) {
       const s = this.slots[i], p = this.game.player;
-      if (!s || !p) return;
+      if (!s || !p || Math.floor(i / PER) >= this.rows) return;   // rows you've hidden don't fire
       if (s.type === 'skill') {
         if (p.skills.use(s.id, undefined, this.slotLevel(s))) this.flash(i);
         return;
@@ -147,9 +178,9 @@
 
     serialize() { return this.slots.map((s) => (s ? Object.assign({ type: s.type, id: s.id }, s.lv ? { lv: s.lv } : null) : null)); }
     load(data) {
-      this.slots = new Array(9).fill(null);
+      this.slots = new Array(SLOTS).fill(null);
       (data || []).forEach((s, i) => {
-        if (!s || i >= 9) return;
+        if (!s || i >= SLOTS) return;
         const job = this.game.player ? this.game.player.job : 'novice';
         if ((s.type === 'item' && G.Items.get(s.id)) || (s.type === 'skill' && G.Skills.get(s.id) && G.Skills.allowed(s.id, job))) this.slots[i] = s;
         // Slots saved before they had their own level keep the level picked in the skills window.

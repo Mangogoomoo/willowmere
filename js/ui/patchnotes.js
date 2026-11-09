@@ -6,6 +6,12 @@
   const h = G.h;
 
   const PATCHES = [
+    { v: '0.44', date: '2026-11-20T12:00', title: 'More action bars and right-click everywhere', notes: [
+      'Up to four action bar rows: point at the right end of the action bar to find a hidden +, and click it to add a row (after four it goes back to one). Each new row has its own keys in Key bindings (row 2 starts as Alt+1 to Alt+9).',
+      'New option: Lock action bar. While locked, hold Shift to move or remove skills and items, so they can’t be knocked off by accident.',
+      'Right-click an item in the cart to take it back into your inventory, and right-click an item in your own trade offer to take it back out (before you lock).',
+      'Inventory tooltips no longer say “right-click to use” while storage, the cart or a trade is open (right-click sends the item there instead).',
+    ] },
     { v: '0.43', date: '2026-11-19T12:00', title: 'Arrows, signs and cleaner tooltips', notes: [
       'Arrows: bows now need arrows in the new Arrows slot (Equipment window, under your portrait). Every bow shot and bow skill uses one. Garrick sells Arrows and Iron Arrows.',
       '11 kinds of arrows: plain, Iron, Steel, Oridecon, Sharp (+20 CRIT), and Fire, Crystal, Wind, Stone, Silver and Immaterial arrows that give your bow attacks their element. Arrows only count while you hold a bow.',

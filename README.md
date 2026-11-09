@@ -253,7 +253,9 @@ the database on the same origin.
 - **Card names:** equipment is named after its cards ("+7 Double Lucky Silk
   Robe of the King") and gear with cards shows in a warm orange.
 - **Action bar:** drag a slot onto another to move or swap it, or drag it off
-  the bar to remove it.
+  the bar to remove it. A hidden + at its right end adds rows (up to four;
+  rows 2–4 get their own keys), and Options can lock the bar so moving needs
+  Shift.
 - **Key bindings** (Options > Key bindings…): every hotbar slot, window and
   toggle can be rebound (primary and secondary key, Alt/Ctrl combos).
 - **Balance:** monsters give 1.8× EXP, quests 2× EXP; normal attacks no

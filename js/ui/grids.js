@@ -17,10 +17,10 @@
         draggable: 'true', tabindex: '0', role: 'button', 'aria-label': `${G.Items.displayName(e)}${e.qty > 1 ? ', ' + e.qty : ''}`,
         ondragstart: (ev) => { ev.dataTransfer.setData('text/x-ext', JSON.stringify({ src: o.source, i })); ev.dataTransfer.effectAllowed = 'move'; G.Tooltip.hide(); },
         ondblclick: () => o.take(i, e.qty),
-        oncontextmenu: (ev) => { if (o.source === 'storage') { ev.preventDefault(); o.take(i, e.qty); } },
+        oncontextmenu: (ev) => { ev.preventDefault(); o.take(i, e.qty); },
         onkeydown: (ev) => { if (ev.key === 'Enter') o.take(i, e.qty); },
       }, h('img', { src: G.Icons.url(e.id), alt: '', draggable: 'false' }), e.qty > 1 ? h('span.qty', { text: String(e.qty) }) : null, e.refine ? h('span.refbadge', { text: '+' + e.refine }) : null);
-      G.Tooltip.bind(cell, () => G.itemTooltip(e, p, { hint: o.source === 'storage' ? 'Drag to your inventory, or double-click or right-click to take it.' : 'Drag to your inventory or double-click to take it.' }));
+      G.Tooltip.bind(cell, () => G.itemTooltip(e, p, { hint: 'Drag to your inventory, or double-click or right-click to take it.' }));
       grid.append(cell);
     });
     const blanks = Math.max(0, Math.ceil(Math.max(o.entries.length, 35) / 7) * 7 - o.entries.length);

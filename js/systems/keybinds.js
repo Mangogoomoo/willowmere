@@ -5,7 +5,10 @@
   'use strict';
 
   const ACTIONS = [];
-  for (let i = 1; i <= 9; i++) ACTIONS.push({ id: 'hot' + i, label: `Hotbar slot ${i}`, def: ['F' + i, String(i)] });
+  // Four action bar rows of nine (row 2 defaults to Alt+1–9; rows 3 and 4 start unbound).
+  for (let r = 1; r <= 4; r++) for (let i = 1; i <= 9; i++) {
+    ACTIONS.push({ id: 'hot' + ((r - 1) * 9 + i), label: `Action bar ${r}, slot ${i}`, def: r === 1 ? ['F' + i, String(i)] : r === 2 ? ['Alt+' + i, ''] : ['', ''] });
+  }
   ACTIONS.push(
     { id: 'status', label: 'Status window', def: ['Alt+A', 'C'] },
     { id: 'inventory', label: 'Inventory', def: ['Alt+E', 'I'] },

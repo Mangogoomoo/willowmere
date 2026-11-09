@@ -888,7 +888,7 @@ const Trade = {
         ws.send(JSON.stringify({ t: 'trade_open', with: o[1].name }));
         return Trade.push(s2);
       }
-      case 'trade_add': case 'trade_zeny': case 'trade_lock': {
+      case 'trade_add': case 'trade_remove': case 'trade_zeny': case 'trade_lock': {
         if (!sess) return;
         const off = sess.off[me.charId];
         if (off.locked) return;
@@ -900,7 +900,8 @@ const Trade = {
           if (!e || e.id !== want.id) { Chars.push(st); return Social.notice(me, 'That item isn’t in your bag any more.'); }
           if (off.items.length >= 10 || off.items.some((x) => x.uid === e.uid)) return;
           off.items.push(Object.assign(Chars.out(e), { qty: Math.min(want.qty, e.qty) }));
-        } else if (m.t === 'trade_zeny') off.zeny = Math.max(0, Math.min(st.zeny, Math.floor(Number(m.amount) || 0)));
+        } else if (m.t === 'trade_remove') off.items = off.items.filter((x) => x.uid !== Number(m.uid));   // taken back before locking
+        else if (m.t === 'trade_zeny') off.zeny = Math.max(0, Math.min(st.zeny, Math.floor(Number(m.amount) || 0)));
         else off.locked = true;
         return Trade.push(sess);
       }

@@ -140,8 +140,11 @@
         }, h('img', { src: G.Icons.url(e.id), alt: '', draggable: 'false' }), e.qty > 1 ? h('span.qty', { text: String(e.qty) }) : null,
           item.type === 'card' ? h('span.cslot', { text: G.Items.CARD_SLOTS[item.cardSlot].tag, title: `Goes into: ${G.Items.CARD_SLOTS[item.cardSlot].long}` }) : null,
           e.refine ? h('span.refbadge', { text: '+' + e.refine }) : null);
-        G.Tooltip.bind(cell, () => G.itemTooltipCompare(e, p, { hint: (game.windows.isOpen('trade') ? 'Right-click to offer it in the trade. ' : game.windows.isOpen('storage') ? 'Right-click to put it in storage. ' : game.windows.isOpen('cart') ? 'Right-click to put it in the cart. ' : '')
-          + (item.type === 'equip' ? 'Double-click to equip.' : item.type === 'use' ? 'Double-click or right-click to use. Drag to the hotbar.' : item.type === 'card' ? 'Double-click to insert into equipment.' : '') }));
+        G.Tooltip.bind(cell, () => {
+          // With trade, storage or the cart open, right-click sends the item there (instead of using it).
+          const W = game.windows, dest = W.isOpen('trade') ? 'Right-click to offer it in the trade. ' : W.isOpen('storage') ? 'Right-click to put it in storage. ' : W.isOpen('cart') ? 'Right-click to put it in the cart. ' : '';
+          return G.itemTooltipCompare(e, p, { hint: dest + (item.type === 'equip' ? 'Double-click to equip.' : item.type === 'use' ? `Double-click${dest ? '' : ' or right-click'} to use. Drag to the hotbar.` : item.type === 'card' ? 'Double-click to insert into equipment.' : '') });
+        });
         grid.append(cell);
       }
 
@@ -320,6 +323,9 @@
         h('h3', { text: 'Controls' }),
         h('div.opt-btns', null, h('button.btn.small', { type: 'button', onclick: () => keysWindow(game).open() }, 'Key bindings…'),
           h('button.btn.small', { type: 'button', onclick: () => G.PatchNotes.open() }, `Patch notes (v${G.PatchNotes.LATEST})`)),
+        h('label.opt.check', null,
+          h('input', { type: 'checkbox', checked: !!game.hotbar.locked, onchange: (e) => game.hotbar.setLocked(e.target.checked) }),
+          h('span', { text: 'Lock action bar (hold Shift to move or remove skills and items)' })),
         h('h3', { text: 'Game' }),
         h('label.opt.check', null,
           h('input', { type: 'checkbox', checked: !!game.autoLoot, onchange: (e) => game.extras.setAutoLoot(e.target.checked) }),
