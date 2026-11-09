@@ -427,8 +427,7 @@
     },
     heal(sys, lv) {
       const p = sys.player;
-      const amt = Math.max(1, Math.floor((p.baseLevel + p.derived.total.int) / 8)) * (4 + 8 * lv);
-      p.heal(amt);
+      p.heal(SkillSystem.healAmount(p, lv));
       sys.game.spells.aura(p, '#7dff9a');
     },
     increase_agi(sys, lv) {
@@ -655,6 +654,8 @@
   G.SkillSystem.BUFFS = BUFFS;
   G.SkillSystem.EFFECTS = EFFECTS;
   G.SkillSystem.runFx = runFx;
+  // Heal: (base level + INT) / 8 x (4 + 8 x level), raised by heal-power gear and cards.
+  SkillSystem.healAmount = (p, lv) => Math.round(Math.max(1, Math.floor((p.baseLevel + p.derived.total.int) / 8)) * (4 + 8 * lv) * (1 + ((p.derived.extra || {}).healPct || 0) / 100));
 
   // Passive skills and buffs feed the stat calculation.
   G.Stats.sources.push(function skills(player, out) { if (player.skills) player.skills.bonuses(out); });

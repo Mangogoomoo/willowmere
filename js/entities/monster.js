@@ -4,6 +4,7 @@
 (function (G) {
   'use strict';
   const C = G.Config, U = G.Utils, TR = G.Terrain;
+  const LOSE_RANGE = C.MONSTER_LOSE_RANGE || 18;
 
   class Monster extends G.Entity {
     constructor(game, type, spawn, id) {
@@ -280,6 +281,18 @@
         }
       }
 
+      // Healers (Geographers) heal a hurt monster nearby every few seconds.
+      const H = def.healFriends;
+      if (H) {
+        this.healT = (this.healT == null ? Math.random() * H.every : this.healT) - dt;
+        if (this.healT <= 0) {
+          this.healT = H.every;
+          const hurt = this.game.monsters.list.filter((m) => m !== this && m.alive && m.hp < m.def.hp * 0.6 && m.distanceTo(this) <= H.range)
+            .sort((a, b) => a.hp / a.def.hp - b.hp / b.def.hp)[0];
+          if (hurt) { hurt.hp = Math.min(hurt.def.hp, hurt.hp + H.amount); hurt.healed(H.amount); }
+        }
+      }
+
       let speed = def.speed;
       const slow = this.status.slowed ? 0.55 : 1;
       switch (this.state) {
@@ -307,10 +320,13 @@
         case 'chase':
         case 'attack': {
           speed = def.chaseSpeed * slow;
-          const homeDist = Math.hypot(this.position.x - this.spawnArea.x, this.position.z - this.spawnArea.z);
-          if (!player.alive || player.playingDead || player.hidden || player.cloaked || this.aggro !== player || homeDist > def.leash + this.spawnArea.r) {
-            this.state = 'return';
+          // Like RO: a monster loses interest once you get far enough away from it (not from its
+          // spawn), so you can gather a pack and kite it around. Then it wanders back home.
+          const lose = def.loseRange || LOSE_RANGE;
+          if (!player.alive || player.playingDead || player.hidden || player.cloaked || this.aggro !== player || this.distanceTo(player) > lose) {
             this.aggro = null;
+            if (def.speed <= 0) { this.state = 'idle'; this.idleT = 1; this.path = null; break; }   // rooted to the spot
+            this.state = 'return';
             this.setPath(nav.findPath(this.position.x, this.position.z, this.home.x, this.home.z, 8000));
             break;
           }
@@ -325,7 +341,7 @@
             this.path = null;
             this.faceTowards(player.position.x, player.position.z);
             if (!this.swinging && this.attackCd <= 0) this.startSwing();
-          } else if (!this.swinging) {
+          } else if (!this.swinging && def.chaseSpeed > 0) {
             // Walk to our spot (repositioning between swings if already in reach).
             this.state = d <= reach ? 'attack' : 'chase';
             const goal = slot || player.position;
@@ -358,5 +374,11 @@
     }
   }
 
+  // Shows a heal on this monster (the server sends it to everyone instead: server/world.js).
+  Monster.prototype.healed = function (n) {
+    const at = this.position.clone(); at.y += this.def.height * 0.55;
+    this.game.overlay.addText(at, `+${n}`, 'heal');
+    this.game.effects.sparkle(this.position, [0.55, 1, 0.6], 10);
+  };
   G.Monster = Monster;
 })(window.G = window.G || {});

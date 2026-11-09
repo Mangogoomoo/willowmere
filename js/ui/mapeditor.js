@@ -53,7 +53,7 @@
     arrival(id) {
       const d = CM().get(id), st = d && d.entities.find((e) => e.type === 'start');
       if (st) return [st.x, st.z];
-      return ({ meadow: [0, -60], forest: [0, -90], dungeon: [0, -86], orc_dungeon: [0, -86], ember_ruins: [0, -86] })[id] || [0, 0];
+      return ({ meadow: [0, -60], forest: [0, -90], dungeon: [0, -86], orc_dungeon: [0, -86], ember_ruins: [0, -86], sunpetal: [-97, 0] })[id] || [0, 0];
     },
     openTeleport() {
       if (!(G.Online && G.Online.isAdmin)) return;

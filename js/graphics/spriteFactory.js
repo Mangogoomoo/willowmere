@@ -130,6 +130,7 @@
     bloody_knight: { outfit: '#3a0a14', chestplate: '#8a1a2a', pauldrons: '#a8283a', cape: '#1a0a0a', hat: { type: 'helm', color: '#7a1a2a', plume: '#1a0a0a' } },
     dark_lord: { outfit: '#1a1424', robe: 'long', collar: '#2a1a3a', cape: '#3a0a2a', trim: '#c9a24a' },
     lord_of_death: { outfit: '#0e0e16', robe: 'long', cape: '#1a1a24', mask: '#000000', hat: { type: 'hood', color: '#0a0a12' } },
+    giearth: { outfit: '#7a5a3a', robe: 'short', belt: '#3a2a1a', hat: { type: 'wizard', color: '#5a4630', band: '#c9a24a' }, beard: '#efe6d2' },
     master: { outfit: '#3f5fa8', robe: 'long', trim: '#e6c25a', hat: { type: 'wizard', color: '#2e4680', band: '#e6c25a' }, beard: '#f4f2ee', skin: '#f2cfb3' },
     dealer: { outfit: '#d98a4a', apron: '#fbf3e3', hat: { type: 'cap', color: '#a0522d' }, beard: '#7a4a2a' },
     priestess: { outfit: '#f4f1fa', robe: 'long', trim: '#7fb8e8', hat: { type: 'cap', color: '#7fb8e8' } },
@@ -483,6 +484,19 @@
           P.sphere([bx * 0.95, headY + 24, hz + bz * 0.95], 1.8, ['#ff6b8b', '#7fc8ff', '#7dff9a'][i % 3], { bias: 1.65 });
         }
         P.sphere([0, headY + 15.5, hz], 12.5, '#f5c542', Object.assign({ sy: 0.22, bias: 1.55 }, gold));
+      } else if (head.top === 'circlet') {
+        P.sphere([0, headY + 11, hz - 1], 18.6, '#e6c25a', Object.assign({ sy: 0.1, bias: 1.5 }, gold));
+        P.sphere([0, headY + 12, hz + 17.5], 2.6, '#5ab4ff', { sy: 1.3, bias: 1.6, light: '#d8f0ff', outline: '#1a4a8a' });
+      } else if (head.top === 'halo') {
+        P.sphere([0, headY + 27, hz - 2], 11, '#fff3b0', { sy: 0.12, bias: 1.7, light: '#ffffff', outline: '#e6c25a' });
+        P.sphere([0, headY + 27.4, hz - 2], 7.5, '#fffbe6', { sy: 0.1, bias: 1.75, outline: '#fff3b0' });
+      } else if (head.top === 'warhelm') {
+        P.sphere([0, headY + 9, hz - 1], 18.4, '#9aa3ad', { sy: 0.78, bias: 1.4, light: '#e6edf5', outline: '#4a5260' });
+        P.capsule([0, headY + 11, hz + 17], [0, headY - 1, hz + 18.5], 1.6, '#7a838d', { bias: 1.5, outline: '#4a5260' });
+        P.sphere([0, headY + 26, hz - 2], 3.2, '#c0394a', { sy: 1.4, bias: 1.55 });
+      } else if (head.top === 'headband') {
+        P.sphere([0, headY + 8, hz - 1], 18.8, '#c0394a', { sy: 0.13, bias: 1.4, outline: '#6a1a24' });
+        P.capsule([0, headY + 8, hz - 18], [-5, headY + 1, hz - 24], 1.6, '#c0394a', { bias: 1.45 });
       }
       if (head.mid === 'lamp') {
         P.sphere([0, headY + 6, hz], 19.2, '#5a3a22', { sy: 0.15, bias: 1.2 });
@@ -654,6 +668,41 @@
     P.setPose(0, rz, [0, 0, 0], [0, 0, 0]);
     P.sphere([0, 11 * sy, 0], 11, '#dcc58f', { sx: 0.85, sy, decals: PUPA_BANDS, outline: '#7a5a28', light: '#fff2cc' });
     P.capsule([0, 22 * sy, -1], [1.5, 22 * sy + 6, -2], 1.8, '#c9ae6e', { outline: '#7a5a28' });
+  }
+
+  /* ===================================================== GEOGRAPHER (man-eating sunflower) */
+  const GEO_FACE = [
+    eyeDecal([0.36, 0.3, 0.86], '#2a1a08', { w: 2.4, h: 3, outer: '#120a02' }), eyeDecal([-0.36, 0.3, 0.86], '#2a1a08', { w: 2.4, h: 3, outer: '#120a02' }),
+    { n: norm([0, -0.28, 0.96]), draw(ctx) {
+      ctx.beginPath(); ctx.ellipse(0, 0, 6, 3.4, 0, 0, TAU); ctx.fillStyle = '#3a0a10'; ctx.fill();
+      ctx.fillStyle = '#fff8e8';
+      for (let i = -2; i <= 2; i++) { ctx.beginPath(); ctx.moveTo(i * 2.2 - 0.9, -2.6); ctx.lineTo(i * 2.2 + 0.9, -2.6); ctx.lineTo(i * 2.2, -0.6); ctx.closePath(); ctx.fill(); }
+      for (let i = -1; i <= 1; i++) { ctx.beginPath(); ctx.moveTo(i * 2.6 - 0.9, 2.6); ctx.lineTo(i * 2.6 + 0.9, 2.6); ctx.lineTo(i * 2.6, 0.7); ctx.closePath(); ctx.fill(); }
+    } },
+  ];
+  const GEO_SEEDS = [];
+  for (let i = 0; i < 14; i++) { const a = i * 2.4, r = 0.25 + (i % 4) * 0.12; GEO_SEEDS.push({ n: norm([Math.cos(a) * r, Math.sin(a) * r + 0.45, 0.8]), minD: 0.2, draw(ctx) { ell(ctx, 0, 0, 0.9, 0.9, '#4a2e10'); } }); }
+  function drawGeographer(P, anim, t) {
+    let sway = Math.sin(t * TAU) * 2.5, lunge = 0, dip = 0, tilt = 0;
+    if (anim === 'attack') { const k = Math.sin(Math.min(1, t * 1.4) * Math.PI); lunge = k * 14; dip = k * 8; }
+    else if (anim === 'hit') { lunge = -4; tilt = 3; }
+    else if (anim === 'die') P.setPose(0, t * 1.1, [0, 0, 0], [0, -3 * t, 0]);
+    const G1 = '#4f9a32', G2 = '#2f6a1e', OUT = '#1f4a12';
+    // Leaves round the foot, and two on the stem.
+    for (let i = 0; i < 5; i++) {
+      const a = (i / 5) * TAU + 0.4;
+      P.sphere([Math.sin(a) * 11, 3, Math.cos(a) * 9 - 2], 7, i % 2 ? G1 : G2, { sx: 1.5, sy: 0.32, outline: OUT, bias: i % 2 ? 0.3 : -0.2 });
+    }
+    const top = [sway, 52 - dip, lunge];
+    P.capsule([0, 2, 0], [sway * 0.5, 28 - dip * 0.5, lunge * 0.4], 3.4, G1, { outline: OUT });
+    P.capsule([sway * 0.5, 28 - dip * 0.5, lunge * 0.4], [top[0], top[1] - 8, top[2] - 1], 3, G1, { outline: OUT });
+    for (const sx of [-1, 1]) P.sphere([sx * 9 + sway * 0.4, 26 - dip * 0.5, lunge * 0.3 + 1], 6, G2, { sx: 1.6, sy: 0.45, outline: OUT, bias: 0.4 });
+    // Petals round the face, then the face itself (a seed disc with a toothy mouth).
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * TAU + tilt * 0.05, ix = Math.cos(a), iy = Math.sin(a);
+      P.capsule([top[0] + ix * 12, top[1] + iy * 12, top[2] - 2], [top[0] + ix * 21, top[1] + iy * 21, top[2] - 3.5], 3.6, i % 2 ? '#ffd23a' : '#ffc21a', { outline: '#b8780a', bias: 0.6 });
+    }
+    P.sphere([top[0], top[1], top[2] - tilt], 13, '#7a5222', { decals: GEO_FACE.concat(GEO_SEEDS), outline: '#3a220a', light: '#a8783a', bias: 0.9 });
   }
 
   /* ===================================================== ROCKER (grasshopper) */
@@ -875,6 +924,14 @@
         { name: 'hit', frames: 2, fps: 8, loop: false }, { name: 'die', frames: 5, fps: 8, loop: false },
       ],
       draw: drawWhisper,
+    },
+    geographer: {
+      frameW: 160, frameH: 176, originX: 80, originY: 166, scale: 1.25,
+      anims: [
+        { name: 'idle', frames: 6, fps: 4 }, { name: 'walk', frames: 6, fps: 4 }, { name: 'attack', frames: 6, fps: 10, loop: false },
+        { name: 'hit', frames: 2, fps: 8, loop: false }, { name: 'die', frames: 5, fps: 8, loop: false },
+      ],
+      draw: drawGeographer,
     },
     king_poring: {
       frameW: 112, frameH: 128, originX: 56, originY: 120, scale: 1.25,

@@ -108,7 +108,7 @@ class MapSim {
     if (map.bridge) { nav.blockRect(B.x - B.halfWidth + 0.12, TR.BRIDGE_Z, 0.1, B.halfLength, 0); nav.blockRect(B.x + B.halfWidth - 0.12, TR.BRIDGE_Z, 0.1, B.halfLength, 0); }
     game.env = new G.Environment(game.mapRoot, nav, map).build();
     // Same order as the game's loadMap: monsters spawn, then NPCs and map-editor objects block their spots.
-    this.monsters = new G.MonsterManager(game, map.spawns || []);
+    this.monsters = game.monsters = new G.MonsterManager(game, map.spawns || []);
     for (const d of G.NPC_DEFS) if ((map.npcs || []).includes(d.id)) nav.blockCircle(d.x, d.z, 0.3);
     G.CustomMaps.build(game);
     game.mapRoot = null;   // the scenery's meshes aren't needed any more
@@ -123,6 +123,8 @@ class MapSim {
     const G = this.G, sim = this, M = G.Monster.prototype;
     const startSwing = M.startSwing, die = M.die;
     M.startSwing = function () { this.swingSeq = (this.swingSeq || 0) + 1; return startSwing.call(this); };
+    // A monster healing another (Geographers): everyone on the map sees the number.
+    M.healed = function (n) { sim.out.broadcast(sim.mapId, { t: 'mob', op: 'hit', map: sim.mapId, id: this.id, heal: Math.round(n) }); };
     M.die = function (killer) {
       // Poison and other kills without a hand behind them count for the last player who hit it.
       if (!(killer && killer.isRemote) && this.lastHitBy && sim.players.get(this.lastHitBy)) killer = sim.players.get(this.lastHitBy);

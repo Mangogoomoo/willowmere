@@ -98,7 +98,7 @@
     if (Sync.puppet()) { net().send({ t: 'mob', op: 'knock', map: this.game.mapId, id: this.id, fx, fz, dist }); return; }
     return origKnock.call(this, fx, fz, dist);
   };
-  const origAttack = G.Combat.monsterAttack;
+  const origAttack = G.Combat.monsterAttack, origHealed = M.healed;
 
   /* ---------------- messages ---------------- */
   Sync.handle = function (m) {
@@ -113,7 +113,8 @@
       else if (m.op === 'hit') {
         // Another player's hit or miss on this monster.
         const at = x.position.clone(); at.y += x.def.height * 0.55;
-        if (m.miss) game.overlay.addText(at, String(m.miss).slice(0, 12), 'miss');
+        if (m.heal) { if (x.alive) { x.hp = Math.min(x.def.hp, x.hp + Number(m.heal)); origHealed.call(x, Math.round(Number(m.heal))); } }
+        else if (m.miss) game.overlay.addText(at, String(m.miss).slice(0, 12), 'miss');
         else { game.overlay.addText(at, String(Math.round(Number(m.dmg) || 0)), ['crit', 'skilldmg', 'magic'].includes(m.k) ? m.k : 'dmg'); if (x.alive) x.sprite.setFlash(1); }
       }
       else if (m.op === 'hurt') { if (game.player.alive) game.player.takeDamage(Math.max(1, Number(m.dmg) || 1), x); }

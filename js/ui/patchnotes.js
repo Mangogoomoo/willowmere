@@ -6,6 +6,15 @@
   const h = G.h;
 
   const PATCHES = [
+    { v: '0.40', date: '2026-11-16T12:00', title: 'Sunpetal Plains, gear for every build, and kiting', notes: [
+      'New map: Sunpetal Plains, through a new exit on the east side of Willowmere Meadows. Giearths and Metalings near the way in, and dozens of Geographers (level 56) scattered over the hills: man-eating sunflowers that never move and only bite what is close, so mages can bolt them from range. Geographers heal each other, so pick them off one at a time.',
+      'New cards: Geographer (garment: Heal power +10%, INT +1), Giearth (shoes: VIT +1, Max HP +100, MDEF +2) and Metaling (weapon: ATK +15, HIT +5).',
+      '43 new pieces of gear, a set for each build: magic (INT/DEX), healing (INT/VIT and heal power), ranged (DEX/AGI/LUK), melee (STR/AGI/LUK) and tank (STR/VIT), with weapons for every class. They drop from monsters around their level all over the world, and four new hats show on your character.',
+      'Monsters now give up the chase when you get far enough away from them, not when they stray from home, so you can gather a pack and kite it around.',
+      'With a skill on the mouse, scroll down for one level lower or up for one higher (the game no longer zooms while a skill is on the mouse).',
+      'Heal on another player now uses the healer’s INT, level and heal gear.',
+      'Fixed: Bards and Dancers can now wield instruments and whips.',
+    ] },
     { v: '0.39', date: '2026-11-15T12:00', title: 'Numbers and skill levels', notes: [
       'Healing numbers show what you actually healed: a potion that only tops up 12 HP shows +12 (nothing at full HP).',
       'Online you now see other players’ damage numbers on monsters (including Miss and criticals), and their healing numbers over their heads.',

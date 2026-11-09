@@ -29,7 +29,7 @@
       d.addEventListener('pointerleave', () => { if (this.cursorEl) this.cursorEl.hidden = true; });
       d.addEventListener('pointerenter', () => { if (this.cursorEl && this.targeting) this.cursorEl.hidden = false; });
       window.addEventListener('pointerup', (e) => this.onUp(e));
-      d.addEventListener('wheel', (e) => { e.preventDefault(); this.game.camera.zoom(e.deltaY * (e.deltaMode === 1 ? 16 : 1)); }, { passive: false });
+      d.addEventListener('wheel', (e) => { e.preventDefault(); if (this.targeting) this.wheelLevel(e); else this.game.camera.zoom(e.deltaY * (e.deltaMode === 1 ? 16 : 1)); }, { passive: false });
       window.addEventListener('blur', () => { this.rotating = false; this.leftDown = false; this.holdMove = false; this.updateCursor(); });
       window.addEventListener('keydown', (e) => this.onKey(e));
       // Dragging an inventory item onto the world drops it on the ground.
@@ -161,6 +161,17 @@
         if (tca > 0 && d2 < bd) { bd = d2; best = r; }
       }
       return best;
+    }
+    // With a skill on the mouse, the wheel picks its level (down: one lower, up: one higher) instead of zooming.
+    wheelLevel(e) {
+      const now = performance.now();
+      if (!e.deltaY || now - (this.wheelT || 0) < 90) return;   // one step per notch, even on a touchpad
+      this.wheelT = now;
+      const max = this.game.player.skills.level(this.targeting);
+      const lv = Math.max(1, Math.min(max, this.targetLv + (e.deltaY > 0 ? -1 : 1)));
+      if (lv === this.targetLv) return;
+      this.targetLv = lv;
+      this.skillCursor().querySelector('.sc-label').textContent = `${G.Skills.get(this.targeting).name} Lv ${lv}`;
     }
     skillCursor() {
       if (this.cursorEl) return this.cursorEl;

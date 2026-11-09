@@ -104,7 +104,7 @@
     C.MONSTERS[id] = Object.assign({
       softDef: Math.round((o.def || 0) / 3), mdef: 0, hit: 10 + lv * 2, flee: 10 + lv, element: 'neutral',
       speed: 2.2, chaseSpeed: 3.6, attackRange: 1.4, attackInterval: 1.4, impactTime: 0.3,
-      respawn: o.mvp ? 300 : 14, leash: 28, hitRadius: 0.85, height: 2, radius: 0.55, scale: 1.2, deathColor: [0.7, 0.7, 0.75],
+      respawn: o.mvp ? 300 : 14, hitRadius: 0.85, height: 2, radius: 0.55, scale: 1.2, deathColor: [0.7, 0.7, 0.75],
       zeny: { chance: 0.7, min: lv * 4, max: lv * 10 },
     }, o, { exp: o.exp || xp(lv, o.mvp), jobExp: o.jobExp || Math.round(xp(lv, o.mvp) * 0.75) });
   };
@@ -175,6 +175,111 @@
     sprite: { humanoid: { costume: 'lord_of_death', weapon: 'spear', skin: '#1a1a24', hair: 'raven', style: 'buzz' } },
     drops: [{ id: 'card_lord_of_death', chance: 0.05 }, { id: 'yggdrasil_berry', chance: 1, qty: 2 }, { id: 'bloody_edge', chance: 0.2 }, { id: 'evil_horn', chance: 1 }] });
 
+  /* ---------------- Sunpetal Plains: Geographers, Giearths and Metalings (v0.40) ---------------- */
+  item('maneater_blossom', { name: 'Maneater Blossom', type: 'etc', icon: { shape: 'herb', color: '#ffd23a' }, price: 40, weight: 1, desc: 'A golden petal from a Geographer. It still bites.' });
+  item('maneater_root', { name: 'Maneater Root', type: 'etc', icon: { shape: 'leg', color: '#8a6a3a' }, price: 60, weight: 1, desc: 'A gnarled root that held a Geographer in place.' });
+  item('elder_pixie_moustache', { name: 'Elder Pixie’s Moustache', type: 'etc', icon: { shape: 'fluff', color: '#f4f2ee' }, price: 50, weight: 1, desc: 'A Giearth’s proud white whiskers.' });
+  item('star_dust', { name: 'Star Dust', type: 'etc', icon: { shape: 'ore', color: '#fff3a0' }, price: 120, weight: 1, rarity: 'uncommon', desc: 'Glittering dust said to fall from the stars.' });
+  item('jubilee', { name: 'Jubilee', type: 'etc', icon: { shape: 'clover', color: '#ffd84a' }, price: 30, weight: 1, desc: 'A shiny little token Metalings love to collect.' });
+  item('flexible_tube', { name: 'Flexible Tube', type: 'etc', icon: { shape: 'pipe', color: '#9aa3ad' }, price: 60, weight: 1, desc: 'A bendy metal tube from a Metaling.' });
+  item('rusty_screw', { name: 'Rusty Screw', type: 'etc', icon: { shape: 'ore', color: '#a8643a' }, price: 200, weight: 1, desc: 'A screw that has seen better days.' });
+  item('large_jellopy', { name: 'Large Jellopy', type: 'etc', icon: { shape: 'jellopy', color: '#7fc8ff' }, price: 90, weight: 1, desc: 'An unusually big, wobbly jellopy.' });
+  item('heal_scroll', { name: 'Heal Scroll', type: 'use', icon: { shape: 'book', color: '#7dff9a' }, price: 800, weight: 1, rarity: 'uncommon', use: { heal: 600 }, desc: 'A prayer written on a leaf. Restores about 600 HP.' });
+
+  card('geographer', 'Geographer', 'garment', { healPct: 10, int: 1 }, 'Heal power +10%, INT +1.', '#ffd23a', { prefix: 'Blooming' });
+  card('giearth', 'Giearth', 'shoes', { vit: 1, maxHp: 100, mdef: 2 }, 'VIT +1, Max HP +100, MDEF +2.', '#8a6a3a', { suffix: 'of the Gnome' });
+  card('metaling', 'Metaling', 'weapon', { atk: 15, hit: 5 }, 'ATK +15, HIT +5.', '#9aa3ad', { prefix: 'Metallic' });
+
+  /* ---------------- gear for every build (v0.40) ----------------
+     Magic (INT/DEX), healing (INT/VIT), ranged (DEX/AGI/LUK), melee (STR/AGI/LUK) and tank (STR/VIT):
+     each has a weapon for its classes plus armour, garment, shoes, headgear and an accessory. */
+  const MAGIC = ['mage', 'wizard', 'sage'], HEALERS = ['acolyte', 'priest', 'monk'], BOWS = ['archer', 'hunter', 'bard', 'dancer', 'rogue'];
+  const SWORDS = ['swordsman', 'knight', 'crusader', 'thief', 'assassin', 'rogue', 'merchant', 'blacksmith', 'alchemist'];
+  const gear = (id, name, slot, req, bonus, icon, color, price, desc, extra) => item(id, Object.assign({ name, type: 'equip', slot, icon: { shape: icon, color },
+    weight: slot === 'armor' ? 80 : slot === 'shield' ? 70 : 20, price, slots: 1, reqLevel: req, jobs: 'all', bonus, rarity: 'rare', desc }, extra || {}));
+  const weapon = (id, name, wt, wlv, req, jobs, bonus, icon, color, price, desc) => gear(id, name, 'weapon', req, bonus, icon, color, price, desc,
+    { weaponType: wt, wlv, jobs, weight: 90 });
+  // Magic
+  weapon('apprentice_staff', 'Apprentice Staff', 'rod', 2, 20, MAGIC, { atk: 30, matk: 50, int: 2, dex: 1 }, 'rod', '#7fb8e8', 9000, 'A practice staff with a steady glow.');
+  weapon('arcanist_staff', 'Arcanist Staff', 'rod', 3, 40, MAGIC, { atk: 35, matk: 90, int: 3, castReduce: 5 }, 'rod', '#5ab4ff', 32000, 'Spells leap from its crystal before the words are done.');
+  weapon('tome_of_embers', 'Tome of Embers', 'book', 3, 45, ['sage'], { atk: 70, matk: 80, int: 3, dex: 2 }, 'book', '#ff7a3d', 36000, 'Its pages are warm to the touch.');
+  gear('arcanist_robe', 'Arcanist Robe', 'armor', 35, { def: 3, mdef: 10, int: 2, maxSp: 80 }, 'shirt', '#4a5ad8', 24000, 'Robes stitched with silver runes.');
+  gear('starweave_mantle', 'Starweave Mantle', 'garment', 30, { def: 1, mdef: 5, dex: 2 }, 'cape', '#3a3a8a', 16000, 'A cloak that shimmers like the night sky.');
+  gear('arcanist_slippers', 'Arcanist Slippers', 'shoes', 30, { def: 1, int: 1, maxSpPct: 5 }, 'boots', '#6a5ab0', 14000, 'Soft slippers for long nights of study.');
+  gear('mana_circlet', 'Mana Circlet', 'headTop', 30, { int: 2, dex: 1, mdef: 3 }, 'crown', '#5ab4ff', 18000, 'A thin gold band with a blue stone.', { look: 'circlet', slots: 0 });
+  gear('focus_ring', 'Focus Ring', 'acc', 35, { int: 2, dex: 2, castReduce: 3 }, 'brooch', '#5ab4ff', 22000, 'Helps the mind stay on the spell.');
+  // Healing
+  weapon('lightbringer_rod', 'Lightbringer Rod', 'rod', 3, 35, HEALERS, { atk: 30, matk: 55, int: 2, healPct: 15 }, 'rod', '#ffe27a', 28000, 'Warm light gathers at its tip.');
+  weapon('mace_of_mercy', 'Mace of Mercy', 'mace', 3, 40, HEALERS, { atk: 110, int: 2, vit: 1, healPct: 10 }, 'club', '#f2efe6', 30000, 'Strikes gently, heals mightily.');
+  weapon('holy_codex', 'Holy Codex', 'book', 3, 50, ['priest'], { atk: 80, matk: 50, int: 2, vit: 2, healPct: 12 }, 'book', '#f2efe6', 40000, 'Every prayer ever answered, written down.');
+  gear('vestments_of_grace', 'Vestments of Grace', 'armor', 35, { def: 5, mdef: 8, vit: 2, int: 1, maxHpPct: 5 }, 'shirt', '#f2f0f7', 24000, 'White robes trimmed with gold.');
+  gear('prayer_shawl', 'Prayer Shawl', 'garment', 30, { def: 2, mdef: 4, vit: 1, healPct: 5 }, 'cape', '#e6c25a', 15000, 'Blessed in the Pond Priestess’s waters.');
+  gear('pilgrim_sandals', 'Pilgrim Sandals', 'shoes', 25, { def: 2, vit: 2, maxHp: 150 }, 'boots', '#c9a06b', 10000, 'Worn smooth by many miles of walking.');
+  gear('halo_circlet', 'Halo Circlet', 'headTop', 40, { int: 1, vit: 1, healPct: 5, mdef: 2 }, 'crown', '#fff3b0', 26000, 'A ring of soft light that floats above you.', { look: 'halo', slots: 0 });
+  gear('rosary', 'Rosary of Light', 'acc', 30, { int: 2, vit: 1, spRegenPct: 10 }, 'brooch', '#f2efe6', 18000, 'Counting its beads calms the spirit.');
+  // Ranged
+  weapon('hawkeye_bow', 'Hawkeye Bow', 'bow', 2, 25, BOWS, { atk: 85, dex: 2, crit: 3 }, 'bow', '#8a5a2c', 14000, 'A light bow for quick, sure shots.');
+  weapon('gale_longbow', 'Gale Longbow', 'bow', 3, 40, BOWS, { atk: 130, dex: 3, hit: 8 }, 'bow', '#8fe0d0', 34000, 'Its arrows ride the wind.');
+  weapon('whispering_lyre', 'Whispering Lyre', 'instrument', 3, 40, ['bard'], { atk: 120, dex: 2, agi: 2 }, 'book', '#e6c25a', 32000, 'Its notes cut like blades.');
+  weapon('silkwind_whip', 'Silkwind Whip', 'whip', 3, 40, ['dancer'], { atk: 115, agi: 2, luk: 2 }, 'knuckle', '#ff9ad6', 32000, 'A silk whip that sings through the air.');
+  gear('ranger_jerkin', 'Ranger Jerkin', 'armor', 30, { def: 4, agi: 2, flee: 5 }, 'shirt', '#5f8a3a', 18000, 'Light leather for moving fast.');
+  gear('windrunner_cloak', 'Windrunner Cloak', 'garment', 30, { def: 2, flee: 8, agi: 1 }, 'cape', '#8fe0d0', 16000, 'Catches the wind at your back.');
+  gear('swift_boots', 'Swift Boots', 'shoes', 25, { def: 2, agi: 2, moveSpeed: 5 }, 'boots', '#5f8a3a', 14000, 'Boots for those who never stand still.');
+  gear('eagle_goggles', 'Eagle Goggles', 'headMid', 30, { dex: 3, hit: 5 }, 'glasses', '#c9a24a', 16000, 'See a fly’s wings at fifty paces.', { look: 'glasses', slots: 0 });
+  gear('marksman_charm', 'Marksman’s Charm', 'acc', 30, { dex: 2, luk: 2, crit: 3 }, 'brooch', '#ffd84a', 18000, 'A lucky arrowhead on a string.');
+  // Melee
+  weapon('fang_dagger', 'Fang Dagger', 'dagger', 2, 25, ['thief', 'assassin', 'rogue', 'swordsman', 'knight', 'crusader', 'merchant', 'blacksmith', 'alchemist'], { atk: 70, agi: 2, crit: 3 }, 'dagger', '#efe6d2', 12000, 'A curved fang set in a bone handle.');
+  weapon('duelist_saber', 'Duelist Saber', 'sword', 3, 40, SWORDS, { atk: 150, agi: 2, crit: 4 }, 'sword', '#cfd8e6', 34000, 'Balanced for the quickest hands.');
+  weapon('wyrm_spear', 'Wyrm Spear', 'spear', 3, 45, ['knight', 'crusader'], { atk: 185, str: 3 }, 'spear', '#5a8a3a', 38000, 'Its tip was carved from a dragon’s tooth.');
+  weapon('shadowfang', 'Shadowfang', 'katar', 3, 45, ['assassin'], { atk: 165, crit: 8, luk: 2 }, 'katar', '#3a2a4a', 38000, 'Twin blades that find the gaps in armour.');
+  weapon('ironfist', 'Ironfist', 'knuckle', 3, 40, ['monk'], { atk: 135, str: 2, agi: 2 }, 'knuckle', '#9aa3ad', 32000, 'Iron knuckles for iron fists.');
+  weapon('warbreaker', 'Warbreaker', 'axe', 3, 40, ['merchant', 'blacksmith', 'alchemist'], { atk: 175, str: 3 }, 'axe', '#8a5a2c', 36000, 'An axe heavy enough to end arguments.');
+  gear('gladiator_harness', 'Gladiator Harness', 'armor', 35, { def: 6, str: 2, agi: 1 }, 'shirt', '#a8743c', 22000, 'Straps and plates for the arena.');
+  gear('duelist_cape', 'Duelist Cape', 'garment', 30, { def: 2, flee: 5, luk: 1 }, 'cape', '#c0394a', 15000, 'Swirl it to distract your foe.');
+  gear('fleetfoot_greaves', 'Fleetfoot Greaves', 'shoes', 30, { def: 3, agi: 2 }, 'boots', '#9aa3ad', 15000, 'Plated, yet light as a feather.');
+  gear('berserker_band', 'Berserker Band', 'headTop', 30, { str: 2, atk: 10 }, 'ribbon', '#c0394a', 16000, 'Tie it on and charge.', { look: 'headband', slots: 0 });
+  gear('fang_necklace', 'Fang Necklace', 'acc', 35, { str: 2, luk: 1, crit: 3 }, 'brooch', '#efe6d2', 20000, 'Trophies of past hunts.');
+  // Tank
+  weapon('warden_mace', 'Warden Mace', 'mace', 3, 40, ['crusader', 'merchant', 'blacksmith', 'alchemist', 'acolyte', 'priest', 'monk'], { atk: 140, vit: 2, def: 3 }, 'club', '#7a838d', 32000, 'A mace for those who hold the line.');
+  gear('bulwark_shield', 'Bulwark Shield', 'shield', 35, { def: 8, vit: 2, maxHpPct: 5 }, 'shield', '#7a838d', 26000, 'Nothing gets past it.');
+  gear('fortress_plate', 'Fortress Plate', 'armor', 40, { def: 10, vit: 3, maxHpPct: 8 }, 'shirt', '#9aa3ad', 32000, 'Plate armour as thick as a castle wall.');
+  gear('bastion_mantle', 'Bastion Mantle', 'garment', 35, { def: 4, mdef: 3, vit: 1 }, 'cape', '#5a6070', 18000, 'A heavy cloak lined with chain.');
+  gear('ironclad_boots', 'Ironclad Boots', 'shoes', 30, { def: 5, maxHp: 300 }, 'boots', '#7a838d', 16000, 'Boots that do not budge.');
+  gear('guardian_helm', 'Guardian Helm', 'headTop', 35, { def: 5, vit: 2, str: 1 }, 'crown', '#9aa3ad', 20000, 'An iron helm with a red plume.', { look: 'warhelm', slots: 0 });
+  gear('stoneheart_amulet', 'Stoneheart Amulet', 'acc', 35, { vit: 3, maxHp: 200 }, 'brooch', '#8a6a3a', 20000, 'A heart of stone keeps you standing.');
+  Object.assign(G.Items.STAT_NAMES, { healPct: 'Heal power %', castReduce: 'Cast time −%', spRegenPct: 'SP recovery %', hpRegenPct: 'HP recovery %', moveSpeed: 'Move speed %', atkPct: 'ATK %' });
+
+  // Bards and Dancers can wield their instruments and whips.
+  if (G.Jobs) for (const [job, wt] of [['bard', 'instrument'], ['dancer', 'whip']]) { const j = G.Jobs.get(job); if (j && !j.weapons.includes(wt)) j.weapons.push(wt); }
+
+  // The new monsters (stats after the classic pre-renewal ones, tuned to Willowmere).
+  mon('geographer', { name: 'Geographer', level: 56, hp: 8071, atk: [467, 621], def: 28, mdef: 26, element: 'earth', hit: 120, flee: 60,
+    aggressive: true, aggroRange: 3.2, attackRange: 3, attackInterval: 1.31, impactTime: 0.45, speed: 0, chaseSpeed: 0, loseRange: 12,
+    healFriends: { every: 5, range: 9, amount: 1100 },   // Heal on a hurt neighbour, like the classic Geographer
+    scale: 1.3, hitRadius: 1, height: 3, radius: 0.7, deathColor: [1, 0.85, 0.3],
+    drops: [{ id: 'card_geographer', chance: 0.002 }, { id: 'maneater_blossom', chance: 0.62 }, { id: 'maneater_root', chance: 0.55 }, { id: 'heal_scroll', chance: 0.01 },
+      { id: 'arcanist_staff', chance: 0.004 }, { id: 'tome_of_embers', chance: 0.003 }, { id: 'lightbringer_rod', chance: 0.004 }, { id: 'holy_codex', chance: 0.003 },
+      { id: 'halo_circlet', chance: 0.005 }, { id: 'mana_circlet', chance: 0.005 }, { id: 'arcanist_robe', chance: 0.004 }, { id: 'prayer_shawl', chance: 0.004 }, { id: 'focus_ring', chance: 0.003 }] });
+  mon('giearth', { name: 'Giearth', level: 29, hp: 2252, atk: [154, 185], def: 10, mdef: 50, element: 'earth', aggressive: false, attackInterval: 1.85, speed: 1.6, chaseSpeed: 2.8,
+    scale: 0.85, height: 1.6, sprite: { humanoid: { costume: 'giearth', weapon: 'none', skin: '#e8c49a', hair: 'snow', style: 'buzz' } },
+    drops: [{ id: 'card_giearth', chance: 0.002 }, { id: 'elder_pixie_moustache', chance: 0.55 }, { id: 'coal', chance: 0.015 }, { id: 'star_dust', chance: 0.01 }, { id: 'great_nature', chance: 0.003 },
+      { id: 'pilgrim_sandals', chance: 0.008 }, { id: 'apprentice_staff', chance: 0.006 }, { id: 'starweave_mantle', chance: 0.006 }, { id: 'arcanist_slippers', chance: 0.006 },
+      { id: 'rosary', chance: 0.005 }, { id: 'eagle_goggles', chance: 0.005 }] });
+  mon('metaling', { name: 'Metaling', level: 26, hp: 889, atk: [135, 270], def: 5, mdef: 3, element: 'neutral', aggressive: false, attackInterval: 0.67, speed: 1.6, chaseSpeed: 3,
+    scale: 1.2, height: 1.15, hitRadius: 0.8, radius: 0.55, sprite: { base: 'poring', hue: 0, sat: 0.03, light: 0.88 }, deathColor: [0.75, 0.78, 0.85],
+    drops: [{ id: 'card_metaling', chance: 0.002 }, { id: 'jubilee', chance: 0.5 }, { id: 'flexible_tube', chance: 0.4 }, { id: 'iron_ore', chance: 0.1 }, { id: 'large_jellopy', chance: 0.1 },
+      { id: 'iron', chance: 0.05 }, { id: 'rusty_screw', chance: 0.02 }, { id: 'ironclad_boots', chance: 0.008 }, { id: 'warden_mace', chance: 0.004 }, { id: 'stoneheart_amulet', chance: 0.004 },
+      { id: 'fang_dagger', chance: 0.006 }, { id: 'hawkeye_bow', chance: 0.005 }, { id: 'swift_boots', chance: 0.006 }] });
+  // The rest of the new gear drops from monsters around its level.
+  const more = {
+    orc_zombie: [['gladiator_harness', 0.005], ['duelist_cape', 0.005]], orc_skeleton: [['bulwark_shield', 0.004], ['guardian_helm', 0.004]],
+    zenorc: [['berserker_band', 0.005], ['ironfist', 0.004], ['fleetfoot_greaves', 0.005]], drainliar: [['windrunner_cloak', 0.005], ['marksman_charm', 0.004]],
+    whisper: [['ranger_jerkin', 0.005], ['silkwind_whip', 0.004]], wind_ghost: [['gale_longbow', 0.004], ['whispering_lyre', 0.004]],
+    raydric: [['fortress_plate', 0.004], ['bastion_mantle', 0.005]], wraith: [['vestments_of_grace', 0.004]], evil_druid: [['mace_of_mercy', 0.004]],
+    khalitzburg: [['duelist_saber', 0.004], ['wyrm_spear', 0.004]], abysmal_knight: [['shadowfang', 0.004], ['warbreaker', 0.004], ['fang_necklace', 0.005]],
+  };
+  for (const m in more) if (C.MONSTERS[m]) for (const [id, chance] of more[m]) C.MONSTERS[m].drops.push({ id, chance });
+
   /* ---------------- maps: Orc Dungeon, Ember Ruins ---------------- */
   if (G.Maps) {
     G.Maps.orc_dungeon = {
@@ -227,6 +332,39 @@
       npcs: [],
       portals: [{ x: 0, z: -100, to: 'orc_dungeon', tx: 78, tz: -50, label: 'Orc Dungeon' }],
     };
+    // Sunpetal Plains, east of Willowmere Meadows: Giearths and Metalings near the way in, and
+    // Geographers (rooted man-eating sunflowers, level 56) scattered over the hills: a classic
+    // spot for mages, who can bolt them from beyond their short reach.
+    G.Maps.sunpetal = {
+      id: 'sunpetal', name: 'Sunpetal Plains', town: false, stream: false, bridge: false,
+      paths: [
+        [[-110, 0], [-84, 2], [-60, -6], [-36, -2], [-12, 8], [12, 4], [36, -10], [60, -4], [84, 10], [100, 14]],
+        [[-36, -2], [-30, -30], [-20, -60], [-8, -86]],
+        [[12, 4], [20, 32], [14, 60], [24, 88]],
+      ],
+      pond: { x: 62, z: -62, r: 7 },
+      hills: 9, seed: 3131,
+      forest: { count: 150, grove: 0.5, clearing: 0.6 },
+      palette: {
+        grassA: '#a9c25a', grassB: '#c2cf68', grassDark: '#7f9a3e', meadow: '#e0c95e',
+        town: '#a9c25a', dirt: '#b08a58', dirtDark: '#8a6a40', cliff: '#9a9a6a', cliffHi: '#7f9a4a',
+      },
+      fog: '#f4ecd2',
+      spawns: [
+        { type: 'giearth', x: -76, z: -28, r: 10, count: 5 }, { type: 'giearth', x: -84, z: 32, r: 10, count: 4 },
+        { type: 'metaling', x: -48, z: 26, r: 10, count: 5 }, { type: 'metaling', x: -52, z: -32, r: 9, count: 4 },
+        { type: 'metaling', x: 30, z: -28, r: 8, count: 4 }, { type: 'giearth', x: 0, z: 26, r: 8, count: 4 },
+        { type: 'geographer', x: 2, z: -42, r: 7, count: 3 }, { type: 'geographer', x: -70, z: 70, r: 8, count: 4 },
+        { type: 'geographer', x: -38, z: 48, r: 8, count: 4 }, { type: 'geographer', x: 52, z: 34, r: 8, count: 4 },
+        { type: 'geographer', x: 70, z: 70, r: 8, count: 4 }, { type: 'geographer', x: 42, z: -46, r: 7, count: 3 },
+        { type: 'geographer', x: 82, z: -28, r: 8, count: 4 }, { type: 'geographer', x: -6, z: 76, r: 7, count: 3 },
+        { type: 'geographer', x: 92, z: 48, r: 7, count: 3 }, { type: 'geographer', x: -84, z: -72, r: 8, count: 4 },
+        { type: 'geographer', x: 26, z: -82, r: 8, count: 3 }, { type: 'geographer', x: -52, z: -80, r: 7, count: 3 },
+      ],
+      npcs: [],
+      portals: [{ x: -104, z: 0, to: 'meadow', tx: 94, tz: 40, label: 'Willowmere Meadows' }],
+    };
+    if (G.Maps.meadow) G.Maps.meadow.portals.push({ x: 99, z: 40, to: 'sunpetal', tx: -97, tz: 0, label: 'Sunpetal Plains (Lv 26–56)' });
     // The way in: a second cave mouth in the west of Whisperwood Glade.
     if (G.Maps.forest) G.Maps.forest.portals.push({ x: -84, z: -42, to: 'orc_dungeon', tx: 0, tz: -86, label: 'Orc Dungeon' });
     // Map bosses for the outdoor maps.

@@ -291,14 +291,17 @@
 
     /* ---------- buffing other players ---------- */
     sendBuff(target, s, lv) {
-      this.send({ t: 'buff', to: target.id, skill: s.id, lv });   // their own effect plays the visuals
+      // Heal is as strong as the healer (their INT, level and heal-power gear).
+      const amt = s.id === 'heal' ? G.SkillSystem.healAmount(this.game.player, lv) : undefined;
+      this.send({ t: 'buff', to: target.id, skill: s.id, lv, amt });   // their own effect plays the visuals
       this.game.log.add(`You cast ${s.name} on ${target.name}.`, 'info');
     },
     receiveBuff(m) {
       const game = this.game, p = game.player, s = G.Skills.get(m.skill);
       if (!s || s.target !== 'ally' || !p.alive) return;
       const sys = p.skills, run = G.SkillSystem.EFFECTS[s.effect || s.id];
-      if (run) run(sys, m.lv, p, s); else if (s.fx) G.SkillSystem.runFx(sys, s, m.lv, p);
+      if (s.id === 'heal' && m.amt > 0) { p.heal(m.amt); game.spells.aura(p, '#7dff9a'); }
+      else if (run) run(sys, m.lv, p, s); else if (s.fx) G.SkillSystem.runFx(sys, s, m.lv, p);
       game.log.add(`${m.fromName} cast ${s.name} on you.`, 'level');
     },
     update(dt) {

@@ -293,6 +293,18 @@ database, and you see other players move, change gear and chat (press
 Enter). See `server/README.md` for setup. Opened any other way (a file or
 the published page), Willowmere stays single-player with browser saves.
 
+## Sunpetal Plains and build gear (v0.40)
+
+- **Sunpetal Plains:** east of Willowmere Meadows (Lv 26–56). Giearths and
+  Metalings near the way in; Geographers (Lv 56, man-eating sunflowers) rooted
+  over the hills, biting only what comes within reach and healing each other.
+- **Gear for every build:** magic, healing (heal power %), ranged, melee and
+  tank sets, with weapons for every class, dropping around their level.
+- **Kiting:** monsters give up once you are far from them
+  (`MONSTER_LOSE_RANGE` in `js/core/config.js`), not when they leave home.
+- **Skill levels from the mouse:** with a skill on the mouse, the wheel picks
+  one level lower or higher.
+
 ## Stage 9: trustworthy server (in progress)
 
 - **Phase 1 – the server keeps your character:** online, items, equipment,

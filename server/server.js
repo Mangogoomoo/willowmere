@@ -442,7 +442,8 @@ wss.on('connection', (ws) => {
       // A support skill cast on another player: they apply it.
       const target = wsOfChar(Number(msg.to));
       if (target && target.readyState === 1 && online.get(target).map === me.map)
-        target.send(JSON.stringify({ t: 'buff', from: me.charId, fromName: me.name, skill: String(msg.skill || '').slice(0, 40), lv: Math.max(1, Math.min(10, Number(msg.lv) || 1)) }));
+        target.send(JSON.stringify({ t: 'buff', from: me.charId, fromName: me.name, skill: String(msg.skill || '').slice(0, 40), lv: Math.max(1, Math.min(10, Number(msg.lv) || 1)),
+          amt: msg.amt != null ? Math.max(0, Math.min(30000, Math.round(Number(msg.amt) || 0))) : undefined }));
     } else if (msg.t === 'pvp_hit') {
       // Only on PvP maps, only to someone on the same map, and not too fast.
       if (!pvpMaps.has(me.map) || msg.map !== me.map) return;
