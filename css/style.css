@@ -761,6 +761,13 @@ button:focus-visible { outline: 2px solid #ffd76a; outline-offset: 2px; }
 .ed-xyz { display: grid; grid-template-columns: repeat(auto-fit, minmax(80px, 1fr)); gap: 6px; }
 .ed-grow { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; font-size: 12px; margin: 4px 0; }
 .ed-foot { display: flex; gap: 6px; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--cell-edge); }
+/* Saving map: the upload's progress, then a moving bar while the server stores it. */
+.ed-savebar { margin-top: 6px; font-size: 12px; font-weight: 600; color: var(--ink-soft); }
+.ed-savebar .bar { height: 8px; margin-bottom: 4px; border-radius: 4px; overflow: hidden; background: var(--meter-bg); border: 1px solid var(--meter-edge); }
+.ed-savebar i { display: block; height: 100%; width: 0; border-radius: 3px; background: linear-gradient(180deg, var(--sp-a), var(--sp-b)); transition: width 0.15s; }
+.ed-savebar.wait i { width: 35%; animation: ed-save-slide 1.1s ease-in-out infinite alternate; }
+@keyframes ed-save-slide { from { transform: translateX(0); } to { transform: translateX(186%); } }
+@media (prefers-reduced-motion: reduce) { .ed-savebar.wait i { animation: none; width: 100%; opacity: 0.6; } }
 .ed-help { margin: 6px 0 0; font-size: 11px; color: var(--ink-soft); line-height: 1.4; }
 
 /* Map editor: readable dark text in every white box. */

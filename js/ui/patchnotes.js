@@ -6,6 +6,9 @@
   const h = G.h;
 
   const PATCHES = [
+    { v: '0.41', date: '2026-11-17T12:00', title: 'Map editor: saving bar', notes: [
+      'Saving a map now shows a bar under Save map: how much of the map has been sent, then “storing it on the server” until it is done. The button reads “Saving…” meanwhile.',
+    ] },
     { v: '0.40', date: '2026-11-16T12:00', title: 'Sunpetal Plains, gear for every build, and kiting', notes: [
       'New map: Sunpetal Plains, through a new exit on the east side of Willowmere Meadows. Giearths and Metalings near the way in, and dozens of Geographers (level 56) scattered over the hills: man-eating sunflowers that never move and only bite what is close, so mages can bolt them from range. Geographers heal each other, so pick them off one at a time.',
       'New cards: Geographer (garment: Heal power +10%, INT +1), Giearth (shoes: VIT +1, Max HP +100, MDEF +2) and Metaling (weapon: ATK +15, HIT +5).',

@@ -645,13 +645,41 @@
 
     /* ---------- saving ---------- */
     async save() {
+      if (this.saving) return;
+      this.saving = true; this.saveProgress = 0; this.render();
       try {
-        this.saving = true;
-        await G.Online.api(`/api/maps/${this.game.mapId}`, 'PUT', { data: this.data });
-        this.dirty = false; this.render();
+        await this.sendMap(`/api/maps/${this.game.mapId}`, { data: this.data }, (f) => { this.saveProgress = f; this.showSaveBar(); });
+        this.dirty = false;
         this.game.log.add('Map saved. Everyone on this map gets the update now.', 'level');
       } catch (e) { this.game.log.add('Saving failed: ' + e.message, 'warn'); }
-      this.saving = false;
+      this.saving = false; this.render();
+    },
+    // Sends the map with upload progress (the bar under Save map follows it).
+    sendMap(path, body, onProgress) {
+      return new Promise((resolve, reject) => {
+        const x = new XMLHttpRequest();
+        x.open('PUT', path);
+        x.setRequestHeader('Content-Type', 'application/json');
+        if (G.Online.token) x.setRequestHeader('Authorization', 'Bearer ' + G.Online.token);
+        x.upload.onprogress = (e) => { if (e.lengthComputable) onProgress(e.loaded / e.total); };
+        x.upload.onload = () => onProgress(1);
+        x.onload = () => {
+          let j = {}; try { j = JSON.parse(x.responseText); } catch (e) { /* not JSON */ }
+          if (x.status >= 200 && x.status < 300) resolve(j); else reject(new Error(j.error || `Server error (${x.status})`));
+        };
+        x.onerror = () => reject(new Error('No connection to the server.'));
+        x.send(JSON.stringify(body));
+      });
+    },
+    // The bar: the upload's percentage, then a moving bar while the server stores the map.
+    showSaveBar() {
+      const el = this.win && this.win.body && this.win.body.querySelector('.ed-savebar');
+      if (!el) return;
+      const f = this.saveProgress || 0, waiting = f >= 1;
+      el.classList.toggle('wait', waiting);
+      el.querySelector('i').style.width = waiting ? '' : Math.round(f * 100) + '%';
+      el.querySelector('span').textContent = waiting ? 'Saving map… storing it on the server' : `Saving map… ${Math.round(f * 100)}%`;
+      el.setAttribute('aria-valuenow', String(Math.round(f * 100)));
     },
     revert() {
       if (this.dirty && !confirm('Throw away your unsaved changes on this map?')) return;
@@ -776,14 +804,16 @@
       else if (this.tab === 'ground') this.renderGround(body);
       else this.renderMap(body);
       b.append(h('div.ed-foot', null,
-        h('button.btn.small', { type: 'button', disabled: !this.dirty, onclick: () => this.save() }, 'Save map'),
+        h('button.btn.small', { type: 'button', disabled: !this.dirty || this.saving, onclick: () => this.save() }, this.saving ? 'Saving…' : 'Save map'),
         h('button.btn.small.ghost', { type: 'button', onclick: () => this.undo(), disabled: !this.undoStack.length }, 'Undo'),
         h('button.btn.small.ghost', { type: 'button', onclick: () => this.revert() }, 'Revert')),
+        ...(this.saving ? [h('div.ed-savebar', { role: 'progressbar', 'aria-label': 'Saving map', 'aria-valuemin': '0', 'aria-valuemax': '100' }, h('div.bar', null, h('i')), h('span'))] : []),
         h('div.opt-btns', null, h('button.btn.small.ghost', { type: 'button', title: 'Remember where you stand, to use as a warp destination', onclick: () => {
           const p = this.game.player.position; this.remembered = { map: this.game.mapId, x: Math.round(p.x * 10) / 10, z: Math.round(p.z * 10) / 10 };
           this.game.log.add(`Remembered: ${(G.Maps[this.remembered.map] || {}).name} at X ${this.remembered.x}, Z ${this.remembered.z}.`, 'system'); this.render();
         } }, '📍 Remember this spot'), this.remembered ? h('small.ed-mem', { text: `${(G.Maps[this.remembered.map] || {}).name} ${this.remembered.x}, ${this.remembered.z}` }) : null),
         h('p.ed-help', { text: this.grab ? 'Moving with the mouse: click to drop it.' : this.placing ? 'Click the ground to place (Shift+click to keep placing, Q/E rotate, Esc stops).' : 'Click to select · arrows nudge · PgUp/PgDn height · Q/E rotate · +/- size · G grab · Del remove · Ctrl+D copy · Ctrl+Z undo · WASD move' }));
+      if (this.saving) this.showSaveBar();
     },
     paletteBtn(label, icon, on, onclick, title) {
       return h('button.ed-item' + (on ? '.on' : ''), { type: 'button', title: title || label, onclick }, h('span.ed-ico', { text: icon }), h('span', { text: label }));
