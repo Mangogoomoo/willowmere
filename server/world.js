@@ -162,13 +162,19 @@ class MapSim {
   }
 
   /* ---- hits from players ---- */
-  hit(me, msg) {
+  hit(me, msg, ws) {
     const m = this.monsters.list.find((x) => x.id === Number(msg.id)), from = this.players.get(me.charId);
     if (!m || !m.alive || !from) return;
     this.focus = from;
-    if (msg.op === 'dmg') {
+    if (msg.op === 'miss') {
+      // Everyone else on the map sees the miss too.
+      if (['Miss', 'Pneuma'].includes(msg.text)) this.out.broadcast(this.mapId, { t: 'mob', op: 'hit', map: this.mapId, id: m.id, miss: msg.text }, ws);
+    } else if (msg.op === 'dmg') {
       m.lastHitBy = me.charId;
-      m.takeDamage(Math.max(0, Math.min(1e7, Math.round(Number(msg.dmg) || 0))), from);
+      const dmg = Math.max(0, Math.min(1e7, Math.round(Number(msg.dmg) || 0)));
+      // Everyone else on the map sees the damage number.
+      this.out.broadcast(this.mapId, { t: 'mob', op: 'hit', map: this.mapId, id: m.id, dmg, k: ['crit', 'skilldmg', 'magic'].includes(msg.k) ? msg.k : 'dmg' }, ws);
+      m.takeDamage(dmg, from);
     } else if (msg.op === 'status') {
       const name = String(msg.name || '').slice(0, 24), data = msg.data && typeof msg.data === 'object' ? msg.data : undefined;
       if (/^[a-z_]+$/.test(name)) m.addStatus(name, Math.max(0.1, Math.min(60, Number(msg.sec) || 1)), data && { dps: Math.max(0, Math.min(1e5, Number(data.dps) || 0)) });
@@ -261,7 +267,7 @@ const World = {
   join(me) { const s = this.sim(me.map); if (s) s.join(me); },
   move(me) { const s = this.sims.get(me.map); if (s) s.move(me); },
   leave(me, map) { const s = this.sims.get(map || me.map); if (s) s.leave(me.charId); },
-  hit(me, msg) { const s = this.sims.get(me.map); if (s && msg.map === me.map) s.hit(me, msg); },
+  hit(me, msg, ws) { const s = this.sims.get(me.map); if (s && msg.map === me.map) s.hit(me, msg, ws); },
   snapshot(map) { const s = this.sims.get(map); return s ? s.snapshot() : []; },
   // A map was edited: rebuild it (its players reload it too).
   mapUpdated(id, data) {

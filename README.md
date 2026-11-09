@@ -144,7 +144,9 @@ online and falls back to a system font offline.
 - **Blessing and Increase AGI** are targeted like the classics: use the
   skill, then click a character (yourself).
 - **Cast lower levels:** ‹ › on a skill in the skill tree picks the level you
-  cast at (cheaper SP); the hotbar shows the chosen level.
+  cast at (cheaper SP). Dragging the skill to the action bar keeps that level
+  in the slot, so the same skill can sit there at several levels (a slot
+  dragged at the highest level follows your highest level).
 - **SP costs** are about 45% of classic values.
 - **Hold to repeat:** hold + on a stat or a skill to keep raising it.
 - The status window line reads "Class, Base Level x, Job Level x".

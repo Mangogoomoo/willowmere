@@ -434,7 +434,7 @@ wss.on('connection', (ws) => {
       else if (text) broadcast(me.map, { t: 'chat', id: me.charId, from: me.name, text });
     } else if (msg.t === 'mob') {
       // A player's hit, status or knockback on a monster: the server's monster takes it.
-      if (['dmg', 'status', 'knock'].includes(msg.op)) World.hit(me, msg);
+      if (['dmg', 'status', 'knock', 'miss'].includes(msg.op)) World.hit(me, msg, ws);
     } else if (msg.t === 'fx') {
       // Cast bars and spell effects, for everyone else on the map to see.
       broadcast(me.map, Object.assign({}, msg, { from: me.charId, map: me.map }), ws);

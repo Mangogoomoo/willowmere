@@ -52,7 +52,9 @@
             if (sk) {
               e.preventDefault();
               if (G.Skills.get(sk).type === 'passive') { this.game.log.add(`${G.Skills.get(sk).name} is passive and always on, so it can't go on the action bar.`, 'warn'); return; }
-              this.set(i, { type: 'skill', id: sk }); return;
+              // A lower level picked in the skills window stays with this slot; the highest level follows new levels.
+              const lv = parseInt(e.dataTransfer.getData('text/x-skill-lv'), 10), max = this.game.player.skills.level(sk);
+              this.set(i, lv && lv < max ? { type: 'skill', id: sk, lv } : { type: 'skill', id: sk }); return;
             }
             if (!d) return;
             e.preventDefault();
@@ -69,11 +71,13 @@
       const s = this.slots[i];
       if (!s) return '<div class="tt-desc">Drag a potion, piece of gear or skill here.</div>';
       const p = this.game.player;
-      if (s.type === 'skill') return G.skillTooltip(G.Skills.get(s.id), p) + `<div class="tt-hint">${this.keyLabel(i)} to use. Drag to another slot to move it, or off the bar to remove it.</div>`;
+      if (s.type === 'skill') return G.skillTooltip(G.Skills.get(s.id), p, this.slotLevel(s)) + `<div class="tt-hint">${this.keyLabel(i)} to use at level ${this.slotLevel(s)}. Drag to another slot to move it, or off the bar to remove it. For another level, pick it in the skills window and drag the skill here again.</div>`;
       const have = p.inventory.count(s.id);
       return G.itemTooltip({ id: s.id, qty: have }, p, { hint: `${this.keyLabel(i)} to use. Drag to another slot to move it, or off the bar to remove it.` });
     }
 
+    // The level a skill slot casts at: its own, or the highest learned.
+    slotLevel(s) { const max = this.game.player ? this.game.player.skills.level(s.id) : 0; return max ? Math.max(1, Math.min(max, s.lv || max)) : 0; }
     keyLabel(i) { return G.Keybinds.label('hot' + (i + 1)); }
     // Slot labels follow the current key bindings.
     renderKeys() { this.cells.forEach((c, i) => { c.querySelector('kbd').textContent = G.Keybinds.primary('hot' + (i + 1)) || '·'; }); }
@@ -89,7 +93,7 @@
       const s = this.slots[i], p = this.game.player;
       if (!s || !p) return;
       if (s.type === 'skill') {
-        if (p.skills.use(s.id)) this.flash(i);
+        if (p.skills.use(s.id, undefined, this.slotLevel(s))) this.flash(i);
         return;
       }
       if (s.type === 'item') {
@@ -110,7 +114,7 @@
         c.draggable = !!s;
         if (!s) { c.classList.remove('full', 'none', 'skill'); return; }
         if (s.type === 'skill') {
-          const sk = G.Skills.get(s.id), lv = p ? p.skills.level(s.id) : 0, use = lv ? p.skills.useLevel(s.id) : 0;
+          const sk = G.Skills.get(s.id), lv = p ? p.skills.level(s.id) : 0, use = this.slotLevel(s);
           c.classList.add('full', 'skill');
           c.classList.toggle('none', !lv);
           c.append(h('img', { src: G.Icons.skillUrl(s.id), alt: sk.name }), h('span.slv', { text: 'Lv ' + use }));
@@ -132,7 +136,7 @@
       this.slots.forEach((s, i) => {
         const c = this.cells[i];
         if (!s || s.type !== 'skill') { if (c._cd) { c.style.setProperty('--cd', '0'); c._cd = 0; } return; }
-        const sk = G.Skills.get(s.id), lv = p.skills.level(s.id) ? p.skills.useLevel(s.id) : 0;
+        const sk = G.Skills.get(s.id), lv = this.slotLevel(s);
         const left = p.skills.cooldownLeft(s.id), total = Math.max(0.25, sk.cd(Math.max(1, lv)));
         const frac = Math.min(1, left / total);
         if (Math.abs(frac - (c._cd || 0)) > 0.01) { c.style.setProperty('--cd', frac.toFixed(3)); c._cd = frac; }
@@ -141,13 +145,16 @@
       });
     }
 
-    serialize() { return this.slots.map((s) => (s ? { type: s.type, id: s.id } : null)); }
+    serialize() { return this.slots.map((s) => (s ? Object.assign({ type: s.type, id: s.id }, s.lv ? { lv: s.lv } : null) : null)); }
     load(data) {
       this.slots = new Array(9).fill(null);
       (data || []).forEach((s, i) => {
         if (!s || i >= 9) return;
         const job = this.game.player ? this.game.player.job : 'novice';
         if ((s.type === 'item' && G.Items.get(s.id)) || (s.type === 'skill' && G.Skills.get(s.id) && G.Skills.allowed(s.id, job))) this.slots[i] = s;
+        // Slots saved before they had their own level keep the level picked in the skills window.
+        const sys = this.game.player && this.game.player.skills;
+        if (this.slots[i] && s.type === 'skill' && !s.lv && sys && sys.selected[s.id]) this.slots[i] = Object.assign({}, s, { lv: sys.selected[s.id] });
       });
       this.render();
       // Passive skills never belong on the bar (older saves might have one).

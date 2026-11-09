@@ -94,6 +94,9 @@
       return t && t[def] != null ? t[def] : 1;
     },
 
+    // A miss on a monster (online, everyone on the map sees it: js/net/mobsync.js).
+    shown() {},
+
     /* Physical hit from the player. opts: mult (skill %), hitBonus (% added
        to hit chance), element, ranged. Criticals only on normal attacks. */
     physical(player, mon, opts) {
@@ -105,9 +108,9 @@
       // Pneuma: ranged physical attacks can't reach anyone standing inside it.
       const ranged = opts.ranged || (!opts.mult && D.weaponType === 'bow') || (opts.mult && D.weaponType === 'bow' && opts.ranged !== false && opts.skill && /strafe|shower|arrow|repel|blitz|musical|throw/.test(opts.skill));
       if (ranged && game.fields && game.fields.list.some((f) => f.kind === 'pneuma' && Math.hypot(mon.position.x - f.x, mon.position.z - f.z) <= f.r)) {
-        game.overlay.addText(at, 'Pneuma', 'miss'); return 0;
+        game.overlay.addText(at, 'Pneuma', 'miss'); Combat.shown(mon, 'Pneuma'); return 0;
       }
-      if (!crit && !opts.noMiss && Math.random() * 100 >= hitPct) { game.overlay.addText(at, 'Miss', 'miss'); game.sfx('miss', at); return 0; }
+      if (!crit && !opts.noMiss && Math.random() * 100 >= hitPct) { game.overlay.addText(at, 'Miss', 'miss'); game.sfx('miss', at); Combat.shown(mon, 'Miss'); return 0; }
       const prov = mon.provoke && mon.provoke.until > game.time ? mon.provoke : null;
       const def = d.def * (prov ? 1 - prov.defDown : 1);
       let dmg;
@@ -127,7 +130,8 @@
       dmg = Math.max(1, Math.round(dmg));
       game.effects.hit(at, crit);
       game.sfx(crit ? 'crit' : 'hit', at);
-      game.overlay.addText(at, String(dmg), crit ? 'crit' : opts.mult ? 'skilldmg' : 'dmg');
+      mon.hitKind = crit ? 'crit' : opts.mult ? 'skilldmg' : 'dmg';
+      game.overlay.addText(at, String(dmg), mon.hitKind);
       mon.takeDamage(dmg, player);
       // Enchant Poison: a chance to poison on every hit.
       if (mon.alive && D.poisonChance && Math.random() * 100 < D.poisonChance && !mon.status.poisoned) {
@@ -144,7 +148,8 @@
       const matk = U.randRange(Math.random, D.matkMin, Math.max(D.matkMin, D.matkMax));
       const el = Combat.element(opts.element, d.element || 'neutral');
       const dmg = Math.max(1, Math.round(matk * (opts.mult || 1) * el * (1 - (d.mdef || 0) / 100)));
-      game.overlay.addText(at, String(dmg), el > 1 ? 'crit' : 'magic');
+      mon.hitKind = el > 1 ? 'crit' : 'magic';
+      game.overlay.addText(at, String(dmg), mon.hitKind);
       game.sfx({ fire: 'fire', water: 'ice', wind: 'zap', holy: 'holy', ghost: 'ice' }[opts.element] || 'hit', at);
       mon.takeDamage(dmg, player);
       return dmg;

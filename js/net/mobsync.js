@@ -83,8 +83,11 @@
     this.lastHurtTime = this.game.time;
     this.sprite.setFlash(1);
     if (!this.swingT2) this.sprite.play('hit', { restart: true });
-    net().send({ t: 'mob', op: 'dmg', map: this.game.mapId, id: this.id, dmg: Math.round(dmg) });
+    // The number's style (normal, critical, skill, magic) goes along so others see the same.
+    net().send({ t: 'mob', op: 'dmg', map: this.game.mapId, id: this.id, dmg: Math.round(dmg), k: this.hitKind || 'dmg' });
+    this.hitKind = null;
   };
+  G.Combat.shown = (mon, text) => { if (Sync.puppet() && mon.alive) net().send({ t: 'mob', op: 'miss', map: mon.game.mapId, id: mon.id, text }); };
   const origStatus = M.addStatus;
   M.addStatus = function (name, seconds, data) {
     origStatus.call(this, name, seconds, data);
@@ -107,6 +110,12 @@
       const x = mon(m.id);
       if (!x) return;
       if (m.op === 'attack') { if (game.player.alive) origAttack.call(G.Combat, x, game.player); }
+      else if (m.op === 'hit') {
+        // Another player's hit or miss on this monster.
+        const at = x.position.clone(); at.y += x.def.height * 0.55;
+        if (m.miss) game.overlay.addText(at, String(m.miss).slice(0, 12), 'miss');
+        else { game.overlay.addText(at, String(Math.round(Number(m.dmg) || 0)), ['crit', 'skilldmg', 'magic'].includes(m.k) ? m.k : 'dmg'); if (x.alive) x.sprite.setFlash(1); }
+      }
       else if (m.op === 'hurt') { if (game.player.alive) game.player.takeDamage(Math.max(1, Number(m.dmg) || 1), x); }
       else if (m.op === 'killed') {
         // Our kill, confirmed by the server: EXP, drops and quest progress are ours.

@@ -114,8 +114,14 @@
       this.game.sfx('heal');
       const before = this.hp;
       this.hp = Math.min(this.maxHp, this.hp + amount);
-      this.game.overlay.addText(this.position, `+${this.hp - before}`, 'heal');
+      this.showHeal(this.hp - before);
       this.game.effects.sparkle(this.position, [0.55, 1, 0.6], 14);
+    }
+    // The HP actually healed, over your head (and over it for everyone else on the map).
+    showHeal(n) {
+      if (n <= 0) return;
+      this.game.overlay.addText(this.position, `+${n}`, 'heal');
+      if (G.Net && G.Net.ws) G.Net.send({ t: 'fx', k: 'heal', n });
     }
 
     // Walk toward something until within range (for skills and NPCs).
@@ -257,15 +263,15 @@
       if (item.use && item.use.fn && G.ItemUse && G.ItemUse[item.use.fn]) return G.ItemUse[item.use.fn](this, item);
       const u = item.use, game = this.game;
       if (u.heal) {
-        const amount = Math.floor(u.heal * (1 + this.derived.total.vit * 0.02));
+        const amount = Math.floor(u.heal * (1 + this.derived.total.vit * 0.02)), before = this.hp;
         this.hp = Math.min(this.maxHp, this.hp + amount);
-        game.overlay.addText(this.position, `+${amount}`, 'heal');
+        this.showHeal(this.hp - before);
         game.effects.sparkle(this.position, [0.55, 1, 0.6], 14);
       }
       if (u.sp) {
-        const amount = Math.floor(u.sp * (1 + this.derived.total.int * 0.02));
+        const amount = Math.floor(u.sp * (1 + this.derived.total.int * 0.02)), before = this.sp;
         this.sp = Math.min(this.maxSp, this.sp + amount);
-        game.overlay.addText(this.position, `+${amount} SP`, 'spheal');
+        if (this.sp > before) game.overlay.addText(this.position, `+${this.sp - before} SP`, 'spheal');
         game.effects.sparkle(this.position, [0.5, 0.7, 1], 14);
       }
       if (u.recall) {

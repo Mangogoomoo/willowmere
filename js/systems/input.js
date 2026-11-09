@@ -128,13 +128,14 @@
       }
     }
 
-    startTargeting(skillId, mode) {
+    startTargeting(skillId, mode, lv) {
       this.targeting = skillId;
+      this.targetLv = lv || this.game.player.skills.useLevel(skillId);
       this.targetMode = mode || 'enemy';
       document.body.classList.add('cursor-target');
       // Like RO: a turning target ring at the mouse, with the skill's name and level beside it.
       const el = this.skillCursor(), s = G.Skills.get(skillId);
-      el.querySelector('.sc-label').textContent = `${s.name} Lv ${this.game.player.skills.useLevel(skillId)}`;
+      el.querySelector('.sc-label').textContent = `${s.name} Lv ${this.targetLv}`;
       if (this.mouseX != null) el.style.transform = `translate(${this.mouseX}px, ${this.mouseY}px)`;
       el.hidden = this.mouseX == null;
       this.updateCursor();
@@ -183,23 +184,23 @@
       if (!player.alive) return;
       const { ground, mon, npc, loot } = this.pickAt();
       if (this.targeting) {
-        const id = this.targeting;
+        const id = this.targeting, lv = this.targetLv;
         if (this.targetMode === 'ground') {
           const pt = ground || (mon && mon.position);
           this.cancelTargeting(!pt);
-          if (pt) player.skills.use(id, { ground: true, alive: true, position: new THREE.Vector3(pt.x, G.Terrain.surfaceHeight(pt.x, pt.z), pt.z) });
+          if (pt) player.skills.use(id, { ground: true, alive: true, position: new THREE.Vector3(pt.x, G.Terrain.surfaceHeight(pt.x, pt.z), pt.z) }, lv);
           return;
         }
         if (this.targetMode === 'ally') {
           const self = this.pickSelf(this.ray.ray), other = !self && this.pickRemote(this.ray.ray);
           this.cancelTargeting(!self && !other);
-          if (self) player.skills.use(id, player);
-          else if (other) player.skills.use(id, other);
+          if (self) player.skills.use(id, player, lv);
+          else if (other) player.skills.use(id, other, lv);
           return;
         }
         const foe = !mon && G.CustomMaps.rule('pvp') && this.pickRemote(this.ray.ray);
         this.cancelTargeting(!mon && !foe);
-        if (mon) player.skills.use(id, mon); else if (foe) player.skills.use(id, foe);
+        if (mon) player.skills.use(id, mon, lv); else if (foe) player.skills.use(id, foe, lv);
         return;
       }
       if (npc) {

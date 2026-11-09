@@ -193,10 +193,11 @@
     cooldownLeft(id) { return Math.max(this.cooldowns[id] || 0, this.delay); }
 
     /* ---------------- using skills ---------------- */
-    use(id, target) {
+    // lvWant: the level to use (an action bar slot's own level); otherwise the one picked in the skills window.
+    use(id, target, lvWant) {
       const s = G.Skills.get(id), p = this.player, game = this.game;
       if (!s || !this.level(id)) return false;
-      const lv = this.useLevel(id);
+      const lv = lvWant ? Math.max(1, Math.min(this.level(id), lvWant)) : this.useLevel(id);
       if (s.type === 'passive') { game.log.add(`${s.name} is passive. It’s always working.`, 'info'); return false; }
       if (!p.alive) return false;
       if (id !== 'play_dead' && p.playingDead) { this.execute(G.Skills.get('play_dead'), 1, null); }
@@ -208,9 +209,9 @@
 
       if (s.target === 'self') { this.begin(s, lv, null); return true; }
       if (s.target === 'ground') {
-        if (!target || !target.ground) { game.input.startTargeting(id, 'ground'); return false; }
-        if (p.position.distanceTo(target.position) <= this.range(s) + 0.5) this.begin(s, lv, target);
-        else { this.queued = { id, target }; p.approach(target, this.range(s)); }
+        if (!target || !target.ground) { game.input.startTargeting(id, 'ground', lv); return false; }
+        if (p.position.distanceTo(target.position) <= this.range(s, lv) + 0.5) this.begin(s, lv, target);
+        else { this.queued = { id, target, lv }; p.approach(target, this.range(s, lv)); }
         return true;
       }
       if (s.target === 'ally') {
@@ -218,11 +219,11 @@
         if (target && target === p) { this.begin(s, lv, p); return true; }
         // Another player: walk into range first if needed.
         if (target && target.isRemote) {
-          if (p.distanceTo(target) <= this.range(s) + 0.5) this.begin(s, lv, target);
-          else { this.queued = { id, target }; p.approach(target, this.range(s)); }
+          if (p.distanceTo(target) <= this.range(s, lv) + 0.5) this.begin(s, lv, target);
+          else { this.queued = { id, target, lv }; p.approach(target, this.range(s, lv)); }
           return true;
         }
-        game.input.startTargeting(id, 'ally');
+        game.input.startTargeting(id, 'ally', lv);
         return false;
       }
 
@@ -230,16 +231,16 @@
       // whatever you happen to be auto-attacking). A target is only passed in
       // by that click.
       const t = target && target.alive ? target : null;
-      if (!t) { game.input.startTargeting(id); return false; }
-      if (this.inRange(s, t)) this.begin(s, lv, t);
-      else { this.queued = { id, target: t }; p.approach(t, this.range(s)); }
+      if (!t) { game.input.startTargeting(id, 'enemy', lv); return false; }
+      if (this.inRange(s, t, lv)) this.begin(s, lv, t);
+      else { this.queued = { id, target: t, lv }; p.approach(t, this.range(s, lv)); }
       return true;
     }
 
-    range(s) {
-      return s.range === 'weapon' ? this.player.attackRange : s.range(this.useLevel(s.id));
+    range(s, lv) {
+      return s.range === 'weapon' ? this.player.attackRange : s.range(lv || this.useLevel(s.id));
     }
-    inRange(s, t) { return t === this.player || this.player.distanceTo(t) <= this.range(s) + (t.def ? t.def.radius : 0.5) + 0.1; }
+    inRange(s, t, lv) { return t === this.player || this.player.distanceTo(t) <= this.range(s, lv) + (t.def ? t.def.radius : 0.5) + 0.1; }
 
     checkCosts(s, lv) {
       const p = this.player;
@@ -363,7 +364,7 @@
       if (this.queued) {
         const q = this.queued, s = G.Skills.get(q.id);
         if (!q.target.alive) this.queued = null;
-        else if (this.inRange(s, q.target)) { p.path = null; this.begin(s, this.useLevel(q.id), q.target); }
+        else if (this.inRange(s, q.target, q.lv)) { p.path = null; this.begin(s, q.lv || this.useLevel(q.id), q.target); }
       }
     }
 

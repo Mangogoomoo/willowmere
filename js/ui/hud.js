@@ -14,14 +14,13 @@
         spFill: $('st-sp-fill'), spText: $('st-sp-text'),
         expFill: $('st-exp-fill'), expText: $('st-exp-text'),
         jexpFill: $('st-jexp-fill'), jexpText: $('st-jexp-text'),
-        zeny: $('st-zeny'), weight: $('st-weight'), points: $('st-points'),
+        zeny: $('st-zeny'), weight: $('st-weight'),
         target: $('target'), tStatus: $('tg-status'), tName: $('tg-name'), tLevel: $('tg-level'), tFill: $('tg-hp-fill'), tText: $('tg-hp-text'),
         help: $('help'), helpBtn: $('help-close'), helpOpen: $('help-open'),
         toast: $('toast'), zone: $('zone'), death: $('death'),
       };
       this.cache = {};
       this.el.helpBtn.addEventListener('click', () => this.toggleHelp(false));
-      this.el.points.addEventListener('click', () => game.windows.open('status'));
       this.el.helpOpen.addEventListener('click', () => this.toggleHelp(true));
       this.toastTimer = null;
       this.zoneTimer = null;
@@ -90,7 +89,6 @@
       this.set('zeny', p.zeny, (v) => { e.zeny.textContent = v.toLocaleString() + ' z'; });
       const wp = p.inventory.weightPct();
       this.set('weight', wp >= 0.9, (heavy) => { e.weight.hidden = !heavy; });
-      this.set('points', p.statPoints, (v) => { e.points.hidden = v <= 0; e.points.textContent = `${v} stat point${v === 1 ? '' : 's'} to spend`; });
 
       const t = p.target;
       const show = !!(t && (t.alive || !t.corpseGone));

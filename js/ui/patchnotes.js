@@ -6,6 +6,13 @@
   const h = G.h;
 
   const PATCHES = [
+    { v: '0.39', date: '2026-11-15T12:00', title: 'Numbers and skill levels', notes: [
+      'Healing numbers show what you actually healed: a potion that only tops up 12 HP shows +12 (nothing at full HP).',
+      'Online you now see other players’ damage numbers on monsters (including Miss and criticals), and their healing numbers over their heads.',
+      'The skill cursor’s name and level now sit above the ring, centred.',
+      'Action bar slots keep their own skill level: pick a level with ‹ › in the skills window, then drag the skill to the bar. Put Heal on the bar at level 5 and again at level 10 to save SP when you don’t need the full heal.',
+      'Removed the yellow “stat points to spend” button from the top-left panel (the Status window still shows your points).',
+    ] },
     { v: '0.38', date: '2026-11-14T12:00', title: 'Skills feel more like RO', notes: [
       'You now stand still while casting: clicking the ground no longer walks you away (and no longer cancels the spell). Sages with Free Cast can still walk while casting.',
       'Using a skill stops you where you stand for one attack motion (shorter with more ASPD), so you can’t walk and shoot Double Strafe at the same time any more.',

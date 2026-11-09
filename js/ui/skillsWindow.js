@@ -6,14 +6,14 @@
   const h = G.h;
   const CW = 118, CH = 92;
 
-  function skillTooltip(s, player) {
+  function skillTooltip(s, player, atLevel) {
     const sys = player.skills, lv = sys.level(s.id);
     const lines = [`<div class="tt-name" style="color:#ffe27a">${G.esc(s.name)}</div>`];
     lines.push(`<div class="tt-type">${s.type === 'passive' ? 'Passive' : s.target === 'self' ? 'Active, self' : s.target === 'ally' ? 'Active, targets a character' : 'Active, targets an enemy'}, ${G.Jobs.get(s.job).name}${s.quest ? ', quest skill' : ''}</div>`);
     if (s.req.length) lines.push(`<div class="tt-req">Requires: ${s.req.map(([rid, rl]) => { const ok = sys.level(rid) >= rl; return `<span class="${ok ? '' : 'bad'}">${G.esc(G.Skills.get(rid).name)} ${rl}</span>`; }).join(', ')}</div>`);
     if (s.quest) lines.push('<div class="tt-req">Quest skill: costs no skill points, opens at job level 15.</div>');
     if (s.catalyst && s.catalyst.length) lines.push(`<div class="tt-req">Uses: ${s.catalyst.map(([id, n]) => `${n} ${G.esc(G.Items.get(id).name)}`).join(', ')}</div>`);
-    const use = lv ? sys.useLevel(s.id) : 0;
+    const use = lv ? (atLevel ? Math.min(lv, atLevel) : sys.useLevel(s.id)) : 0;
     if (lv) lines.push(`<div class="tt-desc"><b>Level ${use}${use < lv ? ' (chosen, learned ' + lv + ')' : ''}:</b> ${G.esc(s.desc(use))}</div>`);
     if (lv < s.max) lines.push(`<div class="tt-desc tt-next"><b>${lv ? 'Next' : 'Level 1'}:</b> ${G.esc(s.desc(lv + 1))}</div>`);
     if (s.type !== 'passive') {
@@ -92,7 +92,7 @@
           update();
         });
         const node = h('div.snode' + (s.type === 'passive' ? '.passive' : '') + (s.quest ? '.quest' : ''), {
-          ondragstart: (e) => { e.dataTransfer.setData('text/x-skill', s.id); G.Tooltip.hide(); },
+          ondragstart: (e) => { e.dataTransfer.setData('text/x-skill', s.id); e.dataTransfer.setData('text/x-skill-lv', String(sys.useLevel(s.id))); G.Tooltip.hide(); },
           ondblclick: () => { if (s.type !== 'passive' && sys.level(s.id)) p.skills.use(s.id); },
         }, h('img', { src: G.Icons.skillUrl(s.id), alt: '' }), h('span.sn-name', { text: s.name }), lvEl,
         s.type !== 'passive' ? useRow : null, plus);

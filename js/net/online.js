@@ -271,6 +271,12 @@
     showFx(m) {
       const game = this.game;
       if (m.k === 'v') { G.FxSync.replay(m); return; }
+      // Someone else was healed: the amount over their head.
+      if (m.k === 'heal') {
+        const r = this.players.get(m.from), n = Math.round(Number(m.n) || 0);
+        if (r && n > 0 && n < 1e7) game.overlay.addText(r.position, `+${n}`, 'heal');
+        return;
+      }
       const caster = this.players.get(m.from), s = G.Skills.get(m.s);
       if (!caster || !s) return;
       if (m.k === 'cast') {
