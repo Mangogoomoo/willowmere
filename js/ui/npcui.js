@@ -115,6 +115,9 @@
     render() {
       if (!this.game.windows.isOpen('shop')) return;
       const p = this.game.player, b = this.win.body;
+      // Keep the list where it was after buying or selling (a new tab starts at the top).
+      const old = b.querySelector('.shop-list'), scroll = old && this.scrollMode === this.mode ? old.scrollTop : 0;
+      this.scrollMode = this.mode;
       b.textContent = '';
       const tabs = h('div.tabs', null, [['buy', 'Buy'], ['sell', 'Sell']].map(([id, label]) => h('button.tab' + (this.mode === id ? '.on' : ''), {
         type: 'button', onclick: () => { this.mode = id; this.render(); },
@@ -150,6 +153,7 @@
       b.append(tabs, list, h('div.inv-foot.shop-foot', null,
         h('span.hint', { text: perk }),
         h('span.zeny', null, h('img', { src: G.Icons.url('zeny'), alt: '' }), `${p.zeny.toLocaleString()} z`)));
+      list.scrollTop = scroll;
     }
 
     update() {
@@ -205,6 +209,7 @@
     render() {
       if (!this.game.windows.isOpen('refine')) return;
       const p = this.game.player, b = this.win.body;
+      const old = b.querySelector('.shop-list'), scroll = old ? old.scrollTop : 0;   // keep the list where it was
       b.textContent = '';
       const list = h('div.shop-list');
       const items = this.targets();
@@ -236,6 +241,7 @@
           : 'Refining up to the safe limit always works. Beyond it, failure destroys the item. Maximum +10.' }),
         h('div.inv-foot.shop-foot', null, h('span.hint', { text: 'Bram sells Phracon and Emveretarcon. Elunium and Oridecon come from monsters.' }),
           h('span.zeny', null, h('img', { src: G.Icons.url('zeny'), alt: '' }), `${p.zeny.toLocaleString()} z`)));
+      list.scrollTop = scroll;
     }
 
     update() {

@@ -203,9 +203,16 @@
       if (id !== 'play_dead' && p.playingDead) { this.execute(G.Skills.get('play_dead'), 1, null); }
       if (id !== 'hiding' && p.hidden) p.unhide();
       if (this.casting) return false;
-      if (this.cooldownLeft(id) > 0) return false;
       const fail = this.checkCosts(s, lv);
       if (fail) { game.log.add(fail, 'warn'); return false; }
+      if (this.cooldownLeft(id) > 0) {
+        // Still cooling down: it can go on the mouse (pick a target), but it only fires once ready.
+        const mode = s.target === 'ground' ? 'ground' : s.target === 'ally' ? 'ally' : s.target === 'self' ? null : 'enemy';
+        const picked = mode === 'ground' ? target && target.ground : mode === 'ally' ? !!target : target && target.alive;
+        if (mode && !picked) { game.input.startTargeting(id, mode, lv); return false; }
+        if (mode) game.log.add(`${s.name} isn’t ready yet.`, 'info');
+        return false;
+      }
 
       if (s.target === 'self') { this.begin(s, lv, null); return true; }
       if (s.target === 'ground') {

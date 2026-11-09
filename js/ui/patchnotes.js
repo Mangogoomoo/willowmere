@@ -6,6 +6,11 @@
   const h = G.h;
 
   const PATCHES = [
+    { v: '0.42', date: '2026-11-18T12:00', title: 'Smoother shops and storage', notes: [
+      'Buying, selling and refining no longer jump the list back to the top.',
+      'Right-click an item in storage to take it back into your inventory (the same way right-click puts it in).',
+      'A skill that is still cooling down can be clicked: it goes on the mouse with its name and level, but only fires once it is ready.',
+    ] },
     { v: '0.41', date: '2026-11-17T12:00', title: 'Map editor: saving bar', notes: [
       'Saving a map now shows a bar under Save map: how much of the map has been sent, then “storing it on the server” until it is done. The button reads “Saving…” meanwhile.',
     ] },
