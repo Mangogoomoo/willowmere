@@ -180,6 +180,7 @@
       this.fields = new G.Fields(this);
       this.cart = new G.Cart(this);
       this.crafting = new G.Crafting(this);
+      G.Vending.install(this);
       G.bindInventoryDrops(this);
       G.Social.init(this);
       G.Trade.init(this);
@@ -411,6 +412,7 @@
       this.hotbar.update(dt);
       this.minimap.update(dt);
       if (G.Net.ws) G.Net.update(dt);
+      G.Vending.update();
       this.trackPerformance(dt);
 
       // Keep the shadow frustum centred on the player (snapped to texels to avoid shimmer).

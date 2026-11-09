@@ -268,7 +268,7 @@ async function api(req, res, url) {
   if (url.pathname === '/api/characters' && req.method === 'GET') {
     const ids = (await pool.query('SELECT id FROM characters WHERE account_id = $1', [acct.id])).rows;
     const slots = new Array(MAX_SLOTS).fill(null);
-    for (const { id } of ids) { const c = await loadCharacter(id, acct.id, false); if (c) slots[c.slot] = c; }
+    for (const { id } of ids) { const c = await loadCharacter(id, acct.id, false); if (c) { c.vending = Vend.shops.has(Number(id)); slots[c.slot] = c; } }
     return send(res, 200, { username: acct.username, slots });
   }
   if (url.pathname === '/api/characters' && req.method === 'POST') {
@@ -335,7 +335,7 @@ const server = http.createServer(async (req, res) => {
 
 /* ---------------------------------------------------------------- multiplayer */
 const online = new Map();   // ws -> session { accountId, charId, name, map, x, z, facing, moving, look }
-const publicState = (s) => ({ id: s.charId, name: s.name, map: s.map, x: s.x, z: s.z, facing: s.facing, moving: s.moving, look: s.look, party: s.partyName || null, guild: s.guild || null, hp: s.hp, maxHp: s.maxHp });
+const publicState = (s) => ({ id: s.charId, name: s.name, map: s.map, x: s.x, z: s.z, facing: s.facing, moving: s.moving, look: s.look, party: s.partyName || null, guild: s.guild || null, hp: s.hp, maxHp: s.maxHp, vend: Vend.title(s.charId) });
 function broadcast(map, msg, except) {
   const data = JSON.stringify(msg);
   for (const [ws, s] of online) if (s.map === map && ws !== except && ws.readyState === 1) ws.send(data);
@@ -349,6 +349,148 @@ const cleanLook = (l) => {
   if (l.appearance && typeof l.appearance === 'object') { out.appearance = {}; for (const k of ['hair', 'outfit', 'eyes', 'style']) if (typeof l.appearance[k] === 'string') out.appearance[k] = l.appearance[k].slice(0, 20); }
   if (l.head && typeof l.head === 'object') { out.head = {}; for (const k of ['top', 'mid', 'low']) if (typeof l.head[k] === 'string') out.head[k] = l.head[k].slice(0, 24); }
   return out;
+};
+
+/* ---------------------------------------------------------------- vending
+   A merchant's shop (Vending skill): items from their cart at a price each.
+   One open shop per account. The server keeps the shop, sells from it and
+   moves the Zeny; the shop stays open while its owner is logged out (they can
+   play another character) and closes when that character logs in again. */
+const VEND_MAX_PRICE = 1000000000, VEND_SPACING = 3;
+const Vend = {
+  shops: new Map(),   // charId -> shop
+  async load() {
+    for (const r of (await pool.query('SELECT account_id, character_id, data FROM vending_shops')).rows) {
+      this.shops.set(Number(r.character_id), Object.assign(r.data, { accountId: Number(r.account_id), charId: Number(r.character_id), online: false }));
+    }
+  },
+  forAccount(accountId) { for (const s of this.shops.values()) if (s.accountId === accountId) return s; return null; },
+  title(charId) { const s = this.shops.get(charId); return s ? s.title : null; },
+  // How a shop whose owner is away looks to everyone else.
+  pub(s) { return { id: s.charId, name: s.name, map: s.map, x: s.x, z: s.z, facing: s.facing || 0, moving: false, look: s.look, party: null, guild: null, hp: null, maxHp: null, vend: s.title }; },
+  ghosts(map, except) { return [...this.shops.values()].filter((s) => !s.online && s.map === map && s.charId !== except).map((s) => this.pub(s)); },
+  async save(s) {
+    const data = { name: s.name, title: s.title, map: s.map, x: s.x, z: s.z, facing: s.facing, look: s.look, items: s.items, sales: s.sales };
+    await pool.query(`INSERT INTO vending_shops (account_id, character_id, data) VALUES ($1, $2, $3)
+      ON CONFLICT (account_id) DO UPDATE SET character_id = $2, data = $3`, [s.accountId, s.charId, JSON.stringify(data)]);
+  },
+  view(s) { return { t: 'vend_view', id: s.charId, name: s.name, title: s.title, items: s.items.map((it) => Object.assign({}, it)) }; },
+  mine(s) { return { t: 'vend_mine', title: s.title, items: s.items, sales: s.sales }; },
+  // The seller's live character (loaded if they are away and the server restarted).
+  async seller(s) { return Chars.mem.get(s.charId) || Chars.load(s.charId, s.accountId, null, false); },
+
+  async handle(ws, me, m) {
+    const st = Chars.mem.get(me.charId);
+    if (!st) return;
+    if (m.t === 'vend_open') return this.open(ws, me, st, m);
+    if (m.t === 'vend_close') { if (this.shops.has(me.charId)) await this.close(me.charId, 'You closed your shop.'); return; }
+    if (m.t === 'vend_view') { const s = this.shops.get(Number(m.id)); if (s && s.map === me.map) ws.send(JSON.stringify(this.view(s))); return; }
+    if (m.t === 'vend_buy') return this.buy(ws, me, st, m);
+  },
+  async open(ws, me, st, m) {
+    const no = (text) => ws.send(JSON.stringify({ t: 'vend_fail', text }));
+    const lv = st.skills.vending || 0;
+    if (!lv || !(st.skills.pushcart > 0)) return no('You need the Vending skill and a Pushcart.');
+    if (this.forAccount(me.accountId)) return no('One of your characters already has a shop open (one per account).');
+    if (pvpMaps.has(me.map)) return no('You can’t open a shop on a PvP map.');
+    if ([...this.shops.values()].some((s) => s.map === me.map && Math.hypot(s.x - me.x, s.z - me.z) < VEND_SPACING)) return no('Too close to another shop. Move a little further away.');
+    const title = String(m.title || '').replace(/\s+/g, ' ').trim().slice(0, 40);
+    if (!title) return no('Give your shop a title.');
+    const want = Array.isArray(m.items) ? m.items.slice(0, 2 + lv) : [];
+    const items = [], used = new Set();
+    for (const w of want) {
+      const i = Math.floor(Number(w.i)), e = st.cart[i], qty = Math.floor(Number(w.qty)), price = Math.floor(Number(w.price));
+      if (!e || e.id !== w.id || used.has(e.uid)) return no('Your cart changed. Open Vending again.');
+      if (!(qty >= 1 && qty <= e.qty)) return no(`Pick 1 to ${e.qty} for ${(Ref.item(e.id) || {}).name || e.id}.`);
+      if (!(price >= 1 && price <= VEND_MAX_PRICE)) return no(`Prices are 1 to ${VEND_MAX_PRICE.toLocaleString()} Zeny each.`);
+      used.add(e.uid);
+      items.push({ k: items.length + 1, uid: e.uid, id: e.id, qty, price, refine: e.refine || 0, cards: e.cards || [], forgedBy: e.forgedBy, element: e.element });
+    }
+    if (!items.length) return no('Pick at least one item to sell.');
+    const s = { accountId: me.accountId, charId: me.charId, name: me.name, title, map: me.map, x: me.x, z: me.z, facing: me.facing || 0, look: me.look, items, sales: [], online: true };
+    this.shops.set(me.charId, s);
+    me.hidden = true;   // monsters leave shopkeepers alone
+    await this.save(s);
+    ws.send(JSON.stringify(this.mine(s)));
+    broadcast(me.map, { t: 'vend', id: me.charId, title }, ws);
+  },
+  async buy(ws, me, buyer, m) {
+    const s = this.shops.get(Number(m.id)), reply = (text) => { ws.send(JSON.stringify(Object.assign(s ? this.view(s) : { t: 'vend_view', id: Number(m.id), items: [], closed: true }, { text }))); };
+    if (!s) return reply('That shop has closed.');
+    if (s.accountId === me.accountId) return reply('You can’t buy from your own shop.');
+    if (s.map !== me.map || Math.hypot(s.x - me.x, s.z - me.z) > 12) return reply('Walk closer to the shop.');
+    const it = s.items.find((x) => x.k === Number(m.k)), qty = Math.floor(Number(m.qty));
+    if (!it) return reply('That item has sold out.');
+    if (!(qty >= 1 && qty <= it.qty)) return reply(`Only ${it.qty} left.`);
+    const cost = it.price * qty;
+    if (buyer.zeny < cost) return reply('You don’t have enough Zeny.');
+    const seller = await this.seller(s);
+    const e = seller && this.cartEntry(s, seller, it);
+    if (!e || e.qty < qty) { it.qty = e ? Math.min(it.qty, e.qty) : 0; return reply('That item isn’t available any more.'); }
+    if (!Chars.add(buyer, 'bag', it.id, qty, e)) return reply('Your inventory is full.');
+    Chars.take(seller, e.uid, qty, seller.cart);
+    buyer.zeny -= cost; seller.zeny = Math.min(2147483647, seller.zeny + cost);
+    buyer.dirty = seller.dirty = true;
+    it.qty -= qty; if (it.qty <= 0) s.items.splice(s.items.indexOf(it), 1);
+    s.sales.push({ id: it.id, qty, zeny: cost, buyer: me.name });
+    await Chars.flush(buyer, seller);
+    Chars.push(buyer);
+    const name = (Ref.item(it.id) || {}).name || it.id;
+    reply(`Bought ${qty} ${name} for ${cost.toLocaleString()} Zeny.`);
+    const sw = wsOfChar(s.charId);
+    if (sw && s.online) { Chars.push(seller); sw.send(JSON.stringify(Object.assign(this.mine(s), { text: `${me.name} bought ${qty} ${name} for ${cost.toLocaleString()} Zeny.` }))); }
+    if (!s.items.length) await this.close(s.charId, 'Your shop sold out and closed.');
+    else await this.save(s);
+  },
+  // The cart item behind a listing. Item numbers change when the server reloads a character
+  // (a restart), so it is found again by what it is: the same item, refine, cards and maker.
+  cartEntry(s, seller, it) {
+    let e = seller.cart.find((x) => x.uid === it.uid && x.id === it.id);
+    if (!e) {
+      const same = (x) => x.id === it.id && (x.refine || 0) === (it.refine || 0) && JSON.stringify(x.cards || []) === JSON.stringify(it.cards || [])
+        && (x.forgedBy || null) === (it.forgedBy || null) && (x.element || null) === (it.element || null);
+      e = seller.cart.find((x) => same(x) && !s.items.some((o) => o !== it && o.uid === x.uid));
+      if (e) it.uid = e.uid;
+    }
+    return e || null;
+  },
+  // Sales while the owner was away, in a line.
+  summary(s) {
+    if (!s.sales.length) return 'Nothing sold while you were away.';
+    const by = {};
+    for (const x of s.sales) { const k = x.id; by[k] = by[k] || { qty: 0, zeny: 0 }; by[k].qty += x.qty; by[k].zeny += x.zeny; }
+    const total = s.sales.reduce((n, x) => n + x.zeny, 0);
+    return `You sold ${Object.entries(by).map(([id, v]) => `${v.qty} ${(Ref.item(id) || {}).name || id}`).join(', ')} for ${total.toLocaleString()} Zeny.`;
+  },
+  async close(charId, text) {
+    const s = this.shops.get(charId);
+    if (!s) return;
+    this.shops.delete(charId);
+    await pool.query('DELETE FROM vending_shops WHERE account_id = $1', [s.accountId]).catch((e) => console.error(e));
+    broadcast(s.map, { t: 'vend', id: charId, title: null });
+    const sw = wsOfChar(charId), me = sw && online.get(sw);
+    if (me) me.hidden = false;
+    if (sw && s.online) sw.send(JSON.stringify({ t: 'vend_closed', text }));
+    if (!s.online) {
+      broadcast(s.map, { t: 'leave', id: charId });   // the shopkeeper who stayed behind goes home
+      const st = Chars.mem.get(charId);
+      if (st && !st.ws) await Chars.release(st, null);
+    }
+  },
+  // The owner logs back into the character: the shop closes and they hear what sold.
+  async login(charId, resume) {
+    const s = this.shops.get(charId);
+    if (!s) return null;
+    if (resume) { s.online = true; return null; }   // the same game reconnecting: keep selling
+    const text = `Your shop “${s.title}” closed when you logged in. ${this.summary(s)}`;
+    // Closing it also saves the shopkeeper and lets go of them, so you start from the database
+    // (storage may have changed while you played someone else).
+    s.online = false;
+    await this.close(charId, null);
+    return text;
+  },
+  // The owner left (logged out, went to character selection, lost connection): the shop stays.
+  away(me) { const s = this.shops.get(me.charId); if (!s) return false; s.online = false; return true; },
 };
 
 /* Monsters live on the server (server/world.js): it runs every map that has
@@ -374,6 +516,8 @@ wss.on('connection', (ws) => {
         const old = Chars.mem.get(s.charId); if (old && old.ws === other && s.charId !== Number(c.id)) Chars.flush(old);
         other.send(JSON.stringify({ t: 'kicked', text: 'This account logged in somewhere else.' })); other.close();
       }
+      // Back on a character whose shop was open: it closes (unless this is the same game reconnecting).
+      const vendNote = await Vend.login(Number(c.id), !!msg.vendResume).catch((e) => { console.error(e); return null; });
       // The server holds the character's items, Zeny, EXP, levels and stats from here on.
       const st = await Chars.load(Number(c.id), acct.id, ws, !!acct.is_admin || ADMINS.has(acct.username.toLowerCase())).catch((e) => { console.error(e); return null; });
       if (!st || ws.readyState !== 1) { if (ws.readyState === 1) { ws.send(JSON.stringify({ t: 'error', text: 'Couldn’t load your character. Try again.' })); ws.close(); } return; }
@@ -384,7 +528,9 @@ wss.on('connection', (ws) => {
       if (me.partyId) Social.refreshParty(me.partyId).catch(() => {});
       if (me.guild) Social.refreshGuild(me.guild.id).catch(() => {});
       const ts = Trade.sessions.get(me.charId); if (ts) Trade.close(ts, `${me.name} left.`);
-      ws.send(JSON.stringify({ t: 'welcome', map: me.map, you: me.charId, players: [...online.values()].filter((s) => s !== me && s.map === me.map).map(publicState), online: online.size, mobs: World.snapshot(me.map), ground: Ground.list(me.map) }));
+      ws.send(JSON.stringify({ t: 'welcome', map: me.map, you: me.charId, players: [...online.values()].filter((s) => s !== me && s.map === me.map).map(publicState).concat(Vend.ghosts(me.map, me.charId)), online: online.size, mobs: World.snapshot(me.map), ground: Ground.list(me.map) }));
+      if (vendNote) ws.send(JSON.stringify({ t: 'notice', text: vendNote, toast: true }));
+      if (Vend.shops.has(me.charId)) { me.hidden = true; ws.send(JSON.stringify(Vend.mine(Vend.shops.get(me.charId)))); }
       Chars.push(st);
       broadcast(me.map, { t: 'join', p: publicState(me) }, ws);
       return;
@@ -400,7 +546,7 @@ wss.on('connection', (ws) => {
         broadcast(old, { t: 'leave', id: me.charId }, ws);
         World.leave(me, old);
         me.map = map;
-        ws.send(JSON.stringify({ t: 'players', map, players: [...online.values()].filter((s) => s !== me && s.map === map).map(publicState), mobs: World.snapshot(map), ground: Ground.list(map) }));
+        ws.send(JSON.stringify({ t: 'players', map, players: [...online.values()].filter((s) => s !== me && s.map === map).map(publicState).concat(Vend.ghosts(map, me.charId)), mobs: World.snapshot(map), ground: Ground.list(map) }));
         Object.assign(me, { x: num(msg.x, 0), z: num(msg.z, 0) });
         broadcast(map, { t: 'join', p: publicState(me) }, ws);
         World.join(me);
@@ -432,6 +578,8 @@ wss.on('connection', (ws) => {
       if (text.startsWith('%') && me.partyId) Social.toParty(me.partyId, { t: 'chat', id: me.charId, from: me.name, text: text.slice(1).trim(), channel: 'party' });
       else if (text.startsWith('$') && me.guild) Social.toGuild(me.guild.id, { t: 'chat', id: me.charId, from: me.name, text: text.slice(1).trim(), channel: 'guild' });
       else if (text) broadcast(me.map, { t: 'chat', id: me.charId, from: me.name, text });
+    } else if (typeof msg.t === 'string' && msg.t.startsWith('vend_')) {
+      await Vend.handle(ws, me, msg).catch((e) => console.error(e));
     } else if (msg.t === 'mob') {
       // A player's hit, status or knockback on a monster: the server's monster takes it.
       if (['dmg', 'status', 'knock', 'miss'].includes(msg.op)) World.hit(me, msg, ws);
@@ -469,7 +617,8 @@ wss.on('connection', (ws) => {
   });
   ws.on('close', () => {
     if (me && online.get(ws) === me) {
-      online.delete(ws); broadcast(me.map, { t: 'leave', id: me.charId });
+      // A shopkeeper who leaves stays sitting at their shop for everyone else.
+      online.delete(ws); if (!Vend.away(me)) broadcast(me.map, { t: 'leave', id: me.charId });
       if (me.partyId) Social.refreshParty(me.partyId).catch(() => {});
       if (me.guild) Social.refreshGuild(me.guild.id).catch(() => {});
       World.leave(me);
@@ -1073,10 +1222,15 @@ const Chars = {
     await client.query(`INSERT INTO character_items (character_id, location, equip_slot, item_id, qty, refine, cards, forged_by, element, sort)
       SELECT $1, location, equip_slot, item_id, qty, refine, cards, forged_by, element, sort FROM jsonb_to_recordset($2::jsonb)
       AS x(location text, equip_slot text, item_id text, qty int, refine smallint, cards text[], forged_by text, element text, sort int)`, [st.id, items]);
-    await client.query('DELETE FROM storage_items WHERE account_id = $1', [st.accountId]);
-    await client.query(`INSERT INTO storage_items (account_id, item_id, qty, refine, cards, forged_by, element, sort)
-      SELECT $1, item_id, qty, refine, cards, forged_by, element, sort FROM jsonb_to_recordset($2::jsonb)
-      AS x(item_id text, qty int, refine smallint, cards text[], forged_by text, element text, sort int)`, [st.accountId, storage]);
+    // Storage is shared by the account: only the character that changed it writes it (a vendor
+    // left logged out keeps an old copy while you play someone else).
+    if (st.storageDirty) {
+      st.storageDirty = false;
+      await client.query('DELETE FROM storage_items WHERE account_id = $1', [st.accountId]);
+      await client.query(`INSERT INTO storage_items (account_id, item_id, qty, refine, cards, forged_by, element, sort)
+        SELECT $1, item_id, qty, refine, cards, forged_by, element, sort FROM jsonb_to_recordset($2::jsonb)
+        AS x(item_id text, qty int, refine smallint, cards text[], forged_by text, element text, sort int)`, [st.accountId, storage]);
+    }
     if (quests.length) await client.query('INSERT INTO character_quests (character_id, quest_id) SELECT $1, unnest($2::text[]) ON CONFLICT DO NOTHING', [st.id, quests]);
   },
   // Write one or more characters in a single transaction (a trade writes both sides together).
@@ -1099,6 +1253,7 @@ const Chars = {
   // The player left: save, then forget the live state (unless they came straight back).
   async release(st, ws) {
     await this.flush(st);
+    if (Vend.shops.has(st.id)) { if (st.ws === ws) st.ws = null; return; }   // a shop left open keeps its owner here
     if (st.ws === ws && this.mem.get(st.id) === st && ![...online.values()].some((s) => s.charId === st.id)) this.mem.delete(st.id);
   },
 
@@ -1385,18 +1540,16 @@ const Chars = {
         if (to === 'cart' && !(st.skills.pushcart > 0)) return NO('You need a Pushcart.');
         const n = d.stack ? Math.min(num(m.qty, 1, 30000), e.qty) : 1;
         if (to === 'cart' && st.cart.reduce((w, x) => w + ((Ref.item(x.id) || {}).weight || 0) * x.qty, 0) + (d.weight || 0) * n > 8000) return NO('The cart is too heavy (8,000 max).');
+        if (to === 'cart' && Vend.shops.has(st.id)) return NO('Close your shop before changing your cart.');
         if (!this.add(st, to, e.id, n, e)) return NO(to === 'storage' ? 'Storage is full.' : 'The cart is full.');
-        this.take(st, e.uid, n); st.dirty = true; return { sync: true };
+        this.take(st, e.uid, n); if (to === 'storage') st.storageDirty = true;
+        st.dirty = true; return { sync: true };
       }
-      case 'unstore': case 'cart_out': case 'vend': {
+      case 'unstore': case 'cart_out': {
         const from = m.k === 'unstore' ? st.storage : st.cart, i = num(m.i, 0, 1000), s = from[i];
         if (!s || s.id !== m.id) return NO();
-        if (m.k === 'vend') {
-          // Vending sells a whole cart stack at the full shop price.
-          const d = Ref.item(s.id);
-          if (!(st.skills.vending > 0) || !d) return NO();
-          from.splice(i, 1); st.zeny = Math.min(2147483647, st.zeny + (d.price || 0) * s.qty); st.dirty = true; return { sync: true };
-        }
+        if (m.k === 'cart_out' && Vend.shops.has(st.id)) return NO('Close your shop before changing your cart.');
+        if (m.k === 'unstore') st.storageDirty = true;
         const n = Math.min(num(m.qty, 1, 30000), s.qty);
         if (!this.add(st, 'bag', s.id, n, s)) return NO('Your inventory is full.');
         s.qty -= n; if (s.qty <= 0) from.splice(i, 1);
@@ -1485,6 +1638,7 @@ async function start() {
   if (ADMINS.size) await pool.query('UPDATE accounts SET is_admin = true WHERE lower(username) = ANY($1)', [[...ADMINS]]);
   for (const r of (await pool.query("SELECT id FROM custom_maps WHERE data->'rules'->>'pvp' = 'true'")).rows) pvpMaps.add(r.id);
   const n = await seedGameData(G);
+  await Vend.load();   // shops left open survive restarts
   // The server's world: monsters on every map that has players.
   World.init({ broadcast, send: (charId, msg) => { const w = wsOfChar(charId); if (w && w.readyState === 1) w.send(JSON.stringify(msg)); } },
     Object.fromEntries((await pool.query('SELECT id, data FROM custom_maps')).rows.map((r) => [r.id, r.data])));

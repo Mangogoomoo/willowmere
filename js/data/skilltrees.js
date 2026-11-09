@@ -74,7 +74,7 @@
   P('pushcart', 'merchant', 'Pushcart', I('s_bag', '#c9a06b'), (l) => `Pull a cart that holds 100 kinds of item (8,000 weight, Alt+W). Moving speed ${l < 10 ? `−${50 - 5 * l}%` : 'normal'} while pulling it.`,
     () => ({ cart: 1 }));
   A('vending', 'merchant', 'Vending', I('s_coin', '#ffd84a'), { target: 'self', sp: r(30), cd: r(2), effect: 'vending',
-    desc: (l) => `In a town, open a stall and sell up to ${2 + l} stacks from your cart at their full price.` });
+    desc: (l) => `Open a shop for other players: set out up to ${2 + l} kinds of items from your cart at your own price each. It stays open while you play another character. (Online only.)` });
   A('item_appraisal', 'merchant', 'Item Appraisal', I('s_eye', '#ffd84a'), { target: 'self', max: 1, sp: r(10), effect: 'cure', desc: () => 'Identify unknown items.' + note.replace('monster does this', 'item is unidentified') });
   A('change_cart', 'merchant', 'Change Cart', I('s_bag', '#ff9ec2'), { target: 'self', max: 1, sp: r(40), cd: r(1), effect: 'change_cart', desc: () => 'Repaint your cart in a new style.' });
 

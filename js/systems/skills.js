@@ -197,6 +197,7 @@
     use(id, target, lvWant) {
       const s = G.Skills.get(id), p = this.player, game = this.game;
       if (!s || !this.level(id)) return false;
+      if (p.vending) { if (id === 'vending') G.Vending.openSetup(this.level(id)); else game.log.add('Close your shop first.', 'info'); return false; }
       const lv = lvWant ? Math.max(1, Math.min(this.level(id), lvWant)) : this.useLevel(id);
       if (s.type === 'passive') { game.log.add(`${s.name} is passive. It’s always working.`, 'info'); return false; }
       if (!p.alive) return false;

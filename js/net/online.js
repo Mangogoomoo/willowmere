@@ -134,6 +134,7 @@
       this.facing = this.targetFacing = p.facing || 0;
       this.moving = !!p.moving;
       this.bubble = null;
+      this.vend = p.vend || null;   // an open shop: they sit behind its sign
     }
     static sheet(l) {
       l = l || {};
@@ -165,7 +166,7 @@
       const walking = this.moving || d > 0.15;
       if (this.cast) { this.cast.t += dt; if (this.cast.t > this.cast.dur + 0.3) this.cast = null; }
       if (this.swingT > 0) this.swingT -= dt;
-      else this.sprite.play(this.cast ? 'cast' : walking ? 'walk' : 'idle');
+      else this.sprite.play(this.vend ? 'sit' : this.cast ? 'cast' : walking ? 'walk' : 'idle');
       if (this.cartMesh) {
         if (!this.cartMesh.parent) this.game.mapRoot.add(this.cartMesh);
         G.Cart.follow(this.cartMesh, this, dt);
@@ -181,7 +182,8 @@
       G.FxSync.install(game);
       G.GroundSync.install(game);
       const ws = this.ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`);
-      ws.onopen = () => ws.send(JSON.stringify({ t: 'hello', token: Online.token, charId, map: game.mapId, look: this.myLook(), level: game.player.baseLevel }));
+      // vendResume: this same game reconnecting while its shop is open (the shop stays open).
+      ws.onopen = () => ws.send(JSON.stringify({ t: 'hello', token: Online.token, charId, map: game.mapId, look: this.myLook(), level: game.player.baseLevel, vendResume: !!(G.Vending && G.Vending.mine) }));
       ws.onmessage = (ev) => { let m; try { m = JSON.parse(ev.data); } catch (e) { return; } this.handle(m); };
       ws.onclose = () => {
         this.clear();
@@ -203,6 +205,7 @@
       // Anything tagged with another map is left over from before a map change.
       if (m.map && m.map !== game.mapId && ['mobs', 'mob', 'state', 'join', 'players', 'welcome', 'action', 'fx', 'look', 'host'].includes(m.t)) return;
       if (m.t === 'mobs' || m.t === 'mob') { G.MobSync.handle(m); return; }
+      if (typeof m.t === 'string' && m.t.startsWith('vend')) { G.Vending.handle(m); return; }
       if (m.t === 'char' || m.t === 'op_res') { G.Ledger.handle(m); return; }
       if (['party', 'guild', 'guild_created', 'invite', 'notice', 'pinfo', 'gainexp', 'loot_gift', 'guild_summon'].includes(m.t)) { G.Social.handle(m); return; }
       if (/^(trade_|inspect_)/.test(m.t)) { G.Trade.handle(m); return; }

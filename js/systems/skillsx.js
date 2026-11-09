@@ -404,7 +404,7 @@
       after(sys, 3, () => { sys.game.spells.ring(c, '#ff7a3d', 2.5); sys.game.sfx('fire', c); for (const m of near(sys.game, c, 2.5)) { const at = m.position.clone(); at.y += m.def.height * 0.6; const dmg = 150 + 50 * lv; sys.game.overlay.addText(at, String(dmg), 'dmg'); m.takeDamage(dmg, sys.player); } });
     },
     change_cart(sys) { const p = sys.player; p.extra.cartStyle = ((p.extra.cartStyle || 0) + 1) % 4; sys.game.cart.restyle(); say(sys.game, 'Your cart has a new look.'); },
-    vending(sys, lv) { sys.game.cart.openVending(lv); },
+    vending(sys, lv) { G.Vending.openSetup(lv); },
     craft(sys, lv, t, s) { sys.game.crafting.open(s.craft, s.id, lv); },
   });
   // Acid Terror and Demonstration use their bottles, like the classics.
@@ -448,13 +448,15 @@
       this.game = game; this.mesh = null;
       this.win = game.windows.create('cart', 'Cart', { width: 400, keyHint: 'Alt+W', pos: () => ({ x: window.innerWidth / 2 - 200, y: 120 }) });
       this.win.render = () => this.render();
-      this.vend = null;
     }
     get has() { const p = this.game.player; return p && p.skills.level('pushcart') > 0; }
     get items() { const p = this.game.player; return (p.extra.cart = p.extra.cart || []); }
     weight() { return this.items.reduce((w, e) => w + G.Items.get(e.id).weight * e.qty, 0); }
     toggle() { if (!this.has) { say(this.game, 'You need the Pushcart skill (Merchant) to use a cart.', 'warn'); return; } this.game.windows.toggle('cart'); this.render(); }
+    // While your shop is open its items stay put (close the shop to change the cart).
+    locked() { if (G.Vending.mine) { say(this.game, 'Close your shop before changing your cart.', 'warn'); return true; } return false; }
     put(uid, qty) {
+      if (this.locked()) return;
       const inv = this.game.player.inventory, e = inv.find(uid); if (!e) return;
       const it = G.Items.get(e.id); qty = Math.min(qty, e.qty);
       if (this.weight() + it.weight * qty > 8000) { say(this.game, 'The cart is too heavy (8,000 max).', 'warn'); return; }
@@ -467,6 +469,7 @@
       this.game.save.markDirty(); this.render();
     }
     take(i, qty) {
+      if (this.locked()) return;
       const s = this.items[i]; if (!s) return;
       if (G.Ledger.blocked(this.game)) return;
       const n = Math.min(qty, s.qty), r = G.Ledger.quiet(() => this.game.player.inventory.add(s.id, n, { cards: s.cards, refine: s.refine, forgedBy: s.forgedBy, element: s.element }));
@@ -475,37 +478,12 @@
       s.qty -= r.added; if (s.qty <= 0) this.items.splice(i, 1);
       this.game.save.markDirty(); this.render();
     }
-    openVending(lv) {
-      if (!this.game.map.town || Math.hypot(this.game.player.position.x - G.Config.TOWN.cx, this.game.player.position.z - G.Config.TOWN.cz) > G.Config.TOWN.radius + 4) { say(this.game, 'Open your stall inside a town.', 'warn'); return; }
-      this.vend = { left: 2 + lv, x: this.game.player.position.x, z: this.game.player.position.z };
-      this.game.windows.open('cart'); this.render();
-      say(this.game, `Your stall is open: sell up to ${2 + lv} stacks from your cart at full price. Walking away closes it.`, 'level');
-    }
     render() {
       if (!this.game.windows.isOpen('cart')) return;
-      const h = G.h, b = this.win.body, p = this.game.player;
-      if (!this.vend) {
-        this.win.put = (uid, qty) => this.put(uid, qty);
-        G.itemGrid(this.game, this.win, { source: 'cart', label: 'Cart', entries: this.items,
-          note: 'Drag items between your inventory and the cart. Double-click takes a whole stack; hold Shift while dragging to choose an amount.',
-          take: (i, qty) => this.take(i, qty), count: `${this.items.length} / 100 kinds`, weight: `Cart weight ${Math.round(this.weight())} / 8000` });
-        return;
-      }
-      b.textContent = '';
-      const list = h('div.shop-list');
-      list.append(h('p.hint', { text: this.vend ? `Vending: ${this.vend.left} sale${this.vend.left === 1 ? '' : 's'} left (full price).` : 'Put items in from your inventory below; take them out any time.' }));
-      this.items.forEach((s, i) => {
-        const it = G.Items.get(s.id), full = it.price * s.qty;
-        const row = h('div.shop-row', null, h('img', { src: G.Icons.url(s.id), alt: '' }), h('span.sname2', null, G.Items.displayName(s), s.qty > 1 ? h('small', { text: ` ×${s.qty}` }) : null), h('span'),
-          this.vend ? h('button.btn.small', { type: 'button', onclick: () => { if (G.Ledger.blocked(this.game)) return; G.Ledger.op('vend', { i, id: s.id }); G.Ledger.quiet(() => { p.zeny += full; }); this.items.splice(i, 1); this.vend.left--; this.game.sfx('zeny'); say(this.game, `Sold ${it.name} ×${s.qty} for ${full.toLocaleString()} z.`, 'loot'); if (this.vend.left <= 0) { this.vend = null; say(this.game, 'Your stall sold out.'); } this.render(); } }, `Sell ${full.toLocaleString()} z`)
-            : h('span'),
-          h('button.btn.small.ghost', { type: 'button', onclick: () => this.take(i, s.qty) }, 'Take'));
-        G.Tooltip.bind(row, () => G.itemTooltip(s, p)); list.append(row);
-      });
-      list.append(h('p.hint', { text: 'Your inventory:' }));
-      for (const e of p.inventory.items) list.append(h('div.shop-row', null, h('img', { src: G.Icons.url(e.id), alt: '' }), h('span.sname2', null, G.Items.displayName(e), e.qty > 1 ? h('small', { text: ` ×${e.qty}` }) : null), h('span'), h('span'),
-        h('button.btn.small.ghost', { type: 'button', onclick: () => this.put(e.uid, e.qty) }, 'Put in')));
-      b.append(list, h('div.inv-foot.shop-foot', null, h('span.hint', { text: `${this.items.length} / 100 kinds` }), h('span.hint', { text: `Cart weight ${Math.round(this.weight())} / 8000` })));
+      this.win.put = (uid, qty) => this.put(uid, qty);
+      G.itemGrid(this.game, this.win, { source: 'cart', label: 'Cart', entries: this.items,
+        note: 'Drag items between your inventory and the cart. Double-click takes a whole stack; hold Shift while dragging to choose an amount.',
+        take: (i, qty) => this.take(i, qty), count: `${this.items.length} / 100 kinds`, weight: `Cart weight ${Math.round(this.weight())} / 8000` });
     }
     restyle() { if (this.mesh) { this.mesh.parent && this.mesh.parent.remove(this.mesh); this.mesh = null; } }
     build() {
@@ -534,7 +512,6 @@
     update(dt) {
       const p = this.game.player;
       if (!p) return;
-      if (this.vend && Math.hypot(p.position.x - this.vend.x, p.position.z - this.vend.z) > 2) { this.vend = null; say(this.game, 'You closed your stall.'); this.render(); }
       if (!this.has) { if (this.mesh) this.restyle(); return; }
       if (!this.mesh || !this.mesh.parent) this.build();
       Cart.follow(this.mesh, p, dt);

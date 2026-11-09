@@ -61,6 +61,7 @@
           },
           d ? portrait(d) : h('div.cs-plus', { text: '+' }),
           d ? h('span.cs-badge', { text: job.name[0], title: job.name, style: `background:${job.color || '#8a9bc4'};color:${light(job.color) ? '#2a3550' : '#fff'}` }) : null,
+          d && d.vending ? h('span.cs-vend', { text: 'Vending', title: 'This character’s shop is open. Logging in closes it.' }) : null,
           h('div.cs-name', { text: d ? d.character.name : 'NAME' }));
           card.addEventListener('click', () => { if (!d) { creation(i); return; } selected = i; deleteArmed = -1; titleCard(); });
           card.addEventListener('dblclick', () => { if (d) startLoad(i); });

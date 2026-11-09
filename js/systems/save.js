@@ -87,10 +87,10 @@
       // Online: the character lives in the server's database.
       if (G.Online && G.Online.enabled && this.charId) {
         this.dirtyT = -1; this.autoT = 0;
-        fetch(`/api/characters/${this.charId}`, { method: 'PUT', keepalive: !!closing, headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + G.Online.token }, body: JSON.stringify(this.soft()) })
-          .then((r) => { if (!silent) this.game.log.add(r.ok ? 'Game saved to the server.' : 'Couldn’t save to the server.', r.ok ? 'system' : 'warn'); })
-          .catch(() => this.game.log.add('Couldn’t reach the server to save. Retrying soon.', 'warn'));
-        return true;
+        // The request is returned so callers can wait for it (Character Selection, opening a shop).
+        return fetch(`/api/characters/${this.charId}`, { method: 'PUT', keepalive: !!closing, headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + G.Online.token }, body: JSON.stringify(this.soft()) })
+          .then((r) => { if (!silent) this.game.log.add(r.ok ? 'Game saved to the server.' : 'Couldn’t save to the server.', r.ok ? 'system' : 'warn'); return r.ok; })
+          .catch(() => { this.game.log.add('Couldn’t reach the server to save. Retrying soon.', 'warn'); return false; });
       }
       const ok = write(slotKey(this.slot || 0), this.serialize());
       this.dirtyT = -1;

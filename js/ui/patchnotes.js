@@ -6,6 +6,13 @@
   const h = G.h;
 
   const PATCHES = [
+    { v: '0.45', date: '2026-11-21T12:00', title: 'Vending shops and Character Selection', notes: [
+      'Vending works like Ragnarok Online now (online). Use the skill to open the Vending window: pick items from your cart, set how many and a price per item (up to 1,000,000,000 Zeny), give the shop a title and press OK. You can list 3 kinds of items at level 1, up to 12 at level 10.',
+      'Your character sits down with a shop sign over their head, which everyone on the map sees. Others click the sign to see your shop and buy as many as they like; the Zeny goes straight to you.',
+      'Keep shop open: go to Character Selection and play another character while your shop keeps selling. Logging back in on the vending character closes the shop and tells you what sold. Shops even survive server restarts.',
+      'One shop per account. No shops on PvP maps, and shops need a little space between them.',
+      'New Character Selection button in the menu (bottom right). Your character screen marks a character whose shop is open.',
+    ] },
     { v: '0.44', date: '2026-11-20T12:00', title: 'More action bars and right-click everywhere', notes: [
       'Up to four action bar rows: point at the right end of the action bar to find a hidden +, and click it to add a row (after four it goes back to one). Each new row has its own keys in Key bindings (row 2 starts as Alt+1 to Alt+9).',
       'New option: Lock action bar. While locked, hold Shift to move or remove skills and items, so they can’t be knocked off by accident.',

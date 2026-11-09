@@ -314,6 +314,7 @@
       if (!this.alive) return false;
       // Like RO: you stand still while casting (Free Cast lets Sages walk) and while a skill goes off.
       if ((this.skills.casting && !this.derived.extra.freeCast) || this.skills.motion > 0) return false;
+      if (this.vending) return false;   // minding your shop (close it to move)
       this.attacking = false;
       this.pendingLoot = null;
       this.approachTarget = null;
@@ -331,7 +332,7 @@
     }
 
     attack(monster) {
-      if (!this.alive || !monster || !monster.alive) return;
+      if (!this.alive || !monster || !monster.alive || this.vending) return;
       this.standUp();
       this.skills.queued = null;
       this.approachTarget = null;
@@ -559,7 +560,8 @@
         }
       }
 
-      if (this.swinging) this.sprite.play('attack');
+      if (this.vending) this.sprite.play('sit');
+      else if (this.swinging) this.sprite.play('attack');
       else if (this.skills.motion > 0) this.sprite.play(this.skills.motionAnim);
       else if (this.moving) this.sprite.play('walk');
       else if (this.hurtT > 0) this.sprite.play('hit');

@@ -400,6 +400,7 @@
     el.prepend(loot);
     el.append(h('button.mbtn', { type: 'button', title: 'What changed in each update', onclick: () => G.PatchNotes.open() }, 'Patch notes', h('kbd', { text: 'v' + G.PatchNotes.LATEST })));
     el.append(h('button.mbtn', { type: 'button', title: 'Monster and item encyclopedia (opens in a new tab)', onclick: () => window.open(G.Config.DB_URL, '_blank', 'noopener') }, 'Database', h('kbd', { text: '↗' })));
+    el.append(h('button.mbtn', { type: 'button', title: 'Save and go back to the character screen (an open shop stays open)', onclick: () => G.toCharSelect(game) }, 'Character Selection'));
     // Hide / show the whole button column (remembered).
     const collapsed = !!G.SaveSystem.prefs().menuHidden;
     const tog = h('button.mbtn.menu-toggle', { type: 'button', 'aria-expanded': String(!collapsed) }, collapsed ? '▲ Show menu' : '▼ Hide menu');

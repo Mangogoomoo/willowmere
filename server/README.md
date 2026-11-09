@@ -30,6 +30,11 @@ minutes after the last player leaves. A map is rebuilt when an admin saves it
 in the map editor. One map costs about 8 MB of memory and a fraction of a
 millisecond per step (`/api/health` shows how many maps are running).
 
+**Vending.** Open shops live in `vending_shops` (one per account) so they
+survive restarts. The server sells from the seller's cart and moves the Zeny,
+also while the seller is logged out (their character stays loaded until the
+shop closes).
+
 Reference tables filled on every start: `item_defs`, `monster_defs`,
 `monster_spawns`, `monster_drops`, `job_defs`, `skill_defs`, `shops` and
 `shop_items` (shop NPCs from the map editor are added when a map is saved),

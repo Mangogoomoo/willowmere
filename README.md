@@ -295,6 +295,13 @@ database, and you see other players move, change gear and chat (press
 Enter). See `server/README.md` for setup. Opened any other way (a file or
 the published page), Willowmere stays single-player with browser saves.
 
+## Vending (v0.45)
+
+- **Vending (online):** a merchant sets out cart items at a price each; a shop
+  sign over their head opens the shop for everyone on the map. One shop per
+  account; it stays open while you play another character (Character
+  Selection) and closes when you log back in on that character.
+
 ## Arrows and signs (v0.43)
 
 - **Arrows:** bows need arrows in the Arrows slot (Equipment window). Each bow

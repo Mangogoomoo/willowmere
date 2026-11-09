@@ -239,3 +239,12 @@ CREATE TABLE IF NOT EXISTS character_quests (
   done_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (character_id, quest_id)
 );
+
+-- Vending (v0.45): one open shop per account. Shops stay open while their
+-- owner is logged out and close when that character logs in again.
+CREATE TABLE IF NOT EXISTS vending_shops (
+  account_id    BIGINT PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE,
+  character_id  BIGINT NOT NULL UNIQUE REFERENCES characters(id) ON DELETE CASCADE,
+  data          JSONB  NOT NULL,         -- title, place, look and the items for sale
+  opened_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
