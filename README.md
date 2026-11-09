@@ -293,6 +293,13 @@ database, and you see other players move, change gear and chat (press
 Enter). See `server/README.md` for setup. Opened any other way (a file or
 the published page), Willowmere stays single-player with browser saves.
 
+## Arrows and signs (v0.43)
+
+- **Arrows:** bows need arrows in the Arrows slot (Equipment window). Each bow
+  shot and bow skill uses one; elemental arrows set your bow attacks' element.
+  Arrow Crafting opens a window of every arrow your materials can make.
+- **Signs:** the map editor's Sign object shows any text you type for it.
+
 ## Sunpetal Plains and build gear (v0.40)
 
 - **Sunpetal Plains:** east of Willowmere Meadows (Lv 26–56). Giearths and

@@ -6,6 +6,13 @@
   const h = G.h;
 
   const PATCHES = [
+    { v: '0.43', date: '2026-11-19T12:00', title: 'Arrows, signs and cleaner tooltips', notes: [
+      'Arrows: bows now need arrows in the new Arrows slot (Equipment window, under your portrait). Every bow shot and bow skill uses one. Garrick sells Arrows and Iron Arrows.',
+      '11 kinds of arrows: plain, Iron, Steel, Oridecon, Sharp (+20 CRIT), and Fire, Crystal, Wind, Stone, Silver and Immaterial arrows that give your bow attacks their element. Arrows only count while you hold a bow.',
+      'Arrow Crafting now opens a window listing every arrow your materials can make: how many you get from each material, how many you could make in total, and Make 1 or Make all.',
+      'Map editor: a new Sign object. Type its text in the Selected tab and it is painted on the board.',
+      'Tooltips: skill requirements are shown once, and only in the skills window (not on the action bar). Cards no longer repeat where they go. Bonuses read like “Max HP +5%” and “Cast time −3%”.',
+    ] },
     { v: '0.42', date: '2026-11-18T12:00', title: 'Smoother shops and storage', notes: [
       'Buying, selling and refining no longer jump the list back to the top.',
       'Right-click an item in storage to take it back into your inventory (the same way right-click puts it in).',

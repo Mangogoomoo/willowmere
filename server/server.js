@@ -1118,6 +1118,11 @@ const Chars = {
 
   /* ---- item helpers ---- */
   find(st, uid) { return st.bag.find((e) => e.uid === uid) || null; },
+  // Back into the bag: a stack joins the same item already there.
+  stash(st, e) {
+    const d = Ref.item(e.id), same = d && d.stack && this.firstOf(st.bag, e.id);
+    if (same) same.qty = Math.min(30000, same.qty + e.qty); else st.bag.push(e);
+  },
   firstOf(list, id) { return list.find((e) => e.id === id) || null; },
   count(st, id) { return st.bag.reduce((n, e) => n + (e.id === id ? e.qty : 0), 0); },
   // Put items into a list the way the game does: stackables join one stack, gear comes one per entry.
@@ -1257,7 +1262,9 @@ const Chars = {
         const why = this.canEquip(st, d); if (why) return NO(why);
         const slot = d.slot !== 'acc' ? d.slot : !st.equip.acc1 ? 'acc1' : !st.equip.acc2 ? 'acc2' : 'acc1';
         st.bag.splice(st.bag.indexOf(e), 1);
-        if (st.equip[slot]) st.bag.push(st.equip[slot]);
+        // More of the same arrows join the equipped stack; anything swapped out goes back to the bag.
+        if (st.equip[slot] && d.stack && st.equip[slot].id === e.id) { st.equip[slot].qty = Math.min(30000, st.equip[slot].qty + e.qty); st.dirty = true; return null; }
+        if (st.equip[slot]) this.stash(st, st.equip[slot]);
         const wt = d.weaponType && GD.Items.WEAPON_TYPES[d.weaponType];
         if (wt && wt.twoHanded && st.equip.shield) { st.bag.push(st.equip.shield); st.equip.shield = null; }
         st.equip[slot] = e; st.dirty = true; return null;
@@ -1266,7 +1273,22 @@ const Chars = {
         const slot = String(m.slot || ''), e = st.equip[slot];
         if (!e) return NO();
         if (st.bag.length >= BAG_MAX) return NO('Your inventory is full.');
-        st.equip[slot] = null; st.bag.push(e); st.dirty = true; return null;
+        st.equip[slot] = null; this.stash(st, e); st.dirty = true; return null;
+      }
+      case 'arrows': {
+        // Arrow Crafting: the recipe and the skill are checked here.
+        const r = (GD.ARROW_RECIPES || []).find((x) => x[0] === m.mat), n = num(m.n, 1, 30000);
+        if (!r || !(st.skills.arrow_crafting > 0)) return NO();
+        if (this.count(st, r[0]) < n) return NO('Not enough materials.');
+        if (!this.add(st, 'bag', r[1], Math.min(30000, r[2] * n))) return NO('Your inventory is full.');
+        this.takeId(st, r[0], n); st.dirty = true; return { sync: true };
+      }
+      case 'ammo': {
+        // Arrows used by bow shots and skills (the game counts them until combat moves here).
+        const a = st.equip.ammo, n = num(m.n, 1, 10);
+        if (!a) return NO();
+        a.qty -= n; if (a.qty <= 0) st.equip.ammo = null;
+        st.dirty = true; return null;
       }
       case 'card': {
         const c = this.find(st, num(m.card, 0, 1e9)), cd = c && Ref.item(c.id);

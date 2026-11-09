@@ -550,6 +550,8 @@ button:focus-visible { outline: 2px solid #ffd76a; outline-offset: 2px; }
 .rinfo { display: grid; min-width: 0; }
 .rinfo small { color: var(--ink-soft); font-size: 11px; }
 .rchance { font-weight: 700; text-align: right; font-size: 13px; }
+.arrow-row { grid-template-columns: 32px 1fr 56px auto; }
+.arrow-btns { display: flex; gap: 4px; }
 .rchance.safe { color: #2f9e57; } .rchance.mid { color: #c88a12; } .rchance.low { color: #d94848; }
 .warnhint { color: #d94848; font-weight: 600; }
 .card-head { display: flex; gap: 10px; align-items: center; margin-bottom: 8px; }

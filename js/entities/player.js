@@ -509,7 +509,7 @@
           this.impactDone = true;
           const t = this.target;
           if (t && t.alive && this.distanceTo(t) <= this.attackRange + t.def.radius + 0.6) {
-            if (this.derived.weaponType === 'bow') game.spells.arrow(this, t, () => { if (t.alive) G.Combat.playerAttack(this, t); });
+            if (this.derived.weaponType === 'bow') { this.inventory.useAmmo(1); game.spells.arrow(this, t, () => { if (t.alive) G.Combat.playerAttack(this, t); }); }
             else G.Combat.playerAttack(this, t);
           }
         }
@@ -527,7 +527,11 @@
         if (d <= reach) {
           this.path = null;
           this.faceTowards(t.position.x, t.position.z);
-          if (!this.swinging && this.attackCd <= 0) this.startSwing();
+          if (!this.swinging && this.attackCd <= 0) {
+            // A bow needs arrows in the Arrows slot.
+            if (this.derived.weaponType === 'bow' && !this.equipment.ammo) { this.attacking = false; game.log.add('Equip arrows to shoot (Equipment window, Arrows slot).', 'warn'); }
+            else this.startSwing();
+          }
         } else if (!this.swinging) {
           this.repathT -= dt;
           const moved = !this.lastGoal || Math.hypot(this.lastGoal.x - t.position.x, this.lastGoal.z - t.position.z) > 0.8;

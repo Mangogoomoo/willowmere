@@ -71,7 +71,7 @@
       const s = this.slots[i];
       if (!s) return '<div class="tt-desc">Drag a potion, piece of gear or skill here.</div>';
       const p = this.game.player;
-      if (s.type === 'skill') return G.skillTooltip(G.Skills.get(s.id), p, this.slotLevel(s)) + `<div class="tt-hint">${this.keyLabel(i)} to use at level ${this.slotLevel(s)}. Drag to another slot to move it, or off the bar to remove it. For another level, pick it in the skills window and drag the skill here again.</div>`;
+      if (s.type === 'skill') return G.skillTooltip(G.Skills.get(s.id), p, this.slotLevel(s), true) + `<div class="tt-hint">${this.keyLabel(i)} to use at level ${this.slotLevel(s)}. Drag to another slot to move it, or off the bar to remove it. For another level, pick it in the skills window and drag the skill here again.</div>`;
       const have = p.inventory.count(s.id);
       return G.itemTooltip({ id: s.id, qty: have }, p, { hint: `${this.keyLabel(i)} to use. Drag to another slot to move it, or off the bar to remove it.` });
     }

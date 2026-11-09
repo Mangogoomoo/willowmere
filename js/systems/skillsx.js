@@ -247,14 +247,8 @@
         if (t.alive && Math.random() < 0.03) t.addStatus('stunned', 3);
       });
     },
-    arrow_crafting(sys) {
-      const inv = sys.player.inventory;
-      const e = inv.items.find((x) => G.Items.get(x.id).type === 'etc' && !/gemstone|ore|converter|steel|iron|coal|card/.test(x.id));
-      if (!e) { say(sys.game, 'You have no loot suitable for arrows.', 'warn'); return; }
-      const n = 3 + ((Math.random() * 8) | 0);
-      inv.remove(e.uid, 1); inv.add('arrow', n);
-      say(sys.game, `Turned ${G.Items.get(e.id).name} into ${n} Arrows.`, 'loot');
-    },
+    // Opens the Arrow Crafting window: every arrow your materials can make.
+    arrow_crafting(sys, lv) { sys.game.crafting.open('arrows', 'arrow_crafting', lv); },
     riding(sys) {
       const p = sys.player;
       p.riding = !p.riding;
@@ -606,9 +600,40 @@
       } else { say(this.game, 'It didn\'t work out… the materials are lost.', 'warn'); this.game.sfx('miss'); }
       this.render();
     }
+    // Arrow Crafting: n of a material into arrows (online the server checks the recipe and does it).
+    makeArrows(mat, n) {
+      const p = this.game.player, inv = p.inventory, r = (G.ARROW_RECIPES || []).find((x) => x[0] === mat);
+      n = Math.min(n, inv.count(mat));
+      if (!r || n <= 0) return;
+      if (G.Ledger.blocked(this.game)) return;
+      const made = G.Ledger.quiet(() => inv.add(r[1], r[2] * n));
+      if (!made.added) { say(this.game, made.reason === 'weight' ? 'That many arrows would be too heavy to carry.' : 'Your inventory is full.', 'warn'); return; }
+      G.Ledger.quiet(() => { let left = n; while (left > 0) { const e = inv.firstOf(mat); if (!e) break; left -= inv.remove(e.uid, left); } });
+      G.Ledger.op('arrows', { mat, n });
+      say(this.game, `Made ${(r[2] * n).toLocaleString()} ${G.Items.get(r[1]).name}${r[2] * n > 1 ? 's' : ''} from ${n} ${G.Items.get(mat).name}.`, 'loot');
+      this.game.sfx('levelup');
+      this.render();
+    }
+    renderArrows(b, p) {
+      const h = G.h, list = h('div.shop-list'), have = (G.ARROW_RECIPES || []).filter(([mat]) => p.inventory.count(mat) > 0);
+      for (const [mat, out, per] of have) {
+        const n = p.inventory.count(mat), it = G.Items.get(out);
+        const row = h('div.refine-row.arrow-row', null, h('img', { src: G.Icons.url(out), alt: '' }),
+          h('div.rinfo', null, h('span.sname2', { text: `${it.name} ×${per}` }), h('small', { text: `each from 1 ${G.Items.get(mat).name} (you have ${n})` })),
+          h('span.rchance.safe', { title: 'Arrows from all of it', text: `${(per * n).toLocaleString()}` }),
+          h('span.arrow-btns', null,
+            h('button.btn.small', { type: 'button', onclick: () => this.makeArrows(mat, 1) }, 'Make 1'),
+            h('button.btn.small', { type: 'button', disabled: n < 2, onclick: () => this.makeArrows(mat, n) }, 'Make all')));
+        G.Tooltip.bind(row, () => G.itemTooltip({ id: out, qty: per }, p));
+        list.append(row);
+      }
+      if (!have.length) list.append(h('p.hint', { text: 'You have nothing to make arrows from yet. Jellopy, Fluff, Iron, Steel, Ember and elemental stones all make arrows.' }));
+      b.append(list, h('p.hint', { text: 'Equip arrows in the Arrows slot of the Equipment window. Every bow shot and bow skill uses one.' }));
+    }
     render() {
       if (!this.game.windows.isOpen('craft')) return;
       const h = G.h, b = this.win.body, p = this.game.player; b.textContent = '';
+      if (this.kind === 'arrows') { this.win.head.firstChild.textContent = 'Arrow Crafting'; this.renderArrows(b, p); return; }
       const isForge = this.kind.startsWith('forge:');
       this.win.head.firstChild.textContent = isForge ? 'Forge' : this.kind === 'potion' ? 'Prepare Potion' : 'Crafting';
       const list = h('div.shop-list');

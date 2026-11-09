@@ -29,11 +29,13 @@
     sources: [
       // Equipment bonuses.
       function equipment(player, out) {
+        const bow = player.equipment.weapon && (G.Items.get(player.equipment.weapon.id) || {}).weaponType === 'bow';
         for (const slot in player.equipment) {
           const e = player.equipment[slot];
-          if (!e) continue;
+          if (!e || (slot === 'ammo' && !bow)) continue;   // arrows only count with a bow
           const item = G.Items.get(e.id);
-          if (item && item.bonus) for (const k in item.bonus) out[k] = (out[k] || 0) + item.bonus[k];
+          // Numbers add up; a word (like an arrow's element) is simply set.
+          if (item && item.bonus) for (const k in item.bonus) { const v = item.bonus[k]; out[k] = typeof v === 'number' ? (out[k] || 0) + v : v; }
           // Refine level bonus (ATK for weapons, DEF for armour).
           if (e.refine && G.Refine) { const rb = G.Refine.bonus(e); for (const k in rb) out[k] = (out[k] || 0) + rb[k]; }
           // Cards inserted into this piece of equipment.
@@ -96,7 +98,7 @@
       if (player.skills && player.skills.buffs.cloaking) d.moveSpeedMult *= 0.6;
       d.doubleAttack = d.weaponType === 'dagger' ? (b.doubleAttack || 0) : 0;
       d.discount = b.discount || 0;
-      d.weaponElement = b.weaponElement || b.forgedElement || 'neutral';
+      d.weaponElement = b.weaponElement || b.forgedElement || b.arrowElement || 'neutral';
       d.extra = b;
       d.atkPct = b.atkPct || 0;
       d.block = b.block || 0;

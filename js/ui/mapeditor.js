@@ -896,6 +896,9 @@
         body.append(this.field('Blocks walking (radius)', it.solid != null ? it.solid : (def ? def.solid : 0), set('solid', 1), { type: 'number', step: '0.1' }));
         // Colour: original scenery keeps its own tint; some library objects come in a few colours.
         const recolour = (v) => { this.snapshot(); if (def) it.opts = Object.assign({}, it.opts, { col: v }); else it.c = v; this.rebuildObj(it); this.render(); };
+        if (def && def.text) body.append(this.field('Sign text', (it.opts && it.opts.text) || '', (v) => {
+          this.snapshot(); it.opts = Object.assign({}, it.opts, { text: String(v).slice(0, 160) }); this.rebuildObj(it); this.render();
+        }, { area: true }));
         if (it.k.startsWith('cap:')) body.append(this.field('Colour', it.c || '#ffffff', recolour, { type: 'color' }));
         else if (def && def.colors) body.append(this.field('Colour', (it.opts && it.opts.col) || def.colors[0][0], recolour, { options: def.colors }));
       } else if (it.type === 'warp') {

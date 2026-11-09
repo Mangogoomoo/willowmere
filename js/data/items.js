@@ -22,6 +22,7 @@
     { id: 'shoes', name: 'Shoes' },
     { id: 'acc1', name: 'Accessory' },
     { id: 'acc2', name: 'Accessory' },
+    { id: 'ammo', name: 'Arrows' },
   ];
 
   const RARITY = {
@@ -238,7 +239,7 @@
     STAT_NAMES: {
       atk: 'ATK', matk: 'MATK', def: 'DEF', mdef: 'MDEF', str: 'STR', agi: 'AGI', vit: 'VIT', int: 'INT', dex: 'DEX', luk: 'LUK',
       maxHp: 'Max HP', maxSp: 'Max SP', hit: 'HIT', flee: 'FLEE', crit: 'CRIT', aspd: 'ASPD',
-      maxHpPct: 'Max HP %', maxSpPct: 'Max SP %',
+      maxHpPct: 'Max HP', maxSpPct: 'Max SP',
     },
   };
 })(window.G = window.G || {});

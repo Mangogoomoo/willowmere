@@ -256,6 +256,7 @@
       if (hp && p.hp <= hp) return `Not enough HP for ${s.name}.`;
       if (zeny && p.zeny < zeny) return `${s.name} needs ${zeny} Zeny.`;
       if (s.needs && p.derived.weaponType !== s.needs) return `${s.name} needs a ${G.Items.WEAPON_TYPES[s.needs].name.toLowerCase()}.`;
+      if (s.needs === 'bow' && !p.equipment.ammo) return `${s.name} needs arrows (Equipment window, Arrows slot).`;
       if (G.SkillSystem.extraCheck) { const x = G.SkillSystem.extraCheck(this, s, lv); if (x) return x; }
       return null;
     }
@@ -303,6 +304,7 @@
       if (s.zeny) p.zeny -= s.zeny(lv);
       this.cooldowns[s.id] = s.cd(lv);
       this.delay = 0.25;
+      if (s.needs === 'bow') p.inventory.useAmmo(1);   // a bow skill uses one arrow
       // Like RO: using a skill stops you where you stand for one attack motion (based on ASPD).
       p.path = null; p.approachTarget = null; p.pendingLoot = null;
       const motion = p.sprite.duration('attack');

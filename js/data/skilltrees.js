@@ -42,7 +42,7 @@
 
   /* ================= Archer ================= */
   A('arrow_crafting', 'archer', 'Arrow Crafting', I('s_arrow', '#c9a06b'), { target: 'self', max: 1, sp: r(5), effect: 'arrow_crafting',
-    desc: () => 'Whittle arrows from loot. (Arrows are not used as ammunition in Willowmere yet, so crafted arrows are only good to sell.)' });
+    desc: () => 'Open the arrow bench: see every arrow your materials can make (Jellopy, Iron, Steel, Ember, elemental stones and more) and make one batch or all of them.' });
 
   /* ================= Acolyte ================= */
   P('demon_bane', 'acolyte', 'Demon Bane', I('s_halo', '#c79bff'), (l) => `+${3 * l} ATK against shadow, ghost and undead monsters.`, (l) => ({ demonBane: 3 * l }));

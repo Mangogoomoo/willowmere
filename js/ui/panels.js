@@ -235,7 +235,7 @@
         onkeydown: (ev) => { if (ev.key === 'Enter' && e) p.inventory.unequip(slotId); },
       },
       h('div.eicon', null, e ? h('img', { src: G.Icons.url(e.id), alt: '' }) : null),
-      h('div.etext', null, h('small', { text: SHORT[slotId] || def.name }), h('span' + (G.Items.isCarded(e) ? '.carded' : ''), { text: e ? G.Items.displayName(e) : 'Empty' })));
+      h('div.etext', null, h('small', { text: SHORT[slotId] || def.name }), h('span' + (G.Items.isCarded(e) ? '.carded' : ''), { text: e ? G.Items.displayName(e) + (e.qty > 1 ? ` ×${e.qty.toLocaleString()}` : '') : 'Empty' })));
       if (e) G.Tooltip.bind(el, () => G.itemTooltip(e, p, { equipped: true, hint: 'Double-click to remove.' }));
       return el;
     }
@@ -251,7 +251,7 @@
       b.append(
         h('div.paperdoll', null,
           h('div.ecol', null, LEFT.map(slotEl)),
-          h('div.pcenter', null, portrait),
+          h('div.pcenter', null, portrait, slotEl('ammo')),
           h('div.ecol', null, RIGHT.map(slotEl))),
         h('div.esum', null,
           h('span', null, 'ATK ', h('b', { text: `${D.statusAtk + D.weaponAtk + D.atkBonus}` })),

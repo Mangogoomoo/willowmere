@@ -121,7 +121,14 @@
       const eq = this.player.equipment;
       // Move the entry out of the bag first so swapping never overflows it.
       this.items.splice(this.items.indexOf(e), 1);
-      if (eq[slot]) this.items.push(eq[slot]);
+      if (eq[slot] && item.stack && eq[slot].id === e.id) { eq[slot].qty += e.qty; e.qty = 0; }   // more of the same arrows: one stack
+      else if (eq[slot]) this.stash(eq[slot]);
+      if (!e.qty) {
+        if (G.Ledger) G.Ledger.op('equip', { uid: e.uid });
+        this.changed();
+        this.player.game.log.add(`Equipped ${G.Items.displayName(eq[slot])} (${eq[slot].qty}).`, 'info');
+        return true;
+      }
       if (item.weaponType && G.Items.WEAPON_TYPES[item.weaponType].twoHanded && eq.shield) { this.items.push(eq.shield); eq.shield = null; }
       eq[slot] = e;
       if (G.Ledger) G.Ledger.op('equip', { uid: e.uid });
@@ -135,10 +142,26 @@
       if (!e) return false;
       if (this.items.length >= this.max) { this.player.game.log.add('Your inventory is full.', 'warn'); return false; }
       this.player.equipment[slot] = null;
-      this.items.push(e);
+      this.stash(e);
       if (G.Ledger) G.Ledger.op('unequip', { slot });
       this.changed();
       this.player.game.log.add(`Removed ${G.Items.displayName(e)}.`, 'info');
+      return true;
+    }
+
+    // Back into the bag (a stack joins the same item already there).
+    stash(e) {
+      const same = G.Items.get(e.id).stack && this.items.find((x) => x.id === e.id);
+      if (same) same.qty += e.qty; else this.items.push(e);
+    }
+    // Arrows used up by a bow shot or skill (online the server is told).
+    useAmmo(n) {
+      const eq = this.player.equipment, a = eq.ammo;
+      if (!a) return false;
+      a.qty -= n;
+      if (a.qty <= 0) { eq.ammo = null; this.player.game.log.add('You are out of arrows.', 'warn'); }
+      if (G.Ledger && G.Ledger.reporting) G.Ledger.op('ammo', { n });
+      this.changed();
       return true;
     }
 

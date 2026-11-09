@@ -216,7 +216,7 @@
 
   G.SHOPS = {
     tools: { name: 'Pell’s Provisions', npc: 'tool_dealer', stock: ['red_potion', 'orange_potion', 'blue_potion', 'green_herb', 'apple', 'carrot', 'butterfly_wing', 'fly_wing'] },
-    weapons: { name: 'Garrick’s Arms', npc: 'weapon_dealer', stock: ['knife', 'cutter', 'sword', 'club', 'rod', 'wand', 'bow', 'composite_bow', 'axe', 'pike', 'katar', 'waghnak', 'bible', 'lance', 'jur', 'knuckle_duster', 'battle_axe', 'encyclopedia'] },
+    weapons: { name: 'Garrick’s Arms', npc: 'weapon_dealer', stock: ['knife', 'cutter', 'sword', 'club', 'rod', 'wand', 'bow', 'composite_bow', 'arrow', 'iron_arrow', 'axe', 'pike', 'katar', 'waghnak', 'bible', 'lance', 'jur', 'knuckle_duster', 'battle_axe', 'encyclopedia'] },
     forge: { name: 'Bram’s Forge', npc: 'refiner', stock: ['phracon', 'emveretarcon'] },
     armor: { name: 'Sabine’s Outfitters', npc: 'armor_dealer', stock: ['cotton_shirt', 'adventurer_suit', 'sandals', 'hood', 'guard', 'ribbon', 'round_glasses', 'leaf_cap'] },
   };

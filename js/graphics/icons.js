@@ -187,6 +187,16 @@
       x.beginPath(); x.moveTo(20, 20); x.lineTo(30, 32); x.lineTo(34, 12); x.moveTo(30, 32); x.lineTo(38, 52); x.moveTo(30, 32); x.lineTo(50, 22); x.stroke();
       shine(x, 26, 24, 3, 5, 0.85);
     },
+    // A bundle of three arrows; the heads take the arrow's colour.
+    arrow(x, o) {
+      for (const [dx, dy] of [[-7, 4], [0, 0], [7, 4]]) {
+        x.save(); x.translate(32 + dx, 32 + dy); x.rotate(-Math.PI / 4 + dx * 0.02);
+        outlineFill(x, (p) => p.rect(-1.5, -14, 3, 38), '#a8743c');
+        outlineFill(x, (p) => { p.moveTo(-5, 18); p.lineTo(0, 12); p.lineTo(5, 18); p.lineTo(5, 25); p.lineTo(0, 21); p.lineTo(-5, 25); p.closePath(); }, '#f4f2ee');
+        outlineFill(x, (p) => { p.moveTo(0, -26); p.lineTo(5, -14); p.lineTo(-5, -14); p.closePath(); }, o.color);
+        x.restore();
+      }
+    },
     spear(x, o) {
       x.save(); x.translate(32, 32); x.rotate(-Math.PI / 4);
       outlineFill(x, (p) => p.rect(-2, -16, 4, 44), '#8b5a33');

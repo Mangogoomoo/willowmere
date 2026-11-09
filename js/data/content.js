@@ -26,7 +26,30 @@
     item(`${el}_converter`, { name: `${name} Elemental Converter`, type: 'use', icon: { shape: 'book', color }, price: 200, weight: 3, use: { fn: 'converter', element: el }, desc: `Endow your weapon with ${el} for 3 minutes.` });
   item('acid_bottle', { name: 'Acid Bottle', type: 'etc', icon: { shape: 'potion', color: '#9ee86a' }, price: 100, weight: 10, desc: 'Ammunition for Acid Terror.' });
   item('bottle_grenade', { name: 'Bottle Grenade', type: 'etc', icon: { shape: 'potion', color: '#ff7a3d' }, price: 100, weight: 10, desc: 'Ammunition for Demonstration.' });
-  item('arrow', { name: 'Arrow', type: 'etc', icon: { shape: 'arrow', color: '#c9a06b' }, price: 1, weight: 0.1, desc: 'A plain arrow. (Arrows aren\'t used as ammunition yet; sell them.)' });
+  // Arrows: equipped in the Arrows slot, one used per bow shot (and per bow skill). Their ATK and
+  // element count only while you hold a bow.
+  const arrow = (id, name, color, atk, extra, desc) => item(id, { name, type: 'equip', slot: 'ammo', stack: true, jobs: 'all', reqLevel: 1, icon: { shape: 'arrow', color },
+    price: extra.price || 2, weight: 0.1, rarity: 'common', bonus: Object.assign({ atk }, extra.bonus || {}), desc });
+  arrow('arrow', 'Arrow', '#c9a06b', 25, { price: 1 }, 'A plain wooden arrow.');
+  arrow('iron_arrow', 'Iron Arrow', '#9aa3ad', 30, {}, 'An arrow with an iron head.');
+  arrow('steel_arrow', 'Steel Arrow', '#cfd8e6', 40, { price: 3 }, 'A heavy arrow with a steel head.');
+  arrow('oridecon_arrow', 'Oridecon Arrow', '#5ab4ff', 50, { price: 5 }, 'Tipped with oridecon. Hits very hard.');
+  arrow('sharp_arrow', 'Sharp Arrow', '#e6edf5', 10, { price: 4, bonus: { crit: 20 } }, 'A needle-sharp arrow that finds weak spots (CRIT +20).');
+  arrow('fire_arrow', 'Fire Arrow', '#ff7a3d', 30, { price: 3, bonus: { arrowElement: 'fire' } }, 'Burns on impact: your bow attacks become Fire.');
+  arrow('crystal_arrow', 'Crystal Arrow', '#7fe8ff', 30, { price: 3, bonus: { arrowElement: 'water' } }, 'Ice-cold: your bow attacks become Water.');
+  arrow('arrow_of_wind', 'Arrow of Wind', '#b4f0a0', 30, { price: 3, bonus: { arrowElement: 'wind' } }, 'Crackles with wind: your bow attacks become Wind.');
+  arrow('stone_arrow', 'Stone Arrow', '#a8743c', 30, { price: 3, bonus: { arrowElement: 'earth' } }, 'Heavy as rock: your bow attacks become Earth.');
+  arrow('silver_arrow', 'Silver Arrow', '#fff3b0', 30, { price: 3, bonus: { arrowElement: 'holy' } }, 'Blessed silver: your bow attacks become Holy.');
+  arrow('immaterial_arrow', 'Immaterial Arrow', '#d8d0ff', 30, { price: 3, bonus: { arrowElement: 'ghost' } }, 'Half there: your bow attacks become Ghost.');
+  // Arrow Crafting (Archer skill): one material makes this many arrows.
+  G.ARROW_RECIPES = [
+    ['jellopy', 'arrow', 4], ['fluff', 'arrow', 3], ['large_jellopy', 'arrow', 15], ['stone', 'stone_arrow', 3],
+    ['iron_ore', 'iron_arrow', 50], ['iron', 'iron_arrow', 100], ['rusty_screw', 'iron_arrow', 50], ['steel', 'steel_arrow', 100], ['coal', 'steel_arrow', 30],
+    ['tooth_of_bat', 'sharp_arrow', 5], ['decayed_nail', 'sharp_arrow', 10], ['oridecon', 'oridecon_arrow', 250],
+    ['ember', 'fire_arrow', 40], ['burning_heart', 'fire_arrow', 150], ['flame_heart', 'fire_arrow', 600],
+    ['mystic_frozen', 'crystal_arrow', 600], ['rough_wind', 'arrow_of_wind', 600], ['great_nature', 'stone_arrow', 600],
+    ['star_dust', 'silver_arrow', 50], ['ectoplasm', 'immaterial_arrow', 15],
+  ];
   const W = (id, name, wt, wlv, atk, req, jobs, price, iconShape, color, desc, extra) => item(id, Object.assign({ name, type: 'equip', slot: 'weapon', weaponType: wt, wlv, icon: { shape: iconShape, color },
     weight: 70, price, slots: wlv >= 3 ? 1 : 2, reqLevel: req, jobs, bonus: { atk }, desc }, extra || {}));
   W('claymore', 'Claymore', 'twohand', 3, 180, 33, ['swordsman'], 15000, 'sword', '#e6edf5', 'A huge two-handed sword.', { slots: 0 });
@@ -66,10 +89,9 @@
     reqLevel: 60, jobs: ['swordsman', 'thief', 'merchant'], bonus: { atk: 210, crit: 5 }, rarity: 'epic', desc: 'A blade that drinks the light around it.' });
 
   /* Cards for the new monsters. */
-  const SLOTN = { weapon: 'weapon', armor: 'armour', garment: 'garment', shoes: 'shoes', headgear: 'headgear', acc: 'accessory', shield: 'shield' };
   const card = (mon, name, slot, bonus, text, color, naming) => item('card_' + mon, { name: `${name} Card`, type: 'card', cardSlot: slot, bonus, rarity: 'card',
     icon: { shape: 'card', color, letter: name[0], slot: (G.Items.CARD_SLOTS && G.Items.CARD_SLOTS[slot] && G.Items.CARD_SLOTS[slot].short) || slot.toUpperCase() },
-    weight: 1, price: 20, naming, effectText: text, desc: `A card holding the essence of a ${name}. Goes into ${SLOTN[slot]}.` });
+    weight: 1, price: 20, naming, effectText: text, desc: `A card holding the essence of a ${name}.` });
   card('marin', 'Marin', 'acc', { dex: 2 }, 'DEX +2.', '#9fd8ff', { prefix: 'Slippery' });
   card('eclipse', 'Eclipse', 'headgear', { vit: 2, maxHp: 150 }, 'VIT +2, Max HP +150.', '#ffe6f0', { prefix: 'Bunny' });
   card('vocal', 'Vocal', 'acc', { agi: 2, flee: 5 }, 'AGI +2, FLEE +5.', '#8fd16a', { suffix: 'of Song' });
@@ -247,7 +269,7 @@
   gear('ironclad_boots', 'Ironclad Boots', 'shoes', 30, { def: 5, maxHp: 300 }, 'boots', '#7a838d', 16000, 'Boots that do not budge.');
   gear('guardian_helm', 'Guardian Helm', 'headTop', 35, { def: 5, vit: 2, str: 1 }, 'crown', '#9aa3ad', 20000, 'An iron helm with a red plume.', { look: 'warhelm', slots: 0 });
   gear('stoneheart_amulet', 'Stoneheart Amulet', 'acc', 35, { vit: 3, maxHp: 200 }, 'brooch', '#8a6a3a', 20000, 'A heart of stone keeps you standing.');
-  Object.assign(G.Items.STAT_NAMES, { healPct: 'Heal power %', castReduce: 'Cast time −%', spRegenPct: 'SP recovery %', hpRegenPct: 'HP recovery %', moveSpeed: 'Move speed %', atkPct: 'ATK %' });
+  Object.assign(G.Items.STAT_NAMES, { healPct: 'Heal power', castReduce: 'Cast time', spRegenPct: 'SP recovery', hpRegenPct: 'HP recovery', moveSpeed: 'Move speed', atkPct: 'ATK', arrowElement: 'Element' });
 
   // Bards and Dancers can wield their instruments and whips.
   if (G.Jobs) for (const [job, wt] of [['bard', 'instrument'], ['dancer', 'whip']]) { const j = G.Jobs.get(job); if (j && !j.weapons.includes(wt)) j.weapons.push(wt); }

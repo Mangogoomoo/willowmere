@@ -6,11 +6,12 @@
   const h = G.h;
   const CW = 118, CH = 92;
 
-  function skillTooltip(s, player, atLevel) {
+  // atLevel: an action bar slot's level; onBar: hovering it on the action bar (no learning details there).
+  function skillTooltip(s, player, atLevel, onBar) {
     const sys = player.skills, lv = sys.level(s.id);
     const lines = [`<div class="tt-name" style="color:#ffe27a">${G.esc(s.name)}</div>`];
     lines.push(`<div class="tt-type">${s.type === 'passive' ? 'Passive' : s.target === 'self' ? 'Active, self' : s.target === 'ally' ? 'Active, targets a character' : 'Active, targets an enemy'}, ${G.Jobs.get(s.job).name}${s.quest ? ', quest skill' : ''}</div>`);
-    if (s.req.length) lines.push(`<div class="tt-req">Requires: ${s.req.map(([rid, rl]) => { const ok = sys.level(rid) >= rl; return `<span class="${ok ? '' : 'bad'}">${G.esc(G.Skills.get(rid).name)} ${rl}</span>`; }).join(', ')}</div>`);
+    if (s.req.length && !onBar) lines.push(`<div class="tt-req">Requires: ${s.req.map(([rid, rl]) => { const ok = sys.level(rid) >= rl; return `<span class="${ok ? '' : 'bad'}">${G.esc(G.Skills.get(rid).name)} ${rl}</span>`; }).join(', ')}</div>`);
     if (s.quest) lines.push('<div class="tt-req">Quest skill: costs no skill points, opens at job level 15.</div>');
     if (s.catalyst && s.catalyst.length) lines.push(`<div class="tt-req">Uses: ${s.catalyst.map(([id, n]) => `${n} ${G.esc(G.Items.get(id).name)}`).join(', ')}</div>`);
     const use = lv ? (atLevel ? Math.min(lv, atLevel) : sys.useLevel(s.id)) : 0;
@@ -28,9 +29,7 @@
       if (s.cd(l) >= 1) bits.push(`cooldown ${s.cd(l)} s`);
       lines.push(`<div class="tt-foot"><span>${bits.join(', ')}</span></div>`);
     }
-    if (s.req.length) {
-      lines.push(`<div class="tt-req">Requires ${s.req.map(([id, rl]) => `<span class="${sys.level(id) >= rl ? '' : 'bad'}">${G.esc(G.Skills.get(id).name)} ${rl}</span>`).join(', ')}</div>`);
-    }
+    if (onBar) return lines.join('');
     if (s.granted) lines.push('<div class="tt-hint">Learned automatically.</div>');
     else if (s.type !== 'passive' && lv) lines.push('<div class="tt-hint">Drag to the hotbar, or double-click to use.</div>');
     return lines.join('');

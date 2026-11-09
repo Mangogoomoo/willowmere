@@ -164,12 +164,18 @@
 
   /* ---------------- item descriptions ---------------- */
   const SN = () => G.Items.STAT_NAMES;
+  const PCT = { crit: 1, aspd: 1, maxHpPct: 1, maxSpPct: 1, healPct: 1, spRegenPct: 1, hpRegenPct: 1, moveSpeed: 1, atkPct: 1, castReduce: 1 };
+  // One bonus as text: "INT +2", "Max HP +5%", "Cast time −3%", "Element: Fire".
+  function bonusText(k, v) {
+    if (k === 'arrowElement') return `${SN()[k]}: ${String(v)[0].toUpperCase() + String(v).slice(1)}`;
+    if (k === 'castReduce') return `${SN()[k]} ${v > 0 ? '−' : '+'}${Math.abs(v)}%`;
+    return `${SN()[k] || k} ${v > 0 ? '+' : ''}${v}${PCT[k] ? '%' : ''}`;
+  }
   function bonusLines(bonus, skipAtk) {
     const out = [];
     for (const k in bonus) {
       if (skipAtk && k === 'atk') continue;
-      const v = bonus[k];
-      out.push(`<div class="tt-bonus">${SN()[k] || k} ${v > 0 ? '+' : ''}${v}${k === 'crit' || k === 'aspd' ? '%' : ''}</div>`);
+      out.push(`<div class="tt-bonus">${esc(bonusText(k, bonus[k]))}</div>`);
     }
     return out.join('');
   }
@@ -181,7 +187,7 @@
     const slots = item.slots ? ` [${item.slots}]` : '';
     const nameColor = G.Items.isCarded(entry) ? G.Items.CARDED_COLOR : rarity.color;
     let html = `<div class="tt-name" style="color:${nameColor}">${esc(G.Items.displayName(entry))}${slots}${entry.qty > 1 ? ` <span class="tt-qty">×${entry.qty}</span>` : ''}</div>`;
-    let kind = { use: 'Consumable', etc: 'Material', card: item.type === 'card' ? `Card for ${G.Items.CARD_SLOTS[item.cardSlot].name.toLowerCase()}` : '' }[item.type];
+    let kind = { use: 'Consumable', etc: 'Material', card: 'Card' }[item.type];
     if (item.type === 'equip') {
       const slotName = item.slot === 'acc' ? 'Accessory' : G.Items.EQUIP_SLOTS.find((s) => s.id === item.slot).name;
       kind = item.weaponType ? `Weapon, ${G.Items.WEAPON_TYPES[item.weaponType].name.toLowerCase()}` : slotName;
@@ -223,8 +229,9 @@
           const keys = new Set([...Object.keys(item.bonus), ...Object.keys(ci.bonus)]);
           const diffs = [];
           keys.forEach((k) => {
+            if (typeof (item.bonus[k] || ci.bonus[k]) !== 'number') return;
             const d = (item.bonus[k] || 0) - (ci.bonus[k] || 0);
-            if (d) diffs.push(`<span class="${d > 0 ? 'up' : 'down'}">${SN()[k] || k} ${d > 0 ? '+' : ''}${d}</span>`);
+            if (d) diffs.push(`<span class="${d > 0 ? 'up' : 'down'}">${esc(bonusText(k, d))}</span>`);
           });
           html += `<div class="tt-compare">Compared with ${esc(ci.name)}: ${diffs.length ? diffs.join(' ') : 'no change'}</div>`;
           if (!opts.noShiftHint) html += '<div class="tt-hint tt-shift">Hold Shift to compare side by side.</div>';

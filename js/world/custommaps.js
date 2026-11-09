@@ -160,6 +160,40 @@
     return m;
   }
   const col = (o, def) => (o && o.opts && o.opts.col) || def;
+  // A wooden sign with your own words painted on both sides of the board (wrapped and sized to fit).
+  const SIGN_TEXT = 'Your text here';
+  function signTexture(text) {
+    const W = 512, H = 256, c = document.createElement('canvas'); c.width = W; c.height = H;
+    const x = c.getContext('2d');
+    x.fillStyle = '#e8d3a8'; x.fillRect(0, 0, W, H);
+    x.strokeStyle = '#a8743c'; x.lineWidth = 10; x.strokeRect(5, 5, W - 10, H - 10);
+    x.fillStyle = '#3a2410'; x.textAlign = 'center'; x.textBaseline = 'middle';
+    const words = String(text || '').split(/\s+/).filter(Boolean);
+    let size = 64, lines = [];
+    for (; size >= 20; size -= 4) {
+      x.font = `bold ${size}px sans-serif`;
+      lines = []; let line = '';
+      for (const w of words) { const t = line ? line + ' ' + w : w; if (x.measureText(t).width > W - 48 && line) { lines.push(line); line = w; } else line = t; }
+      if (line) lines.push(line);
+      if (lines.length * size * 1.15 <= H - 36 && lines.every((l) => x.measureText(l).width <= W - 48)) break;
+    }
+    lines.forEach((l, i) => x.fillText(l, W / 2, H / 2 + (i - (lines.length - 1) / 2) * size * 1.15));
+    const tex = new THREE.CanvasTexture(c);
+    tex.anisotropy = 4;
+    return tex;
+  }
+  function signMesh(e, text) {
+    const g = new THREE.Group();
+    g.add(prim([{ geo: new THREE.BoxGeometry(0.14, 1.7, 0.14), color: '#7a4c2c', pos: [0, 0.85, 0] },
+      { geo: new THREE.BoxGeometry(1.95, 1.05, 0.1), color: '#a8743c', pos: [0, 1.75, 0] }], e.propMat));
+    const mat = new THREE.MeshStandardMaterial({ map: signTexture(text), roughness: 1 });
+    for (const side of [1, -1]) {
+      const face = new THREE.Mesh(new THREE.PlaneGeometry(1.8, 0.9), mat);
+      face.position.set(0, 1.75, 0.056 * side); if (side < 0) face.rotation.y = Math.PI;
+      face.receiveShadow = true; g.add(face);
+    }
+    return g;
+  }
   const LIB = [
     // Nature
     { k: 'tree', name: 'Tree', cat: 'Nature', icon: '🌳', solid: 0.45, build: (e) => new THREE.Mesh(e.treeGeometries().round, e.foliageMat) },
@@ -309,6 +343,7 @@
       build: (e, o) => prim([{ geo: e.pondGeos().pad.clone(), color: col(o, '#4f9e46'), pos: [0, 0.02, 0] }], e.propMat) },
     { k: 'reeds', name: 'Reeds', cat: 'Water', icon: '🌾', solid: 0, build: (e) => { const m = new THREE.Mesh(e.pondGeos().reeds, e.grassMat); m.castShadow = true; m.receiveShadow = true; return wrap(m); } },
     { k: 'signpost_arrows', name: 'Signpost (arrows)', cat: 'Town', icon: '🪧', solid: 0.2, build: (e) => fromEnv(e, (f, p) => f.signpost(p, 0, 0, 0)) },
+    { k: 'sign', name: 'Sign (your text)', cat: 'Town', icon: '📜', solid: 0.2, text: true, build: (e, o) => signMesh(e, (o && o.opts && o.opts.text) || SIGN_TEXT) },
     { k: 'cave_torch', name: 'Cave torch', cat: 'Props', icon: '🔥', solid: 0.15, light: { color: '#ffb366', intensity: 1.6, range: 16, y: 2.6 }, lightIf: (o) => !o.opts || o.opts.light !== false,
       build: (e) => fromEnv(e, (f, p) => f.caveTorch(p, 0, 0, 0, {})) },
     { k: 'glow_crystal', name: 'Glowing crystal', cat: 'Props', icon: '🔮', solid: 0, colors: [['#7fe8ff', 'Cyan'], ['#b98cff', 'Violet'], ['#ff9ad6', 'Pink'], ['#ffd84a', 'Gold']],
