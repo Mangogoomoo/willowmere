@@ -75,7 +75,9 @@
     () => ({ cart: 1 }));
   A('vending', 'merchant', 'Vending', I('s_coin', '#ffd84a'), { target: 'self', sp: r(30), cd: r(2), effect: 'vending',
     desc: (l) => `Open a shop for other players: set out up to ${2 + l} kinds of items from your cart at your own price each. It stays open while you play another character. (Online only.)` });
-  A('item_appraisal', 'merchant', 'Item Appraisal', I('s_eye', '#ffd84a'), { target: 'self', max: 1, sp: r(10), effect: 'cure', desc: () => 'Identify unknown items.' + note.replace('monster does this', 'item is unidentified') });
+  // Appraise a monster's loot from a safe distance (long range, so aggressive monsters don't notice you).
+  A('item_appraisal', 'merchant', 'Item Appraisal', I('s_eye', '#ffd84a'), { target: 'enemy', max: 1, sp: r(10), cd: r(1), range: () => 14, effect: 'appraise',
+    desc: () => 'Look a monster over from up to 14 steps away: see everything it can drop and the chance of each.' });
   A('change_cart', 'merchant', 'Change Cart', I('s_bag', '#ff9ec2'), { target: 'self', max: 1, sp: r(40), cd: r(1), effect: 'change_cart', desc: () => 'Repaint your cart in a new style.' });
 
   /* ================= Knight ================= */
@@ -285,6 +287,8 @@
   B('weapon_perfection', 'blacksmith', 'Weapon Perfection', I('s_sword', '#fff2a0'), 'weapon_perfection', (l) => 10 * l, (l) => 20 - 2 * l, (l) => `For ${10 * l} s, your weapon hits every size of monster at full strength (+10% damage).`, { max: 5 });
   B('maximize_power', 'blacksmith', 'Maximize Power', I('s_bash', '#ff3b3b'), 'maximize_power', r(60), r(10), () => 'Every hit lands at your maximum damage (+15%), but SP drains over time.', { max: 5 });
   A('greed', 'blacksmith', 'Greed', I('s_bag', '#ffd84a'), { target: 'self', max: 1, sp: r(10), cd: r(1), effect: 'greed', desc: () => 'Scoop up every item on the ground around you.' });
+  // Unfair Trick (Dubious Salesmanship): a quest skill from job level 30.
+  P('unfair_trick', 'blacksmith', 'Unfair Trick', I('s_coin', '#c9a24a'), () => 'Dubious Salesmanship: Mammonite costs 10% less Zeny.', () => ({ mammoniteDiscount: 10 }), { questJob: 30 });
 
   /* ================= Alchemist ================= */
   P('potion_research', 'alchemist', 'Potion Research', I('s_book', '#ff8a8a'), (l) => `+${l}% brewing success and +${5 * l}% healing from potions you make or throw.`, (l) => ({ potionBonus: l }));
@@ -397,7 +401,7 @@
       ['smith_knuckle', 1, 2, 3, [['smith_dagger', 1]]], ['smith_mace', 2, 2, 3, [['smith_knuckle', 1]]], ['smith_spear', 3, 2, 3, [['smith_dagger', 2]]],
       ['hilt_binding', 0, 3, 1], ['ore_discovery', 1, 3, 1, [['hilt_binding', 1]]], ['weaponry_research', 2, 3, 10, [['hilt_binding', 1]]], ['weapon_repair', 3, 3, 1, [['weaponry_research', 1]]],
       ['skin_tempering', 0, 4, 5], ['hammer_fall', 1, 4, 5], ['adrenaline_rush', 2, 4, 5, [['hammer_fall', 2]]], ['weapon_perfection', 3, 4, 5, [['weaponry_research', 2], ['adrenaline_rush', 2]]],
-      ['power_thrust', 4, 4, 5, [['adrenaline_rush', 3]]], ['maximize_power', 5, 4, 5, [['weapon_perfection', 3], ['power_thrust', 2]]], ['greed', 0, 5, 1, [], 'q']],
+      ['power_thrust', 4, 4, 5, [['adrenaline_rush', 3]]], ['maximize_power', 5, 4, 5, [['weapon_perfection', 3], ['power_thrust', 2]]], ['greed', 0, 5, 1, [], 'q'], ['unfair_trick', 1, 5, 1, [], 'q']],
     alchemist: [['axe_mastery', 0, 0], ['potion_research', 0, 1], ['prepare_potion', 1, 1, 10, [['potion_research', 5]]], ['potion_pitcher', 2, 0, 5, [['prepare_potion', 3]]],
       ['acid_terror', 2, 1, 5, [['prepare_potion', 5]]], ['demonstration', 2, 2, 5, [['prepare_potion', 4]]], ['summon_flora', 3, 1, 5, [['prepare_potion', 6]]], ['marine_sphere', 3, 2, 5, [['prepare_potion', 2]]],
       ['cp_weapon', 0, 3, 5, [['prepare_potion', 2]]], ['cp_shield', 1, 3, 5, [['cp_weapon', 3]]], ['cp_armor', 2, 3, 5, [['cp_shield', 3]]], ['cp_helm', 3, 3, 5, [['prepare_potion', 2]]],

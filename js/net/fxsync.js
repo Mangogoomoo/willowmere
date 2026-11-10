@@ -6,7 +6,7 @@
 (function (G) {
   'use strict';
   const FNS = {
-    spells: ['aura', 'ring', 'bolt', 'orb', 'arrow', 'beam', 'impact', 'castCircle', 'endCastCircle', 'warning'],
+    spells: ['aura', 'ring', 'bolt', 'orb', 'arrow', 'beam', 'impact', 'castCircle', 'endCastCircle', 'warning', 'buff', 'notes'],
     effects: ['levelUp'],
     overlay: ['levelUp'],
   };

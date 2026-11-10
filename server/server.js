@@ -348,6 +348,7 @@ const cleanLook = (l) => {
   out.cart = Number.isInteger(l.cart) && l.cart >= 0 && l.cart < 8 ? l.cart : null;
   if (l.appearance && typeof l.appearance === 'object') { out.appearance = {}; for (const k of ['hair', 'outfit', 'eyes', 'style']) if (typeof l.appearance[k] === 'string') out.appearance[k] = l.appearance[k].slice(0, 20); }
   if (l.head && typeof l.head === 'object') { out.head = {}; for (const k of ['top', 'mid', 'low']) if (typeof l.head[k] === 'string') out.head[k] = l.head[k].slice(0, 24); }
+  out.perf = typeof l.perf === 'string' && /^[a-z_]{1,32}$/.test(l.perf) ? l.perf : null;   // the song a Bard or Dancer is performing
   return out;
 };
 
@@ -591,7 +592,8 @@ wss.on('connection', (ws) => {
       const target = wsOfChar(Number(msg.to));
       if (target && target.readyState === 1 && online.get(target).map === me.map)
         target.send(JSON.stringify({ t: 'buff', from: me.charId, fromName: me.name, skill: String(msg.skill || '').slice(0, 40), lv: Math.max(1, Math.min(10, Number(msg.lv) || 1)),
-          amt: msg.amt != null ? Math.max(0, Math.min(30000, Math.round(Number(msg.amt) || 0))) : undefined }));
+          amt: msg.amt != null ? Math.max(0, Math.min(30000, Math.round(Number(msg.amt) || 0))) : undefined,
+          song: !!msg.song, dur: msg.song ? Math.max(1, Math.min(30, Math.round(Number(msg.dur) || 20))) : undefined }));
     } else if (msg.t === 'pvp_hit') {
       // Only on PvP maps, only to someone on the same map, and not too fast.
       if (!pvpMaps.has(me.map) || msg.map !== me.map) return;

@@ -6,6 +6,14 @@
   const h = G.h;
 
   const PATCHES = [
+    { v: '0.47', date: '2026-11-23T12:00', title: 'Skill effects, songs and Item Appraisal', notes: [
+      'Item Appraisal now shows a monster’s drops: aim it at a monster from up to 14 steps away (far enough that it won’t notice you) to see everything it can drop and the chance of each.',
+      'Mammonite costs 10 Zeny per level. New Blacksmith quest skill Unfair Trick (job level 30): Mammonite costs 10% less.',
+      'Ground skills show a ring on the ground while you aim them, the size of the area they will hit.',
+      'Bard and Dancer songs: a ring shows how far the song reaches, notes float up, each song plays its own music, and you play your instrument. Party members inside the ring get the song too (it fades 20 s after they step out).',
+      'Buffs look like something now: Blessing’s light column, Increase AGI’s wind spiral, Gloria’s golden rays, Kyrie’s shield dome, fiery attack buffs and more. Every skill shows an effect, and other players see your character move when you use one.',
+      'The chat can be resized: drag its top-right corner. The Controls button moved to the menu (bottom right).',
+    ] },
     { v: '0.46', date: '2026-11-22T12:00', title: 'Fixes', notes: [
       'Cast Cancel now stops the spell you are casting (it was refused while casting).',
       'Mammonite costs 100 Zeny at every level.',

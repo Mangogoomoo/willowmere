@@ -21,7 +21,7 @@
       };
       this.cache = {};
       this.el.helpBtn.addEventListener('click', () => this.toggleHelp(false));
-      this.el.helpOpen.addEventListener('click', () => this.toggleHelp(true));
+      if (this.el.helpOpen) this.el.helpOpen.addEventListener('click', () => this.toggleHelp(true));
       this.toastTimer = null;
       this.zoneTimer = null;
       // Fold the controls away once the player has shown they know the basics.
@@ -43,7 +43,8 @@
     toggleHelp(force) {
       const open = force == null ? this.el.help.hidden : force;
       this.el.help.hidden = !open;
-      this.el.helpOpen.hidden = open;
+      if (this.el.helpOpen) this.el.helpOpen.hidden = open;
+      if (this.helpMenuBtn) this.helpMenuBtn.setAttribute('aria-pressed', String(open));
     }
 
     toast(msg) {

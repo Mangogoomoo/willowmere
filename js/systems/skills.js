@@ -92,7 +92,7 @@
       for (const [rid, rl] of s.req) if (lvl(rid) < rl) return { ok: false, reason: `Needs ${G.Skills.get(rid).name} level ${rl}.` };
       // Quest skills: free, once you reach job level 15 in that job (or have moved past it).
       if (s.quest) {
-        if (p.job === s.job && p.jobLevel < 15) return { ok: false, reason: `${s.name} is a quest skill: it opens at job level 15.` };
+        if (p.job === s.job && p.jobLevel < (s.questJob || 15)) return { ok: false, reason: `${s.name} is a quest skill: it opens at job level ${s.questJob || 15}.` };
         return { ok: true, free: true };
       }
       // Earlier jobs' points must be used up first (Novice, then the first job).
@@ -252,7 +252,7 @@
 
     checkCosts(s, lv) {
       const p = this.player;
-      const sp = s.sp(lv), hp = s.hp ? s.hp(lv) : 0, zeny = s.zeny ? s.zeny(lv) : 0;
+      const sp = s.sp(lv), hp = s.hp ? s.hp(lv) : 0, zeny = this.zenyCost(s, lv);
       if (p.sp < sp) return `Not enough SP for ${s.name} (${sp} needed).`;
       if (hp && p.hp <= hp) return `Not enough HP for ${s.name}.`;
       if (zeny && p.zeny < zeny) return `${s.name} needs ${zeny} Zeny.`;
@@ -302,7 +302,7 @@
       if (target && !target.alive) return;
       p.sp -= s.sp(lv);
       if (s.hp) p.hp -= s.hp(lv);
-      if (s.zeny) p.zeny -= s.zeny(lv);
+      if (s.zeny) p.zeny -= this.zenyCost(s, lv);
       this.cooldowns[s.id] = s.cd(lv);
       this.delay = 0.25;
       if (s.needs === 'bow') p.inventory.useAmmo(1);   // a bow skill uses one arrow
@@ -317,15 +317,29 @@
       if (G.Net && G.Net.ws) G.Net.skillFx(s, lv, target);
       // Buffing another player: they apply it on their side.
       if (target && target.isRemote) { if (G.Net) G.Net.sendBuff(target, s, lv); return; }
-      const eff = EFFECTS[s.effect || s.id];
+      const eff = EFFECTS[s.effect || s.id], shown = game.spells.count || 0;
       if (eff) eff(this, lv, target, s);
       else if (s.fx) runFx(this, s, lv, target);
+      // Every skill shows something: if it had no effect of its own, a flash in its colour.
+      game.after(0.1, () => {
+        if ((game.spells.count || 0) !== shown) return;
+        const col = (s.icon && s.icon.color) || '#ffffff';
+        if (target && target.ground) game.spells.ring(target.position, col, SkillSystem.areaOf(s));
+        else if (target && target !== p && target.position && target.def) game.spells.impact(target, col, 0.7);
+        else game.spells.aura(p, col);
+      });
       if (s.id !== 'play_dead') game.overlay.addText(p.position, s.name + '!', 'skill');
       game.save.markDirty();
     }
 
-    addBuff(id, level, seconds) {
+    // Zeny a skill costs (Unfair Trick takes 10% off Mammonite).
+    zenyCost(s, lv) {
+      const z = s.zeny ? s.zeny(lv) : 0, cut = s.id === 'mammonite' ? ((this.player.derived.extra || {}).mammoniteDiscount || 0) : 0;
+      return cut ? Math.ceil(z * (1 - cut / 100)) : z;
+    }
+    addBuff(id, level, seconds, quiet) {
       this.game.sfx('buff');
+      if (!quiet) this.game.spells.buff(this.player, buffStyle(id), buffColor(id));
       if (id === 'kyrie_eleison') this.player.shieldHp = Math.round(this.player.maxHp * (10 + 2 * level) / 100);
       this.buffs[id] = { level, until: this.game.time + seconds, total: seconds };
       this.player.recalc();
@@ -646,6 +660,16 @@
     }
   }
 
+  // How a buff looks when it lands (see Spells.buff), and its colour (its skill's).
+  const BUFF_STYLE = {
+    blessing: 'pillar', magnificat: 'pillar', assumptio: 'pillar', suffragium: 'pillar', aspersio: 'pillar', true_sight: 'pillar',
+    gloria: 'rays', increase_agi: 'spiral', two_hand_quicken: 'spiral', spear_quicken: 'spiral', improve_concentration: 'spiral', wind_walk: 'spiral',
+    kyrie_eleison: 'dome', angelus: 'dome', endure: 'dome', auto_guard: 'dome', defender: 'dome', energy_coat: 'dome',
+    impositio_manus: 'flame', adrenaline_rush: 'flame', power_thrust: 'flame', maximize_power: 'flame', weapon_perfection: 'flame', fury: 'flame', explosion_spirits: 'flame',
+  };
+  const buffStyle = (id) => BUFF_STYLE[id] || (SkillSystem.isSong(id) ? 'rays' : 'pillar');
+  const buffColor = (id) => { const sk = G.Skills.get(id); return (sk && sk.icon && sk.icon.color) || '#ffffff'; };
+
   function enemiesNear(game, pos, r) {
     return game.monsters.list.filter((m) => m.alive && Math.hypot(m.position.x - pos.x, m.position.z - pos.z) <= r + m.def.radius);
   }
@@ -664,6 +688,14 @@
   G.SkillSystem.BUFFS = BUFFS;
   G.SkillSystem.EFFECTS = EFFECTS;
   G.SkillSystem.runFx = runFx;
+  // How far a ground skill reaches (the ring shown while aiming it).
+  const AREA = { thunderstorm: 3, sanctuary: 2.2, safety_wall: 1.2, pr_safety_wall: 1.2, fire_wall: 1.6, pneuma: 1.6, warp_portal: 1, fire_pillar: 1.4, ice_wall: 2.5,
+    quagmire: 2.6, volcano: 3.5, deluge: 3.5, whirlwind: 3.5, land_protector: 4, body_relocation: 0.8, venom_dust: 1.8, scribble: 1, summon_flora: 0.8, marine_sphere: 3, demonstration: 2.5 };
+  SkillSystem.areaOf = (s) => (s.fx && s.fx.area) || AREA[s.id] || (s.trapId ? 1.2 : 1);
+  // Songs and dances a Bard or Dancer performs (they reach party members nearby).
+  SkillSystem.SONGS = ['poem_of_bragi', 'assassin_cross', 'whistle', 'apple_of_idun', 'humming', 'service_for_you', 'fortunes_kiss', 'dont_forget_me',
+    'mr_kim', 'drum_battlefield', 'ring_nibelungen', 'into_abyss', 'invulnerable_siegfried', 'lullaby', 'eternal_chaos', 'lokis_veil'];
+  SkillSystem.isSong = (id) => SkillSystem.SONGS.includes(String(id).replace(/^dc_/, ''));
   // Heal: (base level + INT) / 8 x (4 + 8 x level), raised by heal-power gear and cards.
   SkillSystem.healAmount = (p, lv) => Math.round(Math.max(1, Math.floor((p.baseLevel + p.derived.total.int) / 8)) * (4 + 8 * lv) * (1 + ((p.derived.extra || {}).healPct || 0) / 100));
 

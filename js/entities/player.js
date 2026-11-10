@@ -564,6 +564,7 @@
       else if (this.swinging) this.sprite.play('attack');
       else if (this.skills.motion > 0) this.sprite.play(this.skills.motionAnim);
       else if (this.moving) this.sprite.play('walk');
+      else if (this.performing) this.sprite.play('cast');   // playing a song
       else if (this.hurtT > 0) this.sprite.play('hit');
       else this.sprite.play('idle');
 

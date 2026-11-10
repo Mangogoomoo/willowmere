@@ -200,6 +200,25 @@
       this.el = document.getElementById('log');
       this.list = document.getElementById('log-list');
       this.max = 60;
+      // Resizable: drag the grip at the top-right corner (the size is remembered).
+      const size = G.SaveSystem.prefs().logSize;
+      if (size) this.resize(size.w, size.h);
+      const grip = h('div.log-grip', { title: 'Drag to resize the chat', 'aria-hidden': 'true' });
+      grip.addEventListener('pointerdown', (e) => {
+        e.preventDefault(); e.stopPropagation(); grip.setPointerCapture(e.pointerId);
+        const r = this.el.getBoundingClientRect(), x0 = e.clientX, y0 = e.clientY;
+        const move = (ev) => this.resize(r.width + ev.clientX - x0, r.height - (ev.clientY - y0));
+        const up = () => { grip.removeEventListener('pointermove', move); grip.removeEventListener('pointerup', up); const b = this.el.getBoundingClientRect(); G.SaveSystem.setPrefs({ logSize: { w: Math.round(b.width), h: Math.round(b.height) } }); };
+        grip.addEventListener('pointermove', move); grip.addEventListener('pointerup', up);
+      });
+      this.el.append(grip);
+    }
+    resize(w, hgt) {
+      w = Math.max(240, Math.min(Math.min(760, window.innerWidth - 40), w));
+      hgt = Math.max(90, Math.min(Math.min(560, window.innerHeight - 260), hgt));
+      this.el.style.width = w + 'px'; this.el.style.height = hgt + 'px';
+      document.documentElement.style.setProperty('--log-h', hgt + 'px');   // the Controls panel and admin buttons sit above it
+      this.list.scrollTop = this.list.scrollHeight;
     }
     add(text, kind) {
       const li = h('li.' + (kind || 'info'), { text });

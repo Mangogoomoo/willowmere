@@ -38,7 +38,7 @@
       this.castMesh = null;
     }
 
-    add(fx) { this.active.push(fx); return fx; }
+    add(fx) { this.count = (this.count || 0) + 1; this.active.push(fx); return fx; }   // count: did a skill show anything?
     remove(obj) { this.scene.remove(obj); if (obj.material && obj.material.dispose && !obj.userData.shared) obj.material.dispose(); }
 
     /* Arrow from the archer to the target; onHit runs on arrival. */
@@ -189,6 +189,74 @@
           { color: [c.r, c.g, c.b], size: 0.2 + Math.random() * 0.15, vx: -Math.sin(a) * 0.8, vy: 1.6 + Math.random() * 1.6, vz: Math.cos(a) * 0.8, life: 1 + Math.random() * 0.5, drag: 0.5 });
       }
       this.ring(p, color, 1.3);
+    }
+
+    /* A buff landing on someone, in one of a few styles:
+       'pillar'  a column of light with falling sparkles (Blessing, Magnificat...)
+       'spiral'  wind spiralling up (Increase AGI, speed buffs)
+       'rays'    golden rays bursting out (Gloria, luck)
+       'dome'    a shield bubble (Kyrie, Angelus, defence)
+       'flame'   rising embers (attack buffs)                                      */
+    buff(ent, style, color) {
+      if (!ent || !ent.position) return;
+      const p = ent.position, c = new THREE.Color(color || '#ffffff'), rgb = [c.r, c.g, c.b], S = this.game.effects.sparks;
+      const h = (ent.def && ent.def.height) || 1.8;
+      if (style === 'pillar') {
+        const mat = new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false, side: THREE.DoubleSide });
+        const col = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.75, 6, 18, 1, true), mat);
+        col.position.set(p.x, p.y + 3, p.z); this.scene.add(col);
+        for (let i = 0; i < 30; i++) S.emit(p.x + (Math.random() - 0.5) * 1.2, p.y + 3 + Math.random() * 2.5, p.z + (Math.random() - 0.5) * 1.2, { color: rgb, size: 0.25, vy: -2.6 - Math.random(), life: 1.1, drag: 0.2 });
+        this.add({ t: 0, update: (dt, fx) => { fx.t += dt; const k = fx.t / 0.9; mat.opacity = 0.55 * (1 - k); col.scale.set(1 - k * 0.6, 1, 1 - k * 0.6); if (k >= 1) { col.geometry.dispose(); this.remove(col); return true; } return false; } });
+      } else if (style === 'spiral') {
+        this.add({ t: 0, e: 0, update: (dt, fx) => {
+          fx.t += dt; fx.e += dt;
+          while (fx.e > 0.012) { fx.e -= 0.012; const a = fx.t * 14, r = 0.75; S.emit(p.x + Math.cos(a) * r, p.y + fx.t * 3.2, p.z + Math.sin(a) * r, { color: rgb, size: 0.22, vy: 1.2, life: 0.6, drag: 1 }); }
+          return fx.t > 0.7;
+        } });
+      } else if (style === 'rays') {
+        for (let i = 0; i < 24; i++) { const a = (i / 24) * Math.PI * 2; S.emit(p.x, p.y + h * 0.6, p.z, { color: rgb, size: 0.32, vx: Math.cos(a) * 4.5, vy: 0.6 + (i % 3) * 0.6, vz: Math.sin(a) * 4.5, life: 0.7, drag: 2.5 }); }
+        this.notes(ent, color, 5);
+      } else if (style === 'dome') {
+        const mat = new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false, side: THREE.DoubleSide });
+        const dome = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2), mat);
+        dome.position.set(p.x, p.y, p.z); this.scene.add(dome);
+        this.add({ t: 0, update: (dt, fx) => { fx.t += dt; const k = Math.min(1, fx.t / 0.9), s = 0.4 + 0.9 * Math.min(1, fx.t * 3); dome.scale.set(s, s * 1.4, s); mat.opacity = 0.35 * (1 - k); if (k >= 1) { dome.geometry.dispose(); this.remove(dome); return true; } return false; } });
+      } else if (style === 'flame') {
+        for (let i = 0; i < 34; i++) { const a = Math.random() * Math.PI * 2, r = 0.3 + Math.random() * 0.5; S.emit(p.x + Math.cos(a) * r, p.y + Math.random() * 0.6, p.z + Math.sin(a) * r, { color: [1, 0.45 + Math.random() * 0.3, 0.15], size: 0.3, vy: 2.5 + Math.random() * 2, life: 0.8, drag: 0.6 }); }
+      }
+      this.ring(p, color || '#ffffff', 1.1);
+    }
+    // Music notes floating up from someone (songs, Gloria).
+    notes(ent, color, n) {
+      const p = ent.position, c = new THREE.Color(color || '#ffd968');
+      if (!this.noteTex) {
+        const cv = U.makeCanvas(64, 64), x = cv.getContext('2d');
+        x.fillStyle = '#ffffff'; x.font = 'bold 52px serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText('♪', 32, 34);
+        this.noteTex = new THREE.CanvasTexture(cv);
+      }
+      for (let i = 0; i < (n || 1); i++) {
+        const mat = new THREE.SpriteMaterial({ map: this.noteTex, color: c, transparent: true, depthWrite: false, toneMapped: false });
+        const sp = new THREE.Sprite(mat), a = Math.random() * Math.PI * 2;
+        sp.position.set(p.x + Math.cos(a) * 0.5, p.y + 1.6 + Math.random() * 0.4, p.z + Math.sin(a) * 0.5); sp.scale.set(0.45, 0.45, 1);
+        this.scene.add(sp);
+        const vx = Math.cos(a) * 0.4, vz = Math.sin(a) * 0.4;
+        this.add({ t: 0, update: (dt, fx) => { fx.t += dt; sp.position.x += vx * dt; sp.position.z += vz * dt; sp.position.y += 0.9 * dt; mat.opacity = Math.max(0, 1 - fx.t / 1.4); if (fx.t > 1.4) { this.remove(sp); return true; } return false; } });
+      }
+    }
+    // A ring that stays on the ground until disposed (where a ground skill will land; a song's reach).
+    groundRing(color, radius) {
+      const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false, side: THREE.DoubleSide });
+      const fill = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.16, depthWrite: false, toneMapped: false, side: THREE.DoubleSide });
+      const g = new THREE.Group(), edge = new THREE.Mesh(new THREE.RingGeometry(0.94, 1, 64), mat), disc = new THREE.Mesh(new THREE.CircleGeometry(0.94, 48), fill);
+      edge.rotation.x = disc.rotation.x = -Math.PI / 2; g.add(disc, edge);
+      g.scale.setScalar(radius); g.renderOrder = 2; this.scene.add(g);
+      return {
+        mesh: g,
+        move: (x, z) => { g.position.set(x, G.Terrain.surfaceHeight(x, z) + 0.08, z); },
+        resize: (r) => g.scale.setScalar(r),
+        set visible(v) { g.visible = v; },
+        dispose: () => { this.scene.remove(g); edge.geometry.dispose(); disc.geometry.dispose(); mat.dispose(); fill.dispose(); },
+      };
     }
 
     /* Big star burst on a target (Bash, Provoke, Steal). */

@@ -295,6 +295,15 @@ database, and you see other players move, change gear and chat (press
 Enter). See `server/README.md` for setup. Opened any other way (a file or
 the published page), Willowmere stays single-player with browser saves.
 
+## Skill effects and songs (v0.47)
+
+- **Item Appraisal** shows a monster's drop list and chances (range 14).
+- **Ground skills** show their area as a ring while you aim.
+- **Songs** reach party members within the ring around the performer, with
+  music and notes; buffs have their own effects (light column, wind spiral,
+  golden rays, shield dome, flames).
+- **Chat** is resizable (drag its top-right corner).
+
 ## Vending (v0.45)
 
 - **Vending (online):** a merchant sets out cart items at a price each; a shop

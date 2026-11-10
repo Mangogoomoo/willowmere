@@ -146,7 +146,7 @@ body:not(.playing) #hud, body:not(.playing) #windows { display: none; }
 .target .meter b { line-height: 15px; }
 
 /* ---------- help ---------- */
-.help { left: 14px; bottom: calc(176px + env(safe-area-inset-bottom, 0px)); width: 268px; }
+.help { left: 14px; bottom: calc(var(--log-h, 150px) + 26px + env(safe-area-inset-bottom, 0px)); width: 268px; z-index: 4; }
 .keys { list-style: none; margin: 0; padding: 6px 10px 8px; display: grid; gap: 3px; font-size: 12px; line-height: 1.25; }
 .keys li { display: grid; grid-template-columns: 98px 1fr; align-items: baseline; gap: 8px; }
 kbd {
@@ -161,7 +161,7 @@ kbd {
 .x:hover { background: rgba(255, 255, 255, 0.35); }
 /* Bottom-left buttons (Controls, and for admins Map editor and Teleport) stacked above the log. */
 .corner-btns {
-  position: absolute; left: 14px; bottom: calc(176px + env(safe-area-inset-bottom, 0px)); z-index: 3;
+  position: absolute; left: 14px; bottom: calc(var(--log-h, 150px) + 26px + env(safe-area-inset-bottom, 0px)); z-index: 3;
   display: flex; flex-direction: column-reverse; align-items: flex-start; gap: 6px; pointer-events: none;
 }
 .corner-btns > * { pointer-events: auto; }
@@ -245,6 +245,10 @@ button:focus-visible { outline: 2px solid #ffd76a; outline-offset: 2px; }
   backdrop-filter: blur(4px);
 }
 .log { display: flex; flex-direction: column; }
+/* The chat's resize grip (top-right corner). */
+.log-grip { position: absolute; right: -1px; top: -1px; width: 16px; height: 16px; cursor: nesw-resize; border-top-right-radius: 10px;
+  background: linear-gradient(225deg, rgba(200, 220, 255, 0.85) 0 2px, transparent 2px 5px, rgba(200, 220, 255, 0.85) 5px 7px, transparent 7px); opacity: 0.6; }
+.log-grip:hover { opacity: 1; }
 .log ul { list-style: none; margin: 0; padding: 7px 10px; flex: 1 1 auto; min-height: 0; overflow-y: auto; font-size: 12.5px; line-height: 1.45; color: #e9eefb; text-shadow: 0 1px 1px rgba(0,0,0,0.6); }
 .log li.system { color: #9fd0ff; }
 .log li.loot { color: #f2f2f2; }

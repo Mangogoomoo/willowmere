@@ -15,6 +15,20 @@
     dungeon: { bpm: 60, root: 45, scale: [0, 2, 3, 7, 8, 12, 14, 15], chords: [0, 0, 8, 7], lead: 'sine', bass: 'sawtooth', pad: 0.06, density: 0.3, echo: 0.45, bell: true },
   };
 
+  // Bard and Dancer songs: tempo, instrument and a short looping tune each.
+  const SONGS = {
+    poem_of_bragi: { bpm: 84, inst: 'triangle', root: 60, notes: [0, null, 4, 7, 12, null, 7, 4, 5, null, 9, 12, 7, null, 4, 2], bass: [0, 5, 7, 0] },
+    assassin_cross: { bpm: 132, inst: 'square', root: 57, vol: 0.05, notes: [0, 3, 7, 3, 0, 3, 8, 7, 0, 3, 7, 10, 12, 10, 7, 3], bass: [0, 0, -2, -4] },
+    whistle: { bpm: 112, inst: 'sine', root: 72, vol: 0.08, notes: [0, 2, 4, null, 7, null, 4, 2, 0, null, 2, 4, 2, null, 0, null] },
+    apple_of_idun: { bpm: 92, inst: 'triangle', root: 64, notes: [0, 4, 7, 11, 12, null, 11, 7, 9, null, 7, 4, 5, null, 4, null], bass: [0, 5, 0, 7] },
+    humming: { bpm: 76, inst: 'sine', root: 60, vol: 0.1, len: 2.4, notes: [0, null, 2, null, 4, null, 2, null, 0, null, -3, null, 0, null, null, null] },
+    service_for_you: { bpm: 120, inst: 'triangle', root: 67, notes: [0, 4, 7, 4, 9, 7, 4, 0, 2, 5, 9, 5, 7, null, 4, null], bass: [0, 2, 5, 7] },
+    fortunes_kiss: { bpm: 104, inst: 'sine', root: 69, vol: 0.09, notes: [0, 7, 12, 7, 0, 5, 9, 5, 0, 4, 7, 12, 11, null, 7, null], bass: [0, -3, -7, -5] },
+    dont_forget_me: { bpm: 70, inst: 'sawtooth', root: 55, vol: 0.035, len: 2.2, notes: [0, null, 1, null, 3, null, 1, null, 0, null, -2, null, -4, null, null, null], bass: [0, -2] },
+    mr_kim: { bpm: 126, inst: 'square', root: 64, vol: 0.045, notes: [0, 0, 7, 7, 9, 9, 7, null, 5, 5, 4, 4, 2, 2, 0, null] },
+    drum_battlefield: { bpm: 140, inst: 'square', root: 52, vol: 0.05, notes: [0, null, 0, 0, 7, null, 0, null, 0, null, 0, 0, 5, null, 7, null], bass: [0, 0, 5, 7] },
+    _: { bpm: 100, inst: 'triangle', root: 62, notes: [0, 4, 7, 4, 2, 5, 9, 5, 0, 4, 7, 12, 7, null, 4, null], bass: [0, 5] },
+  };
   class Audio {
     constructor() {
       const p = G.SaveSystem.prefs().audio || {};
@@ -152,8 +166,41 @@
       tr.gain.gain.setTargetAtTime(1, t, 1.2);
     }
 
+    /* ---------------- Bard and Dancer songs ----------------
+       While you perform, a short melody loops on its own instrument and the map's music
+       steps back. One tune per song (notes are semitones above the root; null is a rest). */
+    playSong(id) {
+      const key = String(id).replace(/^dc_/, ''), tune = SONGS[key] || SONGS._;
+      if (this.songId === id) return;
+      this.songId = id;
+      if (!this.ctx) return;
+      if (!this.songBus) { this.songBus = this.ctx.createGain(); this.songBus.connect(this.musicBus); const send = this.ctx.createGain(); send.gain.value = 0.3; this.songBus.connect(send); send.connect(this.echo); }
+      this.song = { tune, next: this.ctx.currentTime + 0.05, step: 0 };
+      this.songBus.gain.setTargetAtTime(1.6, this.ctx.currentTime, 0.2);
+      if (this.theme && this.tracks[this.theme]) this.tracks[this.theme].gain.gain.setTargetAtTime(0.3, this.ctx.currentTime, 0.4);
+    }
+    stopSong() {
+      if (!this.songId) return;
+      this.songId = null; this.song = null;
+      if (!this.ctx) return;
+      if (this.songBus) this.songBus.gain.setTargetAtTime(0, this.ctx.currentTime, 0.2);
+      if (this.theme && this.tracks[this.theme]) this.tracks[this.theme].gain.gain.setTargetAtTime(1, this.ctx.currentTime, 0.8);
+    }
+    scheduleSong() {
+      const sg = this.song, ctx = this.ctx;
+      if (!sg) return;
+      const tn = sg.tune, beat = 60 / tn.bpm / 2;
+      while (sg.next < ctx.currentTime + 0.35) {
+        const n = tn.notes[sg.step % tn.notes.length];
+        if (n != null) this.tone(NOTE(tn.root + n), beat * (tn.len || 1.6), { type: tn.inst, vol: tn.vol || 0.09, attack: tn.attack || 0.01, at: sg.next, out: this.songBus });
+        if (tn.bass && sg.step % 8 === 0) this.tone(NOTE(tn.root - 12 + tn.bass[(sg.step / 8) % tn.bass.length | 0]), beat * 7, { type: 'triangle', vol: 0.07, attack: 0.05, at: sg.next, out: this.songBus });
+        sg.next += beat; sg.step++;
+      }
+    }
+
     // Look-ahead scheduler: queue notes slightly ahead of the audio clock.
     schedule() {
+      if (this.ctx && this.song) this.scheduleSong();
       if (!this.ctx || !this.theme) return;
       const tr = this.tracks[this.theme], th = THEMES[this.theme], ctx = this.ctx;
       const beat = 60 / th.bpm / 2;          // eighth notes

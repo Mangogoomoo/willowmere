@@ -12,7 +12,7 @@
     const lines = [`<div class="tt-name" style="color:#ffe27a">${G.esc(s.name)}</div>`];
     lines.push(`<div class="tt-type">${s.type === 'passive' ? 'Passive' : s.target === 'self' ? 'Active, self' : s.target === 'ally' ? 'Active, targets a character' : 'Active, targets an enemy'}, ${G.Jobs.get(s.job).name}${s.quest ? ', quest skill' : ''}</div>`);
     if (s.req.length && !onBar) lines.push(`<div class="tt-req">Requires: ${s.req.map(([rid, rl]) => { const ok = sys.level(rid) >= rl; return `<span class="${ok ? '' : 'bad'}">${G.esc(G.Skills.get(rid).name)} ${rl}</span>`; }).join(', ')}</div>`);
-    if (s.quest) lines.push('<div class="tt-req">Quest skill: costs no skill points, opens at job level 15.</div>');
+    if (s.quest) lines.push(`<div class="tt-req">Quest skill: costs no skill points, opens at job level ${s.questJob || 15}.</div>`);
     if (s.catalyst && s.catalyst.length) lines.push(`<div class="tt-req">Uses: ${s.catalyst.map(([id, n]) => `${n} ${G.esc(G.Items.get(id).name)}`).join(', ')}</div>`);
     const use = lv ? (atLevel ? Math.min(lv, atLevel) : sys.useLevel(s.id)) : 0;
     if (lv) lines.push(`<div class="tt-desc"><b>Level ${use}${use < lv ? ' (chosen, learned ' + lv + ')' : ''}:</b> ${G.esc(s.desc(use))}</div>`);
@@ -21,7 +21,7 @@
       const l = Math.max(1, use);
       const bits = [`SP ${s.sp(l)}`];
       if (s.hp) bits.push(`HP ${s.hp(l)}`);
-      if (s.zeny) bits.push(`${s.zeny(l)} Zeny`);
+      if (s.zeny) bits.push(`${player.skills.zenyCost(s, l)} Zeny`);
       if (s.cast(l)) {
         const mine = sys.castTime(s, l);
         bits.push(`cast ${s.cast(l).toFixed(1)} s` + (mine < s.cast(l) - 0.05 ? ` (${mine.toFixed(1)} s with your DEX)` : ''));

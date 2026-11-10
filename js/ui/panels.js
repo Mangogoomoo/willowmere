@@ -400,6 +400,9 @@
     el.prepend(loot);
     el.append(h('button.mbtn', { type: 'button', title: 'What changed in each update', onclick: () => G.PatchNotes.open() }, 'Patch notes', h('kbd', { text: 'v' + G.PatchNotes.LATEST })));
     el.append(h('button.mbtn', { type: 'button', title: 'Monster and item encyclopedia (opens in a new tab)', onclick: () => window.open(G.Config.DB_URL, '_blank', 'noopener') }, 'Database', h('kbd', { text: '↗' })));
+    // The Controls panel (also H).
+    game.hud.helpMenuBtn = h('button.mbtn.toggle', { type: 'button', 'aria-pressed': String(!document.getElementById('help').hidden), onclick: () => game.hud.toggleHelp() }, 'Controls', h('kbd', { text: 'H' }));
+    el.append(game.hud.helpMenuBtn);
     el.append(h('button.mbtn', { type: 'button', title: 'Save and go back to the character screen (an open shop stays open)', onclick: () => G.toCharSelect(game) }, 'Character Selection'));
     // Hide / show the whole button column (remembered).
     const collapsed = !!G.SaveSystem.prefs().menuHidden;

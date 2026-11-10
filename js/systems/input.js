@@ -138,6 +138,14 @@
       el.querySelector('.sc-label').textContent = `${s.name} Lv ${this.targetLv}`;
       if (this.mouseX != null) el.style.transform = `translate(${this.mouseX}px, ${this.mouseY}px)`;
       el.hidden = this.mouseX == null;
+      // Ground skills: a ring on the ground showing where (and how wide) the spell will land.
+      if (this.aimRing) { this.aimRing.dispose(); this.aimRing = null; }
+      if (this.targetMode === 'ground') {
+        const EL = { fire: '#ff7a3d', water: '#6fc3ff', wind: '#ffe066', earth: '#c9a06b', holy: '#fff2a0', ghost: '#c8b8ff', poison: '#9ad84a' };
+        const el2 = s.element || (s.fx && s.fx.element);
+        this.aimRing = this.game.spells.groundRing(EL[el2] || (s.icon && s.icon.color) || '#ffffff', G.SkillSystem.areaOf(s));
+        this.aimRing.visible = false;
+      }
       this.updateCursor();
       this.game.hud.toast(this.targetMode === 'ground' ? `Click the ground to place ${G.Skills.get(skillId).name}. Right-click or Esc cancels.`
         : this.targetMode === 'ally'
@@ -186,6 +194,7 @@
       if (!this.targeting) return;
       this.targeting = null;
       document.body.classList.remove('cursor-target');
+      if (this.aimRing) { this.aimRing.dispose(); this.aimRing = null; }
       if (this.cursorEl) this.cursorEl.hidden = true;
       if (msg) this.game.log.add('Skill cancelled.', 'info');
     }
@@ -235,6 +244,7 @@
     }
 
     update(dt) {
+      this.updateAimRing();
       if (!this.hasPointer) return;
       // Hover highlight (only when not dragging the camera).
       if (!this.rotating) {
@@ -259,7 +269,15 @@
       }
     }
 
+    // The ground ring follows the mouse while a ground skill is being aimed.
+    updateAimRing() {
+      if (!this.aimRing) return;
+      const gp = this.hasPointer && G.Terrain.raycast(this.castRay(), 400);
+      this.aimRing.visible = !!gp;
+      if (gp) this.aimRing.move(gp.x, gp.z);
+    }
     updateCursor() {
+      this.updateAimRing();
       const b = document.body.classList;
       b.toggle('cursor-rotate', this.rotating);
       b.toggle('cursor-attack', !this.rotating && !!this.hover);

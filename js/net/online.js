@@ -140,7 +140,12 @@
       l = l || {};
       return G.SpriteFactory.humanoid(l.appearance || {}, { job: l.job || 'novice', weapon: l.weapon || 'dagger', unarmed: !l.weapon || l.weapon === 'none', head: l.head || {}, mount: l.mount || null, falcon: !!l.falcon });
     }
-    setLook(l) { this.look = l; this.sprite.setSheet(RemotePlayer.sheet(l)); this.syncCart(); }
+    setLook(l) {
+      // Starting or stopping a song only changes the ring, not the character's picture.
+      const same = this.look && JSON.stringify(Object.assign({}, this.look, { perf: null })) === JSON.stringify(Object.assign({}, l, { perf: null }));
+      this.look = l;
+      if (!same) { this.sprite.setSheet(RemotePlayer.sheet(l)); this.syncCart(); }
+    }
     // A monster on the host hit this player: their own game takes the damage.
     addStatus() { /* statuses on other players are their game's business */ }
     takeDamage(dmg, src) {
@@ -166,7 +171,7 @@
       const walking = this.moving || d > 0.15;
       if (this.cast) { this.cast.t += dt; if (this.cast.t > this.cast.dur + 0.3) this.cast = null; }
       if (this.swingT > 0) this.swingT -= dt;
-      else this.sprite.play(this.vend ? 'sit' : this.cast ? 'cast' : walking ? 'walk' : 'idle');
+      else this.sprite.play(this.vend ? 'sit' : this.cast ? 'cast' : walking ? 'walk' : this.look && this.look.perf ? 'cast' : 'idle');
       if (this.cartMesh) {
         if (!this.cartMesh.parent) this.game.mapRoot.add(this.cartMesh);
         G.Cart.follow(this.cartMesh, this, dt);
@@ -198,7 +203,7 @@
       const p = this.game.player;
       return { job: p.job, weapon: p.derived.weaponType || 'none', head: p.headLooks(), appearance: p.appearance,
         mount: p.riding ? (p.job === 'crusader' ? 'grandpeco' : 'peco') : null, falcon: !!p.skills.level('falconry_mastery'),
-        cart: p.skills.level('pushcart') ? (p.extra.cartStyle || 0) : null };
+        cart: p.skills.level('pushcart') ? (p.extra.cartStyle || 0) : null, perf: p.performing || null };
     },
     handle(m) {
       const game = this.game;
@@ -288,6 +293,8 @@
         return;
       }
       caster.cast = null;
+      // Their character moves as the skill goes off (a strike at someone, a cast otherwise).
+      caster.sprite.play(s.target === 'self' || s.target === 'ally' ? 'cast' : 'attack', { restart: true }); caster.swingT = 0.45;
       const at = caster.position.clone(); at.y += 2.4;
       game.overlay.addText(at, s.name + '!', 'skill');
     },
@@ -299,8 +306,16 @@
       this.send({ t: 'buff', to: target.id, skill: s.id, lv, amt });   // their own effect plays the visuals
       this.game.log.add(`You cast ${s.name} on ${target.name}.`, 'info');
     },
+    // A Bard's or Dancer's song reaching a party member (refreshed every 2 s, lasts 20 s).
+    sendSong(target, s, lv) { this.send({ t: 'buff', to: target.id, skill: s.id, lv, song: true, dur: 20 }); },
     receiveBuff(m) {
       const game = this.game, p = game.player, s = G.Skills.get(m.skill);
+      if (m.song && s && s.fx && s.fx.kind === 'buff' && G.SkillSystem.isSong(s.id) && p.alive) {
+        const had = !!p.skills.buffs[s.fx.id];
+        p.skills.addBuff(s.fx.id, m.lv, Math.max(1, Math.min(30, Number(m.dur) || 20)), had);
+        if (!had) game.log.add(`${m.fromName}’s ${s.name} reaches you.`, 'level');
+        return;
+      }
       if (!s || s.target !== 'ally' || !p.alive) return;
       const sys = p.skills, run = G.SkillSystem.EFFECTS[s.effect || s.id];
       if (s.id === 'heal' && m.amt > 0) { p.heal(m.amt); game.spells.aura(p, '#7dff9a'); }

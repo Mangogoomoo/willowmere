@@ -161,6 +161,33 @@
       const d = t.def;
       sys.game.dialog.open({ name: t.name, title: 'Sense' }, async (dlg) => dlg.say(`${t.name}, level ${d.level}\nHP ${Math.round(t.hp)} / ${d.hp}\nElement: ${d.element || 'neutral'}\nDEF ${d.def}, MDEF ${d.mdef || 0}, FLEE ${d.flee}\nATK ${d.atk[0]}–${d.atk[1]}`));
     },
+    // Item Appraisal: a monster's whole drop list, with chances.
+    appraise(sys, lv, t) {
+      if (!t || !t.def) return;
+      const game = sys.game, h = G.h, p = sys.player, d = t.def;
+      if (!game.appraiseWin) {
+        game.appraiseWin = game.windows.create('appraise', 'Item Appraisal', { width: 340, pos: () => ({ x: window.innerWidth / 2 - 170, y: 120 }) });
+        game.appraiseWin.render = () => {};
+      }
+      const W = game.appraiseWin, b = W.body;
+      b.textContent = '';
+      W.head.firstChild.textContent = `${d.name} (Lv ${d.level})`;
+      const pct = (c) => { const v = c * 100; return v >= 10 ? `${Math.round(v)}%` : v >= 1 ? `${+v.toFixed(1)}%` : `${+v.toFixed(2)}%`; };
+      const drops = (d.drops || []).filter((x) => G.Items.get(x.id)).slice()
+        .sort((a, c) => (G.Items.get(c.id).type === 'card') - (G.Items.get(a.id).type === 'card') || c.chance - a.chance);
+      const list = h('div.shop-list');
+      for (const x of drops) {
+        const it = G.Items.get(x.id);
+        const row = h('div.shop-row.appraise-row', null, h('img', { src: G.Icons.url(x.id), alt: '' }),
+          h('span.sname2', { text: it.name }), h('span.sprice', { text: pct(x.chance) }));
+        G.Tooltip.bind(row, () => G.itemTooltip({ id: x.id, qty: 1, cards: [] }, p));
+        list.append(row);
+      }
+      if (!drops.length) list.append(h('p.hint', { text: 'This monster carries nothing worth taking.' }));
+      b.append(list, h('p.hint', { text: 'Chances are per kill. Hover an item for its details.' }));
+      game.windows.open('appraise');
+      game.spells.impact(t, '#ffd84a', 0.6);
+    },
     cast_cancel(sys, lv) {
       const c = sys.casting;
       if (!c) { say(sys.game, 'You aren\'t casting anything.'); return; }
@@ -636,6 +663,60 @@
   G.Crafting = Crafting;
 
   /* ---------------- per-frame extras on the player ---------------- */
+  /* ---------------- Bard and Dancer performances ----------------
+     While a song plays: a ring on the ground around the performer shows its reach,
+     notes float up, its music plays, and party members inside the ring get the song
+     too (refreshed every 2 s, fading 20 s after they leave). Other players see the
+     ring through the performer's look (look.perf). */
+  const SONG_R = 5;
+  const Perform = {
+    rings: new Map(), noteT: 0, shareT: 0,
+    // The song this character is performing (their own song buff, from their own skill).
+    playing(p) {
+      if (p.job !== 'bard' && p.job !== 'dancer' && p.job !== 'novice') return null;
+      for (const id in p.skills.buffs) if (SS.isSong(id) && p.skills.level(id) > 0) return id;
+      return null;
+    },
+    ring(key, who, song) {
+      let r = this.rings.get(key);
+      if (r && r.song !== song) { r.ring.dispose(); r = null; }
+      if (!r) {
+        const sk = G.Skills.get(song), col = (sk && sk.icon && sk.icon.color) || '#ff9ec2';
+        r = { ring: this.game.spells.groundRing(col, SONG_R), song, color: col };
+        this.rings.set(key, r);
+      }
+      r.ring.move(who.position.x, who.position.z);
+      return r;
+    },
+    update(game, dt) {
+      this.game = game;
+      const p = game.player, song = this.playing(p), seen = new Set();
+      p.performing = song;
+      if (song) {
+        const r = this.ring('me', p, song); seen.add('me');
+        game.audio.playSong(song);
+        this.noteT -= dt;
+        if (this.noteT <= 0) { this.noteT = 0.7; game.spells.notes(p, r.color, 1); }
+        // Party members within reach get the song as well.
+        this.shareT -= dt;
+        if (this.shareT <= 0 && G.Net && G.Net.ws && G.Social && G.Social.party) {
+          this.shareT = 2;
+          const mates = new Set((G.Social.party.members || []).map((m) => m.id));
+          // Measured to where they really are (the latest position we heard), not where they're drawn.
+          for (const r2 of G.Net.players.values()) {
+            const at = r2.target || r2.position;
+            if (mates.has(r2.id) && Math.hypot(at.x - p.position.x, at.z - p.position.z) <= SONG_R) G.Net.sendSong(r2, G.Skills.get(song), p.skills.buffs[song].level);
+          }
+        }
+      } else game.audio.stopSong();
+      // Other performers on the map (their look says what they play).
+      if (G.Net && G.Net.players) for (const r2 of G.Net.players.values()) if (r2.look && r2.look.perf) { this.ring(r2.id, r2, r2.look.perf); seen.add(r2.id); }
+      for (const [k, r] of this.rings) if (!seen.has(k)) { r.ring.dispose(); this.rings.delete(k); }
+    },
+    clear() { for (const r of this.rings.values()) r.ring.dispose(); this.rings.clear(); },
+  };
+  G.Perform = Perform;
+
   G.SkillsX = {
     update(game, dt) {
       const p = game.player, sys = p.skills, D = p.derived;
@@ -643,6 +724,7 @@
       // Spirit spheres orbit the monk.
       game.fields.update(dt);
       game.cart.update(dt);
+      Perform.update(game, dt);
       if (p.spheres > 0) {
         this.orbT = (this.orbT || 0) + dt;
         if (this.orbT > 0.05) {
