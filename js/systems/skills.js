@@ -203,7 +203,7 @@
       if (!p.alive) return false;
       if (id !== 'play_dead' && p.playingDead) { this.execute(G.Skills.get('play_dead'), 1, null); }
       if (id !== 'hiding' && p.hidden) p.unhide();
-      if (this.casting) return false;
+      if (this.casting && id !== 'cast_cancel') return false;   // Cast Cancel is the one skill used mid-cast
       const fail = this.checkCosts(s, lv);
       if (fail) { game.log.add(fail, 'warn'); return false; }
       if (this.cooldownLeft(id) > 0) {

@@ -128,8 +128,8 @@
 
   /* ---------------- Merchant ---------------- */
   def('mammonite', { name: 'Mammonite', job: 'merchant', pos: [0, 0], icon: { shape: 's_coin', color: '#f5c542' },
-    sp: () => 5, zeny: (l) => 100 * l, cd: () => 0.5,
-    desc: (l) => `Strike with the weight of your wallet for ${pct(100 + 50 * l)} damage. Costs ${100 * l} Zeny.` });
+    sp: () => 5, zeny: () => 100, cd: () => 0.5,
+    desc: (l) => `Strike with the weight of your wallet for ${pct(100 + 50 * l)} damage. Costs 100 Zeny.` });
   def('cart_revolution', { name: 'Cart Revolution', job: 'merchant', max: 1, pos: [1, 0], req: [['mammonite', 3]], icon: { shape: 's_bag', color: '#d98a4a' },
     sp: () => 12, cd: () => 1,
     desc: () => 'Swing your heavy pack in a wide arc: 150% damage to everything around the target, knocking them back.' });

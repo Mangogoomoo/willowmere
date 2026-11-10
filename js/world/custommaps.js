@@ -273,7 +273,7 @@
       { geo: new THREE.CylinderGeometry(0.9, 0.95, 0.8, 12), color: '#9c958a', pos: [0, 0.4, 0], jitter: 0.15 },
       { geo: new THREE.BoxGeometry(0.12, 1.6, 0.12), color: '#7a5a3e', pos: [-0.8, 1.2, 0] }, { geo: new THREE.BoxGeometry(0.12, 1.6, 0.12), color: '#7a5a3e', pos: [0.8, 1.2, 0] },
       { geo: new THREE.ConeGeometry(1.2, 0.6, 4), color: '#a4553e', pos: [0, 2.2, 0], rot: [0, Math.PI / 4, 0] }], e.propMat) },
-    { k: 'gate', name: 'Town gate', cat: 'Town', icon: '🏰', solid: 0, rect: [5.2, 1.2], build: (e) => fromEnv(e, (f, p) => f.gate(p, p), true) },
+    { k: 'gate', name: 'Town gate', cat: 'Town', icon: '🏰', solid: 0, blocks: [[-3.7, 0, 1.2], [3.7, 0, 1.2]], build: (e) => fromEnv(e, (f, p) => f.gate(p, p), true) },
     { k: 'spike_wall', name: 'Spike wall', cat: 'Town', icon: '🪵', solid: 0, rect: (o) => [((o.opts && o.opts.n) || 8) * 0.25, 0.3], build: (e, o) => {
       const n = (o && o.opts && o.opts.n) || 8, parts = [], r = U.mulberry32(n * 7 + 3);
       for (let i = 0; i < n; i++) { const x = (i - (n - 1) / 2) * 0.5, sc = 0.9 + r() * 0.25;
@@ -785,6 +785,11 @@
       if (block && solid > 0) game.nav.blockCircle(o.x, o.z, solid * (o.s || 1));
       if (block && o.rect) game.nav.blockRect(o.x, o.z, o.rect[0] * (o.s || 1), o.rect[1] * (o.s || 1), o.ry || 0);
       if (block && def && def.rect) { const [hw, hd] = typeof def.rect === 'function' ? def.rect(o) : def.rect; game.nav.blockRect(o.x, o.z, hw * (o.s || 1), hd * (o.s || 1), o.ry || 0); }
+      // Several solid spots (the gate's two towers, with the road open between them).
+      if (block && def && def.blocks) for (const [dx, dz, r] of def.blocks) {
+        const s = o.s || 1, c = Math.cos(o.ry || 0), sn = Math.sin(o.ry || 0);
+        game.nav.blockCircle(o.x + (dx * c + dz * sn) * s, o.z + (-dx * sn + dz * c) * s, r * s);
+      }
       if (block && def && def.deck && def.rails) {
         // Railings along both sides of a bridge.
         const sc = o.s || 1, hw = def.deck.hw * sc, hl = def.deck.hl * sc, c = Math.cos(o.ry || 0), sn = Math.sin(o.ry || 0);

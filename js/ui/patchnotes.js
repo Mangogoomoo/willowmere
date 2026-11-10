@@ -6,6 +6,14 @@
   const h = G.h;
 
   const PATCHES = [
+    { v: '0.46', date: '2026-11-22T12:00', title: 'Fixes', notes: [
+      'Cast Cancel now stops the spell you are casting (it was refused while casting).',
+      'Mammonite costs 100 Zeny at every level.',
+      'The Willowmere town gate lets you walk through again on edited maps: only its two towers are solid.',
+      'NPC conversations show in front of the action bar, and above it when you have more rows.',
+      'The Controls button (bottom left) no longer slides under the admin Map editor and Teleport buttons.',
+      'Character Selection: the Delete character and Log out buttons are readable in dark mode.',
+    ] },
     { v: '0.45', date: '2026-11-21T12:00', title: 'Vending shops and Character Selection', notes: [
       'Vending works like Ragnarok Online now (online). Use the skill to open the Vending window: pick items from your cart, set how many and a price per item (up to 1,000,000,000 Zeny), give the shop a title and press OK. You can list 3 kinds of items at level 1, up to 12 at level 10.',
       'Your character sits down with a shop sign over their head, which everyone on the map sees. Others click the sign to see your shop and buy as many as they like; the Zeny goes straight to you.',

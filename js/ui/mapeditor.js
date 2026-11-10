@@ -38,7 +38,9 @@
       this.tpBtn = h('button.ed-toggle.ed-tp', { type: 'button', hidden: true, title: 'Teleport to any map (admins)', onclick: () => this.openTeleport() }, '🗺 Teleport');
       // While editing: key hints and coordinates where the action bar normally is.
       this.keybar = h('div#ed-keys', { hidden: true, 'aria-live': 'off' });
-      document.body.append(this.btn, this.tpBtn, this.keybar);
+      // Map editor and Teleport stack above the Controls button (bottom left).
+      (document.getElementById('corner-btns') || document.body).append(this.btn, this.tpBtn);
+      document.body.append(this.keybar);
       this.tpWin = game.windows.create('teleport', 'Teleport to map', { width: 300, pos: () => ({ x: window.innerWidth / 2 - 150, y: 90 }) });
       setInterval(() => this.updateKeybar(), 250);
       this.refreshAdmin();

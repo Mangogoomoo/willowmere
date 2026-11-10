@@ -86,6 +86,7 @@
     }
     showRows() {
       this.rowEls.forEach((r, i) => { r.hidden = i >= this.rows; });
+      document.documentElement.style.setProperty('--hotbar-rows', String(this.rows));   // NPC dialogs sit above the bar
       const back = this.rows >= ROWS;
       this.more.textContent = back ? '−' : '+';
       this.more.title = back ? 'Back to one action bar row' : 'Add an action bar row';
