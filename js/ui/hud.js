@@ -21,6 +21,8 @@
       };
       this.cache = {};
       this.el.helpBtn.addEventListener('click', () => this.toggleHelp(false));
+      window.addEventListener('resize', () => this.placeHelp());
+      requestAnimationFrame(() => this.placeHelp());
       if (this.el.helpOpen) this.el.helpOpen.addEventListener('click', () => this.toggleHelp(true));
       this.toastTimer = null;
       this.zoneTimer = null;
@@ -43,8 +45,17 @@
     toggleHelp(force) {
       const open = force == null ? this.el.help.hidden : force;
       this.el.help.hidden = !open;
+      if (open) this.placeHelp();
       if (this.el.helpOpen) this.el.helpOpen.hidden = open;
       if (this.helpMenuBtn) this.helpMenuBtn.setAttribute('aria-pressed', String(open));
+    }
+
+    // The Controls panel sits just left of the bottom-right menu.
+    placeHelp() {
+      const m = document.getElementById('menubar'), hp = this.el.help;
+      if (!m || hp.hidden) return;
+      const r = m.getBoundingClientRect();
+      Object.assign(hp.style, { left: 'auto', right: Math.round(window.innerWidth - r.left + 10) + 'px', bottom: Math.max(14, Math.round(window.innerHeight - r.bottom)) + 'px' });
     }
 
     toast(msg) {

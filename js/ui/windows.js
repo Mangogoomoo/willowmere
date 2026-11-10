@@ -44,9 +44,25 @@
       this.layer.append(el);
       const win = { id, el, body, head, opts, onOpen: opts.onOpen || null, render: opts.render || null };
       this.wins[id] = win;
+      this.keepScroll(win);
       el.addEventListener('pointerdown', () => this.focus(id));
       this.makeDraggable(win);
       return win;
+    }
+
+    // Every scrolling list in a window keeps its place when the window redraws (after buying,
+    // selling, using or taking something). Reopening the window starts from the top again.
+    keepScroll(win) {
+      const saved = new Map(), body = win.body;
+      const keyOf = (n) => { const cls = (n.getAttribute('class') || '').trim(), sel = cls ? '.' + cls.split(/\s+/).join('.') : n.tagName.toLowerCase(); return [sel, [...body.querySelectorAll(sel)].indexOf(n)]; };
+      body.addEventListener('scroll', (e) => { const n = e.target; if (n && n.nodeType === 1 && n !== body) { const [sel, i] = keyOf(n); saved.set(sel + '|' + i, { sel, i, top: n.scrollTop }); } }, true);
+      new MutationObserver(() => {
+        for (const { sel, i, top } of saved.values()) {
+          const n = body.querySelectorAll(sel)[i];
+          if (n && top && n.scrollTop === 0) n.scrollTop = top;
+        }
+      }).observe(body, { childList: true, subtree: true });
+      win.forgetScroll = () => saved.clear();
     }
 
     makeDraggable(win) {
@@ -88,6 +104,7 @@
       const w = this.wins[id];
       if (!w) return;
       if (w.el.hidden) {
+        if (w.forgetScroll) w.forgetScroll();   // a window you open again starts at the top
         w.el.hidden = false;
         if (this.game.sfx) this.game.sfx('click');
         const p = this.positions[id] || w.opts.pos || { x: 80, y: 90 };

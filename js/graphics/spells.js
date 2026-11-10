@@ -243,13 +243,36 @@
         this.add({ t: 0, update: (dt, fx) => { fx.t += dt; sp.position.x += vx * dt; sp.position.z += vz * dt; sp.position.y += 0.9 * dt; mat.opacity = Math.max(0, 1 - fx.t / 1.4); if (fx.t > 1.4) { this.remove(sp); return true; } return false; } });
       }
     }
+    // A note (or, for Apple of Idun, an apple) rising from a spot inside a song's circle.
+    // Each player's game makes these itself, so they aren't sent to others.
+    floatAt(x, z, color, kind) {
+      if (!this.floatTex) this.floatTex = {};
+      if (!this.floatTex[kind || 'note']) {
+        if (kind === 'apple') { this.floatTex.apple = new THREE.TextureLoader().load(G.Icons.url('apple')); }
+        else {
+          // A white note with a dark outline (tinted by the song's colour), readable on any ground.
+          const cv = U.makeCanvas(64, 64), x2 = cv.getContext('2d'); x2.font = 'bold 52px serif'; x2.textAlign = 'center'; x2.textBaseline = 'middle';
+          x2.lineWidth = 7; x2.strokeStyle = 'rgba(40, 20, 50, 0.85)'; x2.strokeText('♪', 32, 34); x2.fillStyle = '#ffffff'; x2.fillText('♪', 32, 34);
+          this.floatTex.note = new THREE.CanvasTexture(cv);
+        }
+      }
+      const mat = new THREE.SpriteMaterial({ map: this.floatTex[kind || 'note'], color: kind === 'apple' ? '#ffffff' : color, transparent: true, depthWrite: false, toneMapped: false });
+      const sp = new THREE.Sprite(mat), y0 = G.Terrain.surfaceHeight(x, z) + 0.4 + Math.random() * 0.6, s = kind === 'apple' ? 0.5 : 0.6;
+      sp.position.set(x, y0, z); sp.scale.set(s, s, 1); this.scene.add(sp);
+      const sway = Math.random() * 6;
+      this.add({ t: 0, update: (dt, fx) => {
+        fx.t += dt; sp.position.y += 0.8 * dt; sp.position.x = x + Math.sin(fx.t * 3 + sway) * 0.15;
+        mat.opacity = Math.max(0, Math.min(1, fx.t * 4, 1.8 - fx.t)); if (fx.t > 1.8) { this.remove(sp); return true; } return false;
+      } });
+    }
     // A ring that stays on the ground until disposed (where a ground skill will land; a song's reach).
     groundRing(color, radius) {
-      const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false, side: THREE.DoubleSide });
-      const fill = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.16, depthWrite: false, toneMapped: false, side: THREE.DoubleSide });
-      const g = new THREE.Group(), edge = new THREE.Mesh(new THREE.RingGeometry(0.94, 1, 64), mat), disc = new THREE.Mesh(new THREE.CircleGeometry(0.94, 48), fill);
-      edge.rotation.x = disc.rotation.x = -Math.PI / 2; g.add(disc, edge);
-      g.scale.setScalar(radius); g.renderOrder = 2; this.scene.add(g);
+      // Drawn over the ground (no depth test) so hills and slopes never hide part of it.
+      const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.85, depthTest: false, depthWrite: false, toneMapped: false, side: THREE.DoubleSide });
+      const fill = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.14, depthTest: false, depthWrite: false, toneMapped: false, side: THREE.DoubleSide });
+      const g = new THREE.Group(), edge = new THREE.Mesh(new THREE.RingGeometry(0.95, 1, 72), mat), disc = new THREE.Mesh(new THREE.CircleGeometry(0.95, 48), fill);
+      edge.rotation.x = disc.rotation.x = -Math.PI / 2; edge.renderOrder = disc.renderOrder = 5; g.add(disc, edge);
+      g.scale.setScalar(radius); this.scene.add(g);
       return {
         mesh: g,
         move: (x, z) => { g.position.set(x, G.Terrain.surfaceHeight(x, z) + 0.08, z); },

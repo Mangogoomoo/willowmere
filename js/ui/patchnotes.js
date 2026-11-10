@@ -6,6 +6,14 @@
   const h = G.h;
 
   const PATCHES = [
+    { v: '0.48', date: '2026-11-24T12:00', title: 'Songs, shop signs and scrolling', notes: [
+      'Song circles are bigger (they reach further) and always fully visible, even on hills. Notes rise from all over the circle, and Apple of Idun sends up apples too.',
+      'Songs need an instrument (Bards) or a whip (Dancers) in hand, and stop if you put it away.',
+      'New volume slider for Bard and Dancer songs (Options), so you can turn the music off and still hear them.',
+      'Shop signs no longer wobble when you turn the camera.',
+      'The Controls panel opens next to the menu buttons (bottom right).',
+      'Every window with a scrolling list keeps its place when you buy, sell, use or take something.',
+    ] },
     { v: '0.47', date: '2026-11-23T12:00', title: 'Skill effects, songs and Item Appraisal', notes: [
       'Item Appraisal now shows a monster’s drops: aim it at a monster from up to 14 steps away (far enough that it won’t notice you) to see everything it can drop and the chance of each.',
       'Mammonite costs 10 Zeny per level. New Blacksmith quest skill Unfair Trick (job level 30): Mammonite costs 10% less.',

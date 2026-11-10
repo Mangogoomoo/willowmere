@@ -32,7 +32,7 @@
   class Audio {
     constructor() {
       const p = G.SaveSystem.prefs().audio || {};
-      this.settings = Object.assign({ master: 0.8, music: 0.45, sfx: 0.8, muted: false }, p);
+      this.settings = Object.assign({ master: 0.8, music: 0.45, sfx: 0.8, songs: 0.6, muted: false }, p);
       this.ctx = null;
       this.last = {};
       this.theme = null;
@@ -50,7 +50,8 @@
       // Gentle compression keeps busy fights from clipping.
       const comp = ctx.createDynamicsCompressor();
       comp.threshold.value = -14; comp.ratio.value = 4;
-      this.sfxBus.connect(this.master); this.musicBus.connect(this.master);
+      this.songVol = ctx.createGain();   // Bard and Dancer songs: their own volume (heard even with music off)
+      this.sfxBus.connect(this.master); this.musicBus.connect(this.master); this.songVol.connect(this.master);
       this.master.connect(comp); comp.connect(ctx.destination);
       // Shared echo for music.
       this.echo = ctx.createDelay(1.5); this.echo.delayTime.value = 0.36;
@@ -72,6 +73,7 @@
       this.master.gain.setTargetAtTime(s.muted ? 0 : s.master, t, 0.05);
       this.sfxBus.gain.setTargetAtTime(s.sfx, t, 0.05);
       this.musicBus.gain.setTargetAtTime(s.music, t, 0.05);
+      this.songVol.gain.setTargetAtTime(s.songs, t, 0.05);
     }
     saveSettings() { this.applyVolumes(); G.SaveSystem.setPrefs({ audio: this.settings }); }
 
@@ -174,7 +176,11 @@
       if (this.songId === id) return;
       this.songId = id;
       if (!this.ctx) return;
-      if (!this.songBus) { this.songBus = this.ctx.createGain(); this.songBus.connect(this.musicBus); const send = this.ctx.createGain(); send.gain.value = 0.3; this.songBus.connect(send); send.connect(this.echo); }
+      if (!this.songBus) {
+        const c = this.ctx; this.songBus = c.createGain(); this.songBus.connect(this.songVol);
+        const echo = c.createDelay(1); echo.delayTime.value = 0.3; const fb = c.createGain(); fb.gain.value = 0.22;
+        this.songBus.connect(echo); echo.connect(fb); fb.connect(echo); fb.connect(this.songVol);
+      }
       this.song = { tune, next: this.ctx.currentTime + 0.05, step: 0 };
       this.songBus.gain.setTargetAtTime(1.6, this.ctx.currentTime, 0.2);
       if (this.theme && this.tracks[this.theme]) this.tracks[this.theme].gain.gain.setTargetAtTime(0.3, this.ctx.currentTime, 0.4);

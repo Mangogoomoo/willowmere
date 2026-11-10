@@ -117,6 +117,7 @@
       const p = this.game.player, b = this.win.body;
       // Keep the list where it was after buying or selling (a new tab starts at the top).
       const old = b.querySelector('.shop-list'), scroll = old && this.scrollMode === this.mode ? old.scrollTop : 0;
+      if (this.scrollMode !== this.mode && this.win.forgetScroll) this.win.forgetScroll();   // a new tab starts at the top
       this.scrollMode = this.mode;
       b.textContent = '';
       const tabs = h('div.tabs', null, [['buy', 'Buy'], ['sell', 'Sell']].map(([id, label]) => h('button.tab' + (this.mode === id ? '.on' : ''), {

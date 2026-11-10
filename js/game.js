@@ -412,7 +412,6 @@
       this.hotbar.update(dt);
       this.minimap.update(dt);
       if (G.Net.ws) G.Net.update(dt);
-      G.Vending.update();
       this.trackPerformance(dt);
 
       // Keep the shadow frustum centred on the player (snapped to texels to avoid shimmer).
@@ -433,6 +432,7 @@
 
       this.renderer.render(this.scene, this.camera3);
       this.overlay.draw(dt);
+      G.Vending.update();   // shop signs, placed with the camera this frame was drawn with
       this.hud.update();
     }
 

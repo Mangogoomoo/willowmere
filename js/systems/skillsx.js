@@ -668,7 +668,7 @@
      notes float up, its music plays, and party members inside the ring get the song
      too (refreshed every 2 s, fading 20 s after they leave). Other players see the
      ring through the performer's look (look.perf). */
-  const SONG_R = 5;
+  const SONG_R = 7.5;   // how far a song reaches (the ring), like RO's 9x9 cells
   const Perform = {
     rings: new Map(), noteT: 0, shareT: 0,
     // The song this character is performing (their own song buff, from their own skill).
@@ -692,11 +692,14 @@
       this.game = game;
       const p = game.player, song = this.playing(p), seen = new Set();
       p.performing = song;
+      // Put the instrument (or whip) away and the song stops.
+      if (song && p.derived.weaponType !== (p.job === 'dancer' ? 'whip' : 'instrument')) {
+        delete p.skills.buffs[song]; p.recalc(); game.log.add('Your song stops: you need your instrument in hand.', 'info');
+        return this.update(game, dt);
+      }
       if (song) {
-        const r = this.ring('me', p, song); seen.add('me');
+        this.ring('me', p, song); seen.add('me');
         game.audio.playSong(song);
-        this.noteT -= dt;
-        if (this.noteT <= 0) { this.noteT = 0.7; game.spells.notes(p, r.color, 1); }
         // Party members within reach get the song as well.
         this.shareT -= dt;
         if (this.shareT <= 0 && G.Net && G.Net.ws && G.Social && G.Social.party) {
@@ -712,6 +715,18 @@
       // Other performers on the map (their look says what they play).
       if (G.Net && G.Net.players) for (const r2 of G.Net.players.values()) if (r2.look && r2.look.perf) { this.ring(r2.id, r2, r2.look.perf); seen.add(r2.id); }
       for (const [k, r] of this.rings) if (!seen.has(k)) { r.ring.dispose(); this.rings.delete(k); }
+      // Notes rise from all over every circle (apples too, for Apple of Idun).
+      this.noteT -= dt;
+      if (this.noteT <= 0 && this.rings.size) {
+        this.noteT = 0.22;
+        for (const [k, r] of this.rings) {
+          const who = k === 'me' ? p : G.Net.players.get(k);
+          if (!who) continue;
+          const a = Math.random() * Math.PI * 2, d = Math.sqrt(Math.random()) * SONG_R * 0.92;
+          const apple = r.song.replace(/^dc_/, '') === 'apple_of_idun' && Math.random() < 0.5;
+          game.spells.floatAt(who.position.x + Math.cos(a) * d, who.position.z + Math.sin(a) * d, r.color, apple ? 'apple' : 'note');
+        }
+      }
     },
     clear() { for (const r of this.rings.values()) r.ring.dispose(); this.rings.clear(); },
   };

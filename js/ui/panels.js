@@ -303,7 +303,7 @@
           h('button.btn.small', { type: 'button', onclick: () => { game.save.save(true); game.save.enabled = false; location.reload(); } }, 'Character select'),
           h('button.btn.small', { type: 'button', onclick: () => { cam.rotSens = cam.pitchSens = cam.zoomSens = 1; cam.invertY = false; game.camera.saveSettings(); win.render(); } }, 'Default settings')),
         h('h3', { text: 'Sound' }),
-        ...[['Master volume', 'master'], ['Music', 'music'], ['Sound effects', 'sfx']].map(([label, key]) => {
+        ...[['Master volume', 'master'], ['Music', 'music'], ['Bard & Dancer songs', 'songs'], ['Sound effects', 'sfx']].map(([label, key]) => {
           const a = game.audio.settings, out = h('output', { text: Math.round(a[key] * 100) + '%' });
           return h('label.opt', null, h('span', { text: label }), h('input', {
             type: 'range', min: '0', max: '1', step: '0.05', value: String(a[key]), 'aria-label': label,

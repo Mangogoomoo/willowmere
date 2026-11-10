@@ -256,7 +256,7 @@
       if (p.sp < sp) return `Not enough SP for ${s.name} (${sp} needed).`;
       if (hp && p.hp <= hp) return `Not enough HP for ${s.name}.`;
       if (zeny && p.zeny < zeny) return `${s.name} needs ${zeny} Zeny.`;
-      if (s.needs && p.derived.weaponType !== s.needs) return `${s.name} needs a ${G.Items.WEAPON_TYPES[s.needs].name.toLowerCase()}.`;
+      if (s.needs && p.derived.weaponType !== s.needs) { const w = G.Items.WEAPON_TYPES[s.needs].name.toLowerCase(); return `${s.name} needs ${/^[aeiou]/.test(w) ? 'an' : 'a'} ${w}.`; }
       if (s.needs === 'bow' && !p.equipment.ammo) return `${s.name} needs arrows (Equipment window, Arrows slot).`;
       if (G.SkillSystem.extraCheck) { const x = G.SkillSystem.extraCheck(this, s, lv); if (x) return x; }
       return null;
@@ -696,6 +696,8 @@
   SkillSystem.SONGS = ['poem_of_bragi', 'assassin_cross', 'whistle', 'apple_of_idun', 'humming', 'service_for_you', 'fortunes_kiss', 'dont_forget_me',
     'mr_kim', 'drum_battlefield', 'ring_nibelungen', 'into_abyss', 'invulnerable_siegfried', 'lullaby', 'eternal_chaos', 'lokis_veil'];
   SkillSystem.isSong = (id) => SkillSystem.SONGS.includes(String(id).replace(/^dc_/, ''));
+  // Songs need an instrument (Bards) or a whip (Dancers) in hand.
+  for (const s of Object.values(G.Skills.DB)) if (SkillSystem.isSong(s.id) && !s.needs && (s.job === 'bard' || s.job === 'dancer')) s.needs = s.job === 'dancer' ? 'whip' : 'instrument';
   // Heal: (base level + INT) / 8 x (4 + 8 x level), raised by heal-power gear and cards.
   SkillSystem.healAmount = (p, lv) => Math.round(Math.max(1, Math.floor((p.baseLevel + p.derived.total.int) / 8)) * (4 + 8 * lv) * (1 + ((p.derived.extra || {}).healPct || 0) / 100));
 
