@@ -7,15 +7,18 @@
                     occlusion from the depth buffer), the colour grade for the
                     time of day and weather, a gentle vignette, lightning flashes
 
-   Quality levels: high = 4x anti-aliasing + bloom + contact shading,
-   medium = bloom at lower resolution, low = fog and grade only. */
+                    a soft focus that deepens toward the edges of the view and
+                    in the distance
+
+   Quality levels: high = 4x anti-aliasing + bloom + contact shading + soft
+   focus, medium = bloom at lower resolution, low = fog and grade only. */
 (function (G) {
   'use strict';
 
   const VERT = 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }';
 
   const BRIGHT = `
-    uniform sampler2D tex; uniform vec2 texel; uniform float threshold; varying vec2 vUv;
+    uniform sampler2D tex; uniform vec2 texel; uniform float threshold; uniform float gain; varying vec2 vUv;
     void main(){
       vec3 c = texture2D(tex, vUv + texel * vec2(-0.5, -0.5)).rgb + texture2D(tex, vUv + texel * vec2(0.5, -0.5)).rgb
              + texture2D(tex, vUv + texel * vec2(-0.5, 0.5)).rgb + texture2D(tex, vUv + texel * vec2(0.5, 0.5)).rgb;
@@ -23,7 +26,7 @@
       float l = max(c.r, max(c.g, c.b));
       // Only what is brighter than the threshold blooms (so sunlit ground doesn't wash out).
       float k = max(l - threshold, 0.0) / max(l, 1e-4);
-      gl_FragColor = vec4(c * k * 2.2, 1.0);
+      gl_FragColor = vec4(c * k * gain, 1.0);
     }`;
   const DOWN = `
     uniform sampler2D tex; uniform vec2 texel; varying vec2 vUv;
@@ -44,14 +47,14 @@
     }`;
 
   const FINAL = `
-    uniform sampler2D tColor; uniform sampler2D tDepth; uniform sampler2D tBloom;
+    uniform sampler2D tColor; uniform sampler2D tDepth; uniform sampler2D tBloom; uniform sampler2D tSoft; uniform float soft; uniform float focus;
     uniform vec2 texel; uniform float near; uniform float far;
     uniform mat4 invProj; uniform mat4 camWorld; uniform vec3 camPos;
     uniform vec3 fogColor; uniform float fogNear; uniform float fogFar; uniform float fogMax;
     uniform float mist; uniform float mistTop; uniform float mistFall;
     uniform vec3 sunDir; uniform vec3 sunGlow; uniform float time;
     uniform float bloom; uniform float ao;
-    uniform vec3 tint; uniform float saturation; uniform float contrast; uniform float vignette; uniform float flash;
+    uniform vec3 tint; uniform float saturation; uniform float contrast; uniform float vignette; uniform float flash; uniform float pastel;
     varying vec2 vUv;
 
     float viewZ(vec2 uv) { float d = texture2D(tDepth, uv).x; return (near * far) / ((far - near) * d - far); }   // negative in front of the camera
@@ -107,12 +110,25 @@
       }
 
       col += texture2D(tBloom, vUv).rgb * bloom;
+      #ifdef USE_SOFT
+      {
+        // Soft focus: the picture melts a little toward a blurred copy of itself, more so toward the top and
+        // bottom of the screen and in the distance (a miniature, tilt-shift look), and bright areas bleed.
+        vec3 blur = texture2D(tSoft, vUv).rgb;
+        float away = sky ? 0.5 : smoothstep(70.0, 240.0, dist) * 0.55;
+        float f = clamp(smoothstep(0.32, 0.54, abs(vUv.y - 0.54)) * 0.5 + away, 0.0, 0.8) * focus;
+        col = mix(col, blur, f);
+        col = 1.0 - (1.0 - col) * (1.0 - blur * blur * soft);
+      }
+      #endif
 
-      // Grade: tint, saturation, contrast.
+      // Grade: tint, saturation, a gentle contrast, then shadows leaning violet and lights leaning cream.
       col *= tint;
       float l = dot(col, vec3(0.299, 0.587, 0.114));
       col = mix(vec3(l), col, saturation);
       col = (col - 0.5) * contrast + 0.5;
+      col += pastel * (1.0 - l) * (1.0 - l) * vec3(0.045, 0.035, 0.085);
+      col *= mix(vec3(1.0), vec3(1.035, 1.01, 0.955), pastel * smoothstep(0.35, 0.95, l));
       col += flash * vec3(0.75, 0.8, 1.0);
       vec2 q = vUv - 0.5;
       col *= 1.0 - vignette * smoothstep(0.25, 0.95, dot(q, q) * 2.2);
@@ -130,7 +146,7 @@
       this.quad.frustumCulled = false;
       this.scene.add(this.quad);
       const mat = (frag, uniforms, defines) => new THREE.ShaderMaterial({ vertexShader: VERT, fragmentShader: frag, uniforms, defines: defines || {}, depthTest: false, depthWrite: false, extensions: { derivatives: true } });
-      this.bright = mat(BRIGHT, { tex: { value: null }, texel: { value: new THREE.Vector2() }, threshold: { value: 0.86 } });
+      this.bright = mat(BRIGHT, { tex: { value: null }, texel: { value: new THREE.Vector2() }, threshold: { value: 0.86 }, gain: { value: 2.2 } });
       this.down = mat(DOWN, { tex: { value: null }, texel: { value: new THREE.Vector2() } });
       this.up = mat(UP, { tex: { value: null }, add: { value: null }, texel: { value: new THREE.Vector2() } });
       this.u = {
@@ -139,7 +155,7 @@
         fogColor: { value: new THREE.Color(0.86, 0.93, 0.96) }, fogNear: { value: 90 }, fogFar: { value: 300 }, fogMax: { value: 1 },
         mist: { value: 0.12 }, mistTop: { value: 0.5 }, mistFall: { value: 0.35 },
         sunDir: { value: new THREE.Vector3(0.4, 0.8, 0.3) }, sunGlow: { value: new THREE.Color(0, 0, 0) }, time: { value: 0 },
-        bloom: { value: 0.55 }, ao: { value: 0.7 },
+        bloom: { value: 0.55 }, ao: { value: 0.7 }, tSoft: { value: null }, soft: { value: 0.3 }, focus: { value: 1 }, pastel: { value: 1 },
         tint: { value: new THREE.Color(1, 1, 1) }, saturation: { value: 1.06 }, contrast: { value: 1.04 }, vignette: { value: 0.22 }, flash: { value: 0 },
       };
       this.final = mat(FINAL, this.u, {});
@@ -151,7 +167,7 @@
     setQuality(level) {
       if (this.level === level && this.target) return;
       this.level = level;
-      this.final.defines = level === 'high' ? { USE_AO: '' } : {};
+      this.final.defines = level === 'high' ? { USE_AO: '', USE_SOFT: '' } : {};
       this.final.needsUpdate = true;
       this.build();
     }
@@ -184,6 +200,14 @@
           this.targets.push(mk(), mk());                      // [down, up] per level
         }
       }
+      // Soft-focus chain (high quality): the whole picture, blurred.
+      for (const t of this.softTargets || []) t.dispose();
+      this.softTargets = [];
+      if (this.level === 'high') for (let i = 0; i < 3; i++) {
+        const k = 2 << i, tw = Math.max(2, Math.round(this.w / k)), th = Math.max(2, Math.round(this.h / k));
+        const mk = () => new THREE.WebGLRenderTarget(tw, th, { depthBuffer: false, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, generateMipmaps: false });
+        this.softTargets.push(mk(), mk());
+      }
     }
 
     pass(material, target) {
@@ -200,17 +224,18 @@
       r.render(scene, camera);
 
       const u = this.u;
-      if (this.bloomOn) {
-        const T = this.targets, n = T.length / 2;
+      // Blur a copy of the picture: down a chain of smaller targets, then back up adding each level's detail.
+      const chain = (T, threshold, gain) => {
+        const n = T.length / 2;
         this.bright.uniforms.tex.value = this.target.texture;
         this.bright.uniforms.texel.value.set(1 / this.w, 1 / this.h);
+        this.bright.uniforms.threshold.value = threshold; this.bright.uniforms.gain.value = gain;
         this.pass(this.bright, T[0]);
         for (let i = 1; i < n; i++) {
           this.down.uniforms.tex.value = T[(i - 1) * 2].texture;
           this.down.uniforms.texel.value.set(1 / T[(i - 1) * 2].width, 1 / T[(i - 1) * 2].height);
           this.pass(this.down, T[i * 2]);
         }
-        // Back up the chain, adding each level's detail.
         let prev = T[(n - 1) * 2];
         for (let i = n - 2; i >= 0; i--) {
           this.up.uniforms.tex.value = prev.texture;
@@ -219,8 +244,10 @@
           this.pass(this.up, T[i * 2 + 1]);
           prev = T[i * 2 + 1];
         }
-        u.tBloom.value = prev.texture;
-      } else u.tBloom.value = this.black;
+        return prev.texture;
+      };
+      u.tBloom.value = this.bloomOn ? chain(this.targets, 0.84, 2.2) : this.black;      // only the bright parts
+      u.tSoft.value = this.softTargets.length ? chain(this.softTargets, 0, 1) : this.black;   // everything
 
       u.tColor.value = this.target.texture;
       u.tDepth.value = this.target.depthTexture;

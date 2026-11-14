@@ -119,10 +119,16 @@
     B.dep = new Float32Array(n);     // surface depth toward the viewer (rig units)
     B.flag = new Uint8Array(n);      // 1 = no outline between this and neighbours of the same colour, 2 = never outlined
     B.col = new Uint32Array(n);
+    B.lb = new Int8Array(n);         // light bias: cloth folds and strand shading
+    B.band = new Uint8Array(n);
     B.img = null;
     B.x0 = 0; B.y0 = 0; B.x1 = w - 1; B.y1 = h - 1;   // the area drawn on last time (cleared before the next frame)
     return B;
   }
+  /* Per-pixel flags: 1 merge (no line against same-coloured merge parts), 2 no line against what it covers,
+     4 strands (hair locks: a fine line wherever one lock passes over another), 8 takes no drop shadow,
+     16 casts no drop shadow, 32 glossy crown (the band of shine on hair), 64 takes face decals (a cloth mask). */
+  const flagsOf = (p) => (p.merge ? 1 : 0) | (p.line === false ? 2 : 0) | (p.strands ? 4 : 0) | (p.noShadow ? 8 : 0) | (p.noCast ? 16 : 0) | (p.gloss ? 32 : 0) | (p.face ? 64 : 0);
   function grow(b, x0, y0, x1, y1) { if (x0 < b.x0) b.x0 = x0; if (y0 < b.y0) b.y0 = y0; if (x1 > b.x1) b.x1 = x1; if (y1 > b.y1) b.y1 = y1; }
   let stamp = null, stampCtx = null;
   function stampCanvas(w, h) {
@@ -193,10 +199,17 @@
        Common options: bias (draw order), mat ('cloth', 'skin', 'hair', 'metal', 'jelly', 'fur', 'leather', 'gem', 'flat'),
        line: false (no outline against what it covers), merge: true (blend into same-coloured neighbours).
        sphere: sx, sy (squash), decals, paint(x, y, z) -> 0 | layer number, layers: [{ fill, mat }]
-       capsule: r2 (radius at b, for tapered limbs and cones)
+       capsule: r2 (radius at b, for tapered limbs and cones), flat (cut straight across the ends),
+                pleats (number of cloth folds round it), paint(t, x, y, z) -> 0 | layer number | -1 hole, layers
+       all: strands (hair locks), noShadow / noCast (drop shadows), gloss (hair shine)
        poly: flat polygon from 3D points; n = its normal in rig space (for shading). */
     sphere(c, r, fill, opts) {
       this.prims.push(Object.assign({ type: 'sphere', c, r, fill, sx: 1, sy: 1, bias: 0, pose: this.pose }, opts || {}));
+    }
+    // A true 3D ellipsoid: r = [rx, ry, rz] along the rig's own axes, so a head can be wider than it is deep
+    // and a torso flat, and they look right from every side. Takes paint, layers and decals like a sphere.
+    ellipsoid(c, r, fill, opts) {
+      this.prims.push(Object.assign({ type: 'ell', c, r3: r, fill, bias: 0, pose: this.pose }, opts || {}));
     }
     capsule(a, b, r, fill, opts) {
       this.prims.push(Object.assign({ type: 'capsule', a, b, r, fill, bias: 0, pose: this.pose }, opts || {}));
@@ -240,6 +253,7 @@
         this.pose = p.pose === undefined ? finalPose : p.pose;
         order++;
         if (p.type === 'sphere') this._sphere(buf, p, order);
+        else if (p.type === 'ell') this._ellipsoid(buf, p, order);
         else if (p.type === 'capsule') this._capsule(buf, p, order);
         else if (p.type === 'poly') this._poly(buf, p, order);
         else this._custom(buf, p);
@@ -258,7 +272,7 @@
       const y0 = Math.max(0, Math.floor(c.y - ry)), y1 = Math.min(H - 1, Math.ceil(c.y + ry));
       if (x1 < x0 || y1 < y0) return;
       grow(buf, x0, y0, x1, y1);
-      const fill = rgbOf(p.fill), mat = MAT[p.mat] || 0, flag = (p.merge ? 1 : 0) | (p.line === false ? 2 : 0);
+      const fill = rgbOf(p.fill), mat = MAT[p.mat] || 0, flag = flagsOf(p);
       const paint = p.paint, layers = p.layers;
       // View-space normal back to rig space (for paint functions): undo pitch, facing, pose.
       const cp = this.cp, sp = this.sp, ct = this.ct, st = this.st, P = this.pose;
@@ -285,7 +299,7 @@
             if (k > 0 && lay && lay[k - 1]) { col = lay[k - 1].fill; m = lay[k - 1].mat; reg = k; }
           }
           buf.alb[i] = col; buf.id[i] = order; buf.reg[i] = reg; buf.mat[i] = m; buf.flag[i] = flag;
-          buf.nx[i] = u * 127; buf.ny[i] = -v * 127;
+          buf.nx[i] = u * 127; buf.ny[i] = -v * 127; buf.lb[i] = 0;
           buf.dep[i] = dep + nz * R;
         }
       }
@@ -349,6 +363,109 @@
       d.draw(ctx, nn);
     }
 
+    _ellipsoid(buf, p, order) {
+      const W = buf.w, H = buf.h, S = this.S, c = p.pc, r = p.r3;
+      // Rows of the rig-to-view rotation (pose included): screen x, screen up, toward the viewer.
+      const ex = this.dir([1, 0, 0]), ey = this.dir([0, 1, 0]), ez = this.dir([0, 0, 1]);
+      const Xx = ex.x, Xy = ey.x, Xz = ez.x, Ux = ex.up, Uy = ey.up, Uz = ez.up, Dx = ex.d, Dy = ey.d, Dz = ez.d;
+      const hw = Math.sqrt((Xx * r[0]) ** 2 + (Xy * r[1]) ** 2 + (Xz * r[2]) ** 2) * S, hh = Math.sqrt((Ux * r[0]) ** 2 + (Uy * r[1]) ** 2 + (Uz * r[2]) ** 2) * S;
+      if (hw < 0.3 || hh < 0.3) return;
+      const x0 = Math.max(0, Math.floor(c.x - hw)), x1 = Math.min(W - 1, Math.ceil(c.x + hw));
+      const y0 = Math.max(0, Math.floor(c.y - hh)), y1 = Math.min(H - 1, Math.ceil(c.y + hh));
+      if (x1 < x0 || y1 < y0) return;
+      grow(buf, x0, y0, x1, y1);
+      const fill = rgbOf(p.fill), mat = MAT[p.mat] || 0, flag = flagsOf(p), paint = p.paint;
+      const lay = p.layers ? p.layers.map((l) => ({ fill: rgbOf(l.fill), mat: MAT[l.mat] || 0 })) : null;
+      const X1 = Xx / r[0], X2 = Xy / r[1], X3 = Xz / r[2], U1 = Ux / r[0], U2 = Uy / r[1], U3 = Uz / r[2], D1 = Dx / r[0], D2 = Dy / r[1], D3 = Dz / r[2];
+      const A = D1 * D1 + D2 * D2 + D3 * D3, dep = p.depth;
+      if (p.overlay) {
+        // Nothing of its own is drawn: its decals are laid onto the skin (or mask) beneath it.
+        // A face is drawn this way, so it sits correctly over a skull and jaw made of several parts.
+        if (HEADLESS || !p.decals || !p.decals.length) return;
+        const st = this._decalImage(p, hw, hh), img = st.img, ix = Math.round(c.x - 0.5 - st.mx), iy = Math.round(c.y - 0.5 - st.my);
+        for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
+          const i = y * W + x;
+          if (!buf.id[i] || buf.mat[i] !== MAT.skin && !(buf.flag[i] & 64)) continue;
+          const fx = x - ix, fy = y - iy;
+          if (fx < 0 || fy < 0 || fx >= st.bw || fy >= st.bh) continue;
+          const o = (fy * st.bw + fx) * 4, al = img[o + 3];
+          if (al < 24) continue;
+          const a = (x + 0.5 - c.x) / S, b = -(y + 0.5 - c.y) / S;
+          const e1 = a * X1 + b * U1, e2 = a * X2 + b * U2, e3 = a * X3 + b * U3;
+          const Bq = D1 * e1 + D2 * e2 + D3 * e3, disc = Bq * Bq - A * (e1 * e1 + e2 * e2 + e3 * e3 - 1);
+          if (disc < 0 || buf.dep[i] > dep - p.bias + (-Bq + Math.sqrt(disc)) / A + 0.6) continue;
+          const base = buf.alb[i], k = al / 255;
+          buf.alb[i] = pack(((base >> 16) & 255) * (1 - k) + img[o] * k, ((base >> 8) & 255) * (1 - k) + img[o + 1] * k, (base & 255) * (1 - k) + img[o + 2] * k);
+          if (k > 0.5) buf.reg[i] = 200;
+        }
+        return;
+      }
+      for (let y = y0; y <= y1; y++) {
+        const b = -(y + 0.5 - c.y) / S;
+        for (let x = x0; x <= x1; x++) {
+          const a = (x + 0.5 - c.x) / S;
+          // Where the line of sight through this pixel meets the surface (the nearer of the two hits).
+          const e1 = a * X1 + b * U1, e2 = a * X2 + b * U2, e3 = a * X3 + b * U3;
+          const Bq = D1 * e1 + D2 * e2 + D3 * e3, disc = Bq * Bq - A * (e1 * e1 + e2 * e2 + e3 * e3 - 1);
+          if (disc < 0) continue;
+          const d = (-Bq + Math.sqrt(disc)) / A;
+          const q1 = e1 + d * D1, q2 = e2 + d * D2, q3 = e3 + d * D3;     // the hit, on a unit sphere in the part's own axes
+          let col = fill, m = mat, reg = 0;
+          if (paint) {
+            const k = paint(q1, q2, q3);
+            if (k < 0) continue;
+            if (k > 0 && lay && lay[k - 1]) { col = lay[k - 1].fill; m = lay[k - 1].mat; reg = k; }
+          }
+          const n1 = q1 / r[0], n2 = q2 / r[1], n3 = q3 / r[2];
+          const vx = Xx * n1 + Xy * n2 + Xz * n3, vu = Ux * n1 + Uy * n2 + Uz * n3, vd = Dx * n1 + Dy * n2 + Dz * n3, l = Math.hypot(vx, vu, vd) || 1;
+          const i = y * W + x;
+          buf.alb[i] = col; buf.id[i] = order; buf.reg[i] = reg; buf.mat[i] = m; buf.flag[i] = flag; buf.lb[i] = 0;
+          buf.nx[i] = (vx / l) * 127; buf.ny[i] = (vu / l) * 127;
+          buf.dep[i] = dep + d;
+        }
+      }
+      if (p.decals && p.decals.length && !HEADLESS) {
+        const st = this._decalImage(p, hw, hh);
+        this._stamp(buf, st.img, Math.round(c.x - 0.5 - st.mx), Math.round(c.y - 0.5 - st.my), st.bw, st.bh, order);
+      }
+    }
+
+    // An ellipsoid's decals, drawn once per facing (and pose) and kept.
+    _decalImage(p, hw, hh) {
+      const bw = Math.ceil(hw) * 2 + 3, bh = Math.ceil(hh) * 2 + 3, mx = (bw - 1) / 2, my = (bh - 1) / 2;
+      const ps = this.pose, key = this.ct.toFixed(4) + '|' + this.st.toFixed(4) + '|' + bw + '|' + bh + (ps ? '|' + ps.cx.toFixed(3) + ',' + ps.sx.toFixed(3) + ',' + ps.cz.toFixed(3) + ',' + ps.sz.toFixed(3) : '');
+      let per = this._decalCache.get(p.decals);
+      if (!per) { per = new Map(); this._decalCache.set(p.decals, per); }
+      let st = per.get(key);
+      if (!st) {
+        const sc = stampCanvas(bw, bh);
+        sc.setTransform(1, 0, 0, 1, 0, 0);
+        sc.clearRect(0, 0, bw, bh);
+        for (const d of p.decals) this._drawDecalE(sc, p, d, mx + 0.5, my + 0.5);
+        sc.setTransform(1, 0, 0, 1, 0, 0);
+        st = { img: sc.getImageData(0, 0, bw, bh).data, bw, bh, mx, my };
+        per.set(key, st);
+      }
+      return st;
+    }
+
+    // A decal on an ellipsoid: drawn in true rig units along the surface at the spot n (a point on the unit sphere).
+    _drawDecalE(ctx, p, d, cx, cy) {
+      const r = p.r3, n = d.n, S = this.S;
+      const ml = Math.hypot(n[0] / r[0], n[1] / r[1], n[2] / r[2]) || 1;
+      const nn = this.dir([n[0] / r[0] / ml, n[1] / r[1] / ml, n[2] / r[2] / ml]);
+      if (nn.d < (d.minD == null ? 0.04 : d.minD)) return;
+      let ux = n[2], uz = -n[0], ul = Math.hypot(ux, uz);
+      if (ul < 1e-4) { ux = 1; uz = 0; ul = 1; }
+      ux /= ul; uz /= ul;
+      const v = [n[1] * uz, n[2] * ux - n[0] * uz, -n[1] * ux];
+      const us = [ux * r[0], 0, uz * r[2]], vs = [v[0] * r[0], v[1] * r[1], v[2] * r[2]];
+      const usl = Math.hypot(us[0], us[1], us[2]) || 1, vsl = Math.hypot(vs[0], vs[1], vs[2]) || 1;
+      const uu = this.dir(us), vv = this.dir(vs), off = this.dir([n[0] * r[0], n[1] * r[1], n[2] * r[2]]);
+      ctx.setTransform(uu.x / usl * S, -uu.up / usl * S, vv.x / vsl * S, -vv.up / vsl * S, cx + off.x * S, cy - off.up * S);
+      d.draw(ctx, nn);
+    }
+
     _capsule(buf, p, order) {
       const W = buf.w, H = buf.h, S = this.S, a = p.pa, b = p.pb;
       const r1 = p.r * S, r2 = (p.r2 == null ? p.r : p.r2) * S, rm = Math.max(r1, r2);
@@ -358,8 +475,11 @@
       if (x1 < x0 || y1 < y0) return;
       grow(buf, x0, y0, x1, y1);
       const dx = b.x - a.x, dy = b.y - a.y, l2 = dx * dx + dy * dy;
-      const fill = rgbOf(p.fill), mat = MAT[p.mat] || 0, flag = (p.merge ? 1 : 0) | (p.line === false ? 2 : 0);
+      const fill = rgbOf(p.fill), mat = MAT[p.mat] || 0, flag = flagsOf(p);
       const da = a.depth + p.bias, db = b.depth + p.bias;
+      const paint = p.paint, pleats = p.pleats || 0, pd = (p.pleatDepth == null ? 0.3 : p.pleatDepth) * 127, rig = paint || pleats;
+      const lay = p.layers ? p.layers.map((l) => ({ fill: rgbOf(l.fill), mat: MAT[l.mat] || 0 })) : null;
+      const cp = this.cp, sp = this.sp, ct = this.ct, st = this.st, P = this.pose;
       // Thin parts (strings, wires) keep at least one pixel.
       const thin = rm < 0.75, flat = !!p.flat;
       for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
@@ -371,7 +491,21 @@
         const d2 = qx * qx + qy * qy, rr = thin ? 0.75 : r;
         if (d2 > rr * rr) continue;
         const i = y * W + x, k = Math.sqrt(d2) / Math.max(rr, 0.01);
-        buf.alb[i] = fill; buf.id[i] = order; buf.reg[i] = 0; buf.mat[i] = mat; buf.flag[i] = flag;
+        let col = fill, m = mat, reg = 0, lb = 0;
+        if (rig) {
+          // The surface normal in the rig's own frame: lets cloth fold round the part, and paint follow it.
+          const u = qx / Math.max(rr, 0.01), up = -qy / Math.max(rr, 0.01), nz = Math.sqrt(Math.max(0, 1 - k * k));
+          const yv = up * cp + nz * sp, z1 = -up * sp + nz * cp;
+          let ax = u * ct - z1 * st, ay = yv, az = u * st + z1 * ct;
+          if (P) { const bx = ax * P.cz + ay * P.sz, by = -ax * P.sz + ay * P.cz; ax = bx; ay = by * P.cx + az * P.sx; az = -by * P.sx + az * P.cx; }
+          if (pleats) lb = Math.sin(Math.atan2(ax, az) * pleats + (p.pleatPhase || 0)) * pd * (p.pleatGrow ? t : 1);
+          if (paint) {
+            const kk = paint(t, ax, ay, az);
+            if (kk < 0) continue;
+            if (kk > 0 && lay && lay[kk - 1]) { col = lay[kk - 1].fill; m = lay[kk - 1].mat; reg = kk; }
+          }
+        }
+        buf.alb[i] = col; buf.id[i] = order; buf.reg[i] = reg; buf.mat[i] = m; buf.flag[i] = flag; buf.lb[i] = lb;
         buf.nx[i] = (qx / Math.max(rr, 0.01)) * 127; buf.ny[i] = (-qy / Math.max(rr, 0.01)) * 127;
         buf.dep[i] = da + (db - da) * t + Math.sqrt(Math.max(0, 1 - k * k)) * (r / S);
       }
@@ -385,7 +519,7 @@
       y0 = Math.max(0, Math.floor(y0)); y1 = Math.min(H - 1, Math.ceil(y1));
       if (y1 < y0) return;
       grow(buf, 0, y0, W - 1, y1);
-      const fill = rgbOf(p.fill), mat = MAT[p.mat] || 0, flag = (p.merge ? 1 : 0) | (p.line === false ? 2 : 0);
+      const fill = rgbOf(p.fill), mat = MAT[p.mat] || 0, flag = flagsOf(p);
       // Shading normal: given in rig space, or facing the viewer.
       let nx = 0, ny = 0;
       if (p.n) { const d = this.dir(p.n), l = Math.hypot(d.x, d.up, d.d) || 1; const sgn = d.d < 0 ? -1 : 1; nx = (d.x / l) * sgn; ny = (d.up / l) * sgn; }
@@ -405,7 +539,7 @@
             const i = y * W + x;
             // An optional gradient across the polygon gives cloth some fold shading.
             buf.alb[i] = fill; buf.id[i] = order; buf.reg[i] = 0; buf.mat[i] = mat; buf.flag[i] = flag;
-            buf.nx[i] = nx * 127; buf.ny[i] = ny * 127; buf.dep[i] = dep;
+            buf.nx[i] = nx * 127; buf.ny[i] = ny * 127; buf.dep[i] = dep; buf.lb[i] = 0;
           }
         }
       }
@@ -434,29 +568,45 @@
       if (!buf.img) buf.img = ctx.createImageData(W, H);
       const img = buf.img, out = img.data;
       const X0 = buf.x0, X1 = buf.x1, Y0 = buf.y0, Y1 = buf.y1;
-      // 1. Tone bands from the surface normal.
+      const { lb, band: bands } = buf;
+      // 1. Tone bands from the surface normal (plus cloth folds).
       for (let y = Y0; y <= Y1; y++) for (let x = X0; x <= X1; x++) {
         const i = y * W + x;
         if (!id[i]) continue;
         const m = mat[i], ax = nx[i] / 127, ay = ny[i] / 127;
         const az = Math.sqrt(Math.max(0, 1 - ax * ax - ay * ay));
-        const l = (ax * LX + ay * LY + az * LZ) / LN;
+        const l = (ax * LX + ay * LY + az * LZ) / LN + lb[i] / 127;
         let band;
         if (m === MAT.metal || m === MAT.gem) {
           band = l > 0.93 ? 4 : l > 0.62 ? 3 : l > 0.22 ? 2 : l > -0.18 ? 1 : l > -0.62 ? 0 : 1;   // a rim of bounced light
         } else if (m === MAT.jelly) {
           band = l > 0.9 ? 4 : l > 0.58 ? 3 : l > 0.02 ? 2 : l > -0.5 ? 1 : 2;                     // glows through at the far edge
         } else if (m === MAT.hair) {
-          band = l > 0.72 ? 3 : l > 0.16 ? 2 : l > -0.3 ? 1 : 0;
-          // The classic jagged band of shine round the crown.
-          const ring = ay - 0.50 + 0.05 * Math.sin(ax * 19) + 0.03 * Math.sin(ax * 43 + 1);
-          if (az > 0.25 && ring > 0 && ring < 0.11) band = Math.min(4, band + (ring > 0.03 && ring < 0.08 ? 2 : 1));
+          band = l > 0.74 ? 3 : l > 0.16 ? 2 : l > -0.3 ? 1 : 0;
+          if (flag[i] & 32) {
+            // The classic jagged band of shine round the crown.
+            const ring = ay - 0.50 + 0.05 * Math.sin(ax * 19) + 0.03 * Math.sin(ax * 43 + 1);
+            if (az > 0.25 && ring > 0 && ring < 0.11) band = Math.min(4, band + (ring > 0.03 && ring < 0.08 ? 2 : 1));
+          }
         } else if (m === MAT.skin) {
           band = l > 0.97 ? 4 : l > 0.80 ? 3 : l > 0.10 ? 2 : l > -0.42 ? 1 : 0;
         } else {
           band = l > 0.95 ? 4 : l > 0.66 ? 3 : l > 0.16 ? 2 : l > -0.3 ? 1 : 0;
         }
-        col[i] = tone(alb[i], band, m);
+        bands[i] = band;
+      }
+      // Drop shadows: a part lying in front, on the side the light comes from, darkens what is behind it
+      // (the fringe on the forehead, the head on the shoulders, an arm across the chest).
+      const k = this.S / 1.25, sx = Math.max(1, Math.round(0.8 * k)), sy = Math.max(1, Math.round(1.9 * k)), so = sy * W + sx;
+      for (let y = Y0; y <= Y1; y++) for (let x = X0; x <= X1; x++) {
+        const i = y * W + x;
+        if (!id[i]) continue;
+        let b = bands[i];
+        if (b > 0 && x >= sx && y >= sy && mat[i] !== MAT.flat && !(flag[i] & 8)) {
+          const j = i - so;
+          if (id[j] > id[i] && dep[j] - dep[i] > 2.2 && !(flag[j] & 16)) b--;
+        }
+        col[i] = tone(alb[i], b, mat[i]);
       }
       // 2. Lines between overlapping parts: drawn on the part that lies behind.
       for (let y = Y0; y <= Y1; y++) for (let x = X0; x <= X1; x++) {
@@ -478,7 +628,7 @@
           if (flag[front] & 2) continue;
           const jump = Math.abs(dep[i] - dep[j]);
           if (alb[i] === alb[j]) {
-            if (((flag[i] & 1) && (flag[j] & 1)) || jump < 3.2) continue;
+            if (((flag[i] & 1) && (flag[j] & 1)) || jump < ((flag[i] & flag[j] & 4) ? 1.0 : 3.2)) continue;
             col[back] = lineOf(alb[back], 0.7);
           } else col[back] = lineOf(alb[back], jump > 1.2 ? 0.3 : 0.7);
         }

@@ -179,26 +179,8 @@
      surface, and a head whose hairline is painted the same way. Hats and
      headgear are fitted shells around the head (see `shell` below), so they
      hug it from every angle instead of floating on top. */
-  const HIP = 30, SH = 50, HEADY = 67, HR = 14.5, HSX = 1.04, HSY = 0.98;
-  const SHORTISH = ['short', 'spiky', 'swept', 'messy', 'slick', 'buzz'];
-  // Is this spot on the head covered by hair? (x right, y up, z toward the face; unit sphere)
-  function isHair(x, y, z, style) {
-    if (style === 'buzz') return y > 0.52 - (z < 0 ? 0.75 : 0) || (z < 0.1 && y > -0.18 && Math.abs(x) > 0.5 && y > 0.2);
-    const a = Math.atan2(x, z);
-    if (y > 0.5) return true;
-    if (style === 'slick') {
-      if (z < -0.02 && y > -0.5) return true;
-      if (Math.abs(x) > 0.8 && y > -0.05) return true;
-      return z >= -0.02 && y > 0.4 + 0.05 * Math.cos(a * 2);
-    }
-    const short = SHORTISH.includes(style);
-    if (z < -0.05 && y > (short ? -0.58 : -0.86)) return true;                 // back of the head
-    if (Math.abs(x) > 0.8 && z < 0.28 && y > (short ? 0.0 : -0.5) - (Math.abs(x) - 0.8) * 0.5) return true;   // side locks
-    if (z < 0) return false;
-    if (style === 'swept') return y > 0.1 + 0.34 * (0.5 - x * 0.62) + 0.05 * Math.abs(Math.sin(a * 5));
-    if (style === 'spiky' || style === 'messy') return y > 0.2 + 0.17 * Math.abs(Math.sin(a * 4.2 + (style === 'messy' ? 0.6 : 0)));
-    return y > 0.23 + 0.13 * Math.abs(Math.sin(a * 5.5));                       // a zig-zag fringe
-  }
+  const HIP = 30, SH = 50, HEADY = 67, HR = 14.8;
+  const HRX = 16, HRY = 13.6, HRZ = 15.2;        // the skull: wider than it is tall or deep
 
   function makeNovice(app, look) {
     app = normalizeAppearance(app);
@@ -220,46 +202,71 @@
     const hat = head.top ? null : O.hat;
     const gold = GOLD;
 
-    /* ---- face ---- */
-    function eye(x, closed) {
-      const w = 2.55, h = 3.9;
+    /* ---- face ----
+       Drawn as decals on the skull and jaw: large eyes with lashes, a coloured
+       iris and two catch-lights, brows that follow the mood, a small nose,
+       mouth and a touch of blush. One set per expression. */
+    const LASH = '#2b1a26', skinDark = U.shade(NV.skin, -0.3);
+    function eye(sx, mood) {
+      const w = 3.0, h = 4.5;
       return {
-        n: norm([x, -0.17, 0.9]), draw(ctx) {
-          if (closed) {
-            ctx.beginPath(); ctx.moveTo(-w, 0.4); ctx.quadraticCurveTo(0, -1.6, w, 0.4);
-            ctx.strokeStyle = '#3a2430'; ctx.lineWidth = 0.95; ctx.lineCap = 'round'; ctx.stroke(); return;
+        n: norm([sx * 0.45, -0.2, 0.87]), draw(ctx) {
+          ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+          if (mood === 'blink') {
+            ctx.beginPath(); ctx.moveTo(-w, 0.6); ctx.quadraticCurveTo(0, -1.9, w, 0.6);
+            ctx.strokeStyle = LASH; ctx.lineWidth = 1.05; ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(sx * w, 0.6); ctx.lineTo(sx * (w + 1.1), 1.3); ctx.lineWidth = 0.8; ctx.stroke();
+            return;
           }
-          ell(ctx, 0, 0, w, h, '#33202c');
-          const g = ctx.createLinearGradient(0, h, 0, -h);
-          g.addColorStop(0, U.shade(iris, -0.5)); g.addColorStop(0.45, iris); g.addColorStop(1, U.shade(iris, 0.45));
-          ell(ctx, 0, -0.25, w * 0.8, h * 0.82, g);
-          ell(ctx, 0, 0.3, w * 0.4, h * 0.42, '#1a1830');
-          ell(ctx, 0, -h * 0.55, w * 0.5, h * 0.16, U.shade(iris, 0.7));
-          ell(ctx, -w * 0.34, h * 0.42, w * 0.36, w * 0.4, '#ffffff');
-          ell(ctx, w * 0.36, -h * 0.3, w * 0.17, w * 0.17, '#ffffff');
-          // upper lash
-          ctx.beginPath(); ctx.moveTo(-w * 1.2, h * 0.3); ctx.quadraticCurveTo(-w * 0.5, h * 1.12, w * 0.4, h * 1.02); ctx.quadraticCurveTo(w * 1.05, h * 0.8, w * 1.25, h * 0.38);
-          ctx.strokeStyle = '#2a1a24'; ctx.lineWidth = 0.95; ctx.lineCap = 'round'; ctx.stroke();
+          if (mood === 'hit') {                               // squeezed shut: > <
+            ctx.beginPath(); ctx.moveTo(-sx * w * 0.9, 2); ctx.lineTo(sx * w * 0.5, 0); ctx.lineTo(-sx * w * 0.9, -2);
+            ctx.strokeStyle = LASH; ctx.lineWidth = 1.1; ctx.stroke();
+            return;
+          }
+          // white of the eye, shaded under the lid
+          ell(ctx, 0, 0, w, h, '#ffffff');
+          ell(ctx, 0, h * 0.62, w * 0.96, h * 0.42, 'rgba(120,130,170,0.35)');
+          // iris and pupil
+          const g = ctx.createLinearGradient(0, h * 0.8, 0, -h * 0.9);
+          g.addColorStop(0, U.shade(iris, -0.55)); g.addColorStop(0.5, iris); g.addColorStop(1, U.shade(iris, 0.5));
+          ell(ctx, sx * -0.25, -0.35, w * 0.8, h * 0.84, g);
+          ell(ctx, sx * -0.25, 0.1, w * 0.4, h * 0.44, '#171428');
+          ell(ctx, sx * -0.25, -h * 0.6, w * 0.5, h * 0.17, U.shade(iris, 0.75));
+          ell(ctx, -w * 0.36, h * 0.4, w * 0.36, w * 0.42, '#ffffff');
+          ell(ctx, w * 0.3, -h * 0.34, w * 0.18, w * 0.18, '#ffffff');
+          // upper lid: a heavy lash line with a flick at the outer corner; a light lower line
+          ctx.beginPath(); ctx.moveTo(-sx * w * 1.05, h * 0.42); ctx.quadraticCurveTo(-sx * w * 0.4, h * 1.14, sx * w * 0.35, h * 1.04);
+          ctx.quadraticCurveTo(sx * w * 1.0, h * 0.86, sx * w * 1.28, h * 0.3);
+          ctx.strokeStyle = LASH; ctx.lineWidth = 1.25; ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(sx * w * 1.2, h * 0.6); ctx.lineTo(sx * w * 1.75, h * 0.95); ctx.lineWidth = 0.8; ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(-sx * w * 0.5, -h * 1.0); ctx.quadraticCurveTo(sx * w * 0.3, -h * 1.12, sx * w * 0.95, -h * 0.75);
+          ctx.strokeStyle = 'rgba(70,40,50,0.7)'; ctx.lineWidth = 0.55; ctx.stroke();
+          if (mood === 'fierce') { ctx.beginPath(); ctx.moveTo(-sx * w * 1.2, h * 0.95); ctx.lineTo(sx * w * 0.5, h * 1.35); ctx.lineTo(sx * w * 1.3, h * 1.4); ctx.lineTo(sx * w * 1.3, h * 0.5); ctx.closePath(); ctx.fillStyle = NV.skin; ctx.fill(); }
         },
       };
     }
-    const brow = (x) => ({ n: norm([x, 0.13, 0.92]), draw(ctx) { ctx.beginPath(); ctx.moveTo(-2.2, -0.3); ctx.quadraticCurveTo(0, 0.7, 2.2, -0.1); ctx.strokeStyle = NV.hairDark; ctx.lineWidth = 0.8; ctx.lineCap = 'round'; ctx.stroke(); } });
-    const mouth = { n: norm([0, -0.5, 0.87]), draw(ctx) { ctx.beginPath(); ctx.moveTo(-1.3, 0.3); ctx.quadraticCurveTo(0, -0.7, 1.3, 0.3); ctx.strokeStyle = '#a04a4a'; ctx.lineWidth = 0.75; ctx.lineCap = 'round'; ctx.stroke(); } };
-    const cheeks = [0.62, -0.62].map((x) => ({ n: norm([x, -0.4, 0.7]), draw(ctx) { ell(ctx, 0, 0, 2.3, 1.2, 'rgba(255,110,130,0.34)'); } }));
+    const brow = (sx, mood) => ({ n: norm([sx * 0.45, 0.2, 0.87]), draw(ctx) {
+      const tilt = mood === 'fierce' ? 1.5 : mood === 'hit' ? -1.1 : 0;
+      ctx.beginPath(); ctx.moveTo(-sx * 2.5, -0.2 - tilt); ctx.quadraticCurveTo(0, 0.9, sx * 2.7, 0.1 + tilt * 0.4);
+      ctx.strokeStyle = NV.hairDark; ctx.lineWidth = 0.9; ctx.lineCap = 'round'; ctx.stroke();
+    } });
+    const nose = { n: norm([0, -0.4, 0.92]), draw(ctx) { ctx.beginPath(); ctx.moveTo(-0.5, 0.5); ctx.lineTo(0.35, -0.5); ctx.strokeStyle = skinDark; ctx.lineWidth = 0.7; ctx.lineCap = 'round'; ctx.stroke(); } };
+    const blush = [0.7, -0.7].map((x) => ({ n: norm([x, -0.45, 0.56]), draw(ctx) { ell(ctx, 0, 0, 2.5, 1.3, 'rgba(255,105,125,0.36)'); ctx.strokeStyle = 'rgba(220,70,95,0.55)'; ctx.lineWidth = 0.4; for (const dx of [-0.8, 0.2]) { ctx.beginPath(); ctx.moveTo(dx, -0.5); ctx.lineTo(dx + 0.6, 0.5); ctx.stroke(); } } }));
+    const mouth = (mood) => ({ n: norm([0, -0.6, 0.8]), draw(ctx) {
+      ctx.lineCap = 'round';
+      if (mood === 'fierce' || mood === 'hit') { ell(ctx, 0, -0.1, mood === 'hit' ? 1.5 : 1.25, mood === 'hit' ? 1.0 : 1.2, '#7a2a36'); ell(ctx, 0, -0.55, 0.8, 0.45, '#e8788a'); return; }
+      ctx.beginPath(); ctx.moveTo(-1.5, 0.35); ctx.quadraticCurveTo(0, -0.75, 1.5, 0.35); ctx.strokeStyle = '#9a4048'; ctx.lineWidth = 0.75; ctx.stroke();
+    } });
     const glasses = (head.mid === 'glasses' || costume.glasses) ? [
-      ...[0.4, -0.4].map((x) => ({ n: norm([x, -0.17, 0.9]), draw(ctx) { ctx.beginPath(); ctx.arc(0, 0, 4.5, 0, TAU); ctx.fillStyle = 'rgba(200,236,255,0.28)'; ctx.fill(); ctx.lineWidth = 1.0; ctx.strokeStyle = '#3b3346'; ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(-2.6, 2.2); ctx.lineTo(-0.6, 3.4); ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.lineWidth = 0.8; ctx.stroke(); } })),
-      { n: norm([0, -0.12, 1]), draw(ctx) { ctx.beginPath(); ctx.moveTo(-1.6, 0); ctx.quadraticCurveTo(0, 1.2, 1.6, 0); ctx.lineWidth = 0.9; ctx.strokeStyle = '#3b3346'; ctx.stroke(); } },
+      ...[0.45, -0.45].map((x) => ({ n: norm([x, -0.2, 0.87]), draw(ctx) { ctx.beginPath(); ctx.arc(0, 0, 4.9, 0, TAU); ctx.fillStyle = 'rgba(205,238,255,0.26)'; ctx.fill(); ctx.lineWidth = 1.0; ctx.strokeStyle = '#3b3346'; ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(-2.9, 2.4); ctx.lineTo(-0.8, 3.7); ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.lineWidth = 0.8; ctx.stroke(); } })),
+      { n: norm([0, -0.17, 0.98]), draw(ctx) { ctx.beginPath(); ctx.moveTo(-1.5, 0); ctx.quadraticCurveTo(0, 1.2, 1.5, 0); ctx.lineWidth = 0.9; ctx.strokeStyle = '#3b3346'; ctx.stroke(); } },
     ] : [];
-    const faceOpen = [brow(0.4), brow(-0.4), eye(0.4), eye(-0.4), mouth, ...cheeks, ...glasses];
-    const faceClosed = [brow(0.4), brow(-0.4), eye(0.4, true), eye(-0.4, true), mouth, ...cheeks, ...glasses];
-    // Head surface: skin, hair (layer 1), and a face mask or beard shadow (layer 2).
-    const headLayers = [{ fill: NV.hair, mat: 'hair' }, { fill: costume.mask || '#000', mat: 'cloth' }];
-    const headPaint = (x, y, z) => {
-      if (isHair(x, y, z, style)) return 1;
-      if (costume.mask && z > 0 && y < -0.3) return 2;
-      return 0;
-    };
+    const FACE = {};
+    for (const mood of ['open', 'blink', 'hit', 'fierce']) FACE[mood] = [brow(1, mood), brow(-1, mood), eye(1, mood), eye(-1, mood), ...(costume.mask ? [] : [nose, mouth(mood)]), ...blush, ...glasses];
+    // Skull surface: skin, with a cloth mask over the lower face for those who wear one.
+    const headLayers = [{ fill: costume.mask || '#000', mat: 'cloth' }];
+    const headPaint = costume.mask ? (x, y, z) => (z > -0.1 && y < -0.72 ? 1 : 0) : null;
 
     /* ---- torso surface ---- */
     const TL = [];
@@ -409,7 +416,7 @@
       const footL = sit ? [5.5, 2.6, 15] : [4.1, 2.6 + liftL, swing * 8], footR = sit ? [-5.5, 2.6, 15] : [-4.1, 2.6 + liftR, -swing * 8];
       const knee = (hip, foot, lift) => sit ? [hip[0] * 1.3, hipY + 2, 9.5] : [(hip[0] + foot[0]) / 2, (hip[1] + foot[1]) / 2 + 0.6, (hip[2] + foot[2]) / 2 + 1.3 + lift * 0.9];
       const kL = knee(hipL, footL, liftL), kR = knee(hipR, footR, liftR);
-      const legBias = sit || openSkirt ? 0 : -3;                  // thighs tuck under the hem
+      const legBias = sit ? 0 : -3;                               // thighs tuck under the hem
       for (const [hip, k, f] of [[hipL, kL, footL], [hipR, kR, footR]]) {
         if (showLegs) {
           P.capsule(hip, k, 3.7, thighCol, { r2: 3.1, mat: legMat, merge: true, bias: legBias });
@@ -432,20 +439,28 @@
           }
         }
         const footCol = O.barefoot || O.sandals ? C.skin : C.boots;
-        P.sphere(add(f, [0, -0.1, 1.9]), 3.6, footCol, { sy: 0.7, sx: 0.92, mat: O.barefoot || O.sandals ? 'skin' : bootMat, merge: true, bias: showLegs ? 0 : -4 });
+        P.ellipsoid(add(f, [0, -0.2, 2.2]), [3.2, 2.6, 5.1], footCol, { mat: O.barefoot || O.sandals ? 'skin' : bootMat, merge: true, bias: showLegs ? 0 : -4 });
         if (O.sandals) P.capsule(add(f, [-2.2, 1.2, 2.4]), add(f, [2.2, 1.2, 2.4]), 0.7, C.boots, { mat: 'metal', bias: 0.3 });
       }
 
       /* ---- body ---- */
-      P.sphere([0, 41 + dy, tz], 9.2, C.tunic, { sx: 0.93, sy: 1.22, paint: torsoPaint, layers: TL, decals: torsoDecals, merge: true });
+      P.ellipsoid([0, 41 + dy, tz], [8.8, 11.2, 6.9], C.tunic, { paint: torsoPaint, layers: TL, decals: torsoDecals, merge: true });
       // The lower garment. `to` is how low it hangs; an open one is a coat split at the front.
-      const cone = (g, bias, zs) => {
-        const to = Math.min(g.to, hipY - 4), col = g.color || C.tunic, zf = sit ? 5 : 0;
-        P.capsule([0, hipY + 3, tz + zs], [sway * 0.3, to, tz + zs + zf], 8.6, col, { r2: g.flare || 10.5, bias, merge: true, flat: true });
-        P.capsule([sway * 0.3, to, tz + zs + zf], [sway * 0.3, to - 1.7, tz + zs + zf], g.flare || 10.5, g.hem || U.shade(col, -0.2), { r2: (g.flare || 10.5) + 0.3, bias: bias + 0.01, flat: true });
+      const cone = (g, bias, isOpen) => {
+        const to = Math.min(g.to, hipY - 4), col = g.color || C.tunic, zf = sit ? 5 : 0, hem = g.hem || U.shade(col, -0.22);
+        P.capsule([0, hipY + 3, tz], [sway * 0.3, to - 1.4, tz + zf], 8.6, col, {
+          r2: (g.flare || 10.5) + 0.3, bias, merge: true, flat: true, pleats: g.pleats == null ? 9 : g.pleats, pleatDepth: 0.26, pleatGrow: true,
+          layers: [{ fill: hem }, { fill: O.trim || hem }],
+          // Cloth folds round it; a hem (and a line of trim above it); an open coat shows what is underneath.
+          paint: (t, x, y, z) => {
+            if (isOpen && z > 0) { const ax = Math.abs(x); if (ax < 0.3) return -1; if (ax < 0.4) return 2; }
+            if (t > 0.9) return 1;
+            return O.trim && t > 0.79 && t < 0.84 ? 2 : 0;
+          },
+        });
       };
-      if (O.underSkirt) cone(O.underSkirt, 0.3, 0);
-      if (skirt) cone(skirt, openSkirt ? (O.underSkirt ? -0.2 : -1) : 0.3, openSkirt ? -2.8 : 0);
+      if (O.underSkirt) cone(O.underSkirt, 0.3, false);
+      if (skirt) cone(skirt, 0.32, openSkirt);
       else {
         // No skirt: the garment just ends in a short flared hem over the hips.
         P.capsule([0, hipY + 4, tz], [0, hipY - 2.5, tz], 8.5, tstyle === 'bare' || tstyle === 'crop' ? C.pants : C.tunic, { r2: 9.3, bias: 0.25, merge: true, flat: true });
@@ -508,7 +523,7 @@
       }
       if (O.cape) {
         const cp = O.cape, cx = cp.side || 0, low = Math.max(cp.to, 6) - (sit ? 6 : 0), cz = tz - 6.5 - Math.abs(sway) * 0.4;
-        P.capsule([cx, shY - 1, tz - 5], [cx + sway * 0.5, low, cz], 8.6, cp.color, { r2: 11.8, bias: -0.7, flat: true });
+        P.capsule([cx, shY - 1, tz - 5], [cx + sway * 0.5, low, cz], 8.6, cp.color, { r2: 11.8, bias: -0.7, flat: true, pleats: 7, pleatDepth: 0.3, pleatGrow: true });
         P.capsule([cx + sway * 0.5, low, cz], [cx + sway * 0.5, low - 1.6, cz], 11.8, cp.lining || U.shade(cp.color, -0.22), { r2: 12, bias: -0.69, flat: true });
         P.capsule([-8.5 + cx, shY + 1, tz - 1.5], [8.5 + cx * 0.4, shY + 1, tz - 1.5], 3.1, cp.color, { bias: -0.2, merge: true });
         if (cp.lining) P.sphere([cx > 0 ? 6 : 0, shY + 0.6, tz + 5.4], 1.7, cp.lining, { bias: 0.9, mat: 'metal' });                   // the clasp
@@ -519,7 +534,7 @@
       }
       if (O.mantle) {
         // A short cape that sits on the shoulders.
-        P.capsule([0, shY + 2.5, tz], [0, shY - 7.5, tz], 5.6, O.mantle.color, { r2: 12.2, flat: true, bias: 1.6, merge: true });
+        P.capsule([0, shY + 2.5, tz], [0, shY - 7.5, tz], 5.6, O.mantle.color, { r2: 12.2, flat: true, bias: 1.6, merge: true, pleats: 8, pleatDepth: 0.2, pleatGrow: true });
         P.capsule([0, shY - 7.5, tz], [0, shY - 9, tz], 12.2, O.mantle.trim || U.shade(O.mantle.color, -0.2), { r2: 12.5, flat: true, bias: 1.61 });
         P.sphere([0, shY + 0.4, tz + 6.4], 1.6, O.mantle.trim || gold, { bias: 1.7, mat: 'metal' });
       }
@@ -567,14 +582,15 @@
         P.sphere(s, puff ? 4.8 : 3.15, upCol, { mat: upMat, merge: true });
         P.capsule(s, e, puff ? 4 : 3.1, upCol, { r2: puff ? 2.9 : 2.7, mat: upMat, merge: true });
         if (sl === 'short') P.capsule(lerp3(s, e, 0.75), e, 3.05, U.shade(C.sleeve, -0.18), { r2: 3.1, flat: true, bias: 0.04 });   // sleeve hem
-        P.capsule(e, hnd, 2.7, loCol, { r2: wide ? 4.4 : 2.4, mat: loMat, merge: true, flat: wide });
+        P.capsule(e, hnd, 2.7, loCol, { r2: wide ? 4.4 : 2.4, mat: loMat, merge: true, flat: wide, pleats: wide ? 4 : 0, pleatDepth: 0.22 });
         if (wide) P.capsule(lerp3(e, hnd, 0.8), hnd, 4.06, O.cuffs || U.shade(C.sleeve, -0.2), { r2: 4.5, flat: true, bias: 0.04 });
         else if (O.cuffs && sl !== 'none' && sl !== 'short' && !armor) P.capsule(lerp3(e, hnd, 0.68), lerp3(e, hnd, 0.94), 2.85, O.cuffs, { r2: 2.75, bias: 0.04 });
         if (O.wraps) P.capsule(lerp3(e, hnd, 0.28), lerp3(e, hnd, 0.9), 2.75, O.wraps, { r2: 2.6, bias: 0.05 });
         if (O.bracers) P.capsule(lerp3(e, hnd, 0.28), lerp3(e, hnd, 0.9), 3.05, O.bracers, { r2: 2.8, mat: O.bracersMat || 'metal', bias: 0.05 });
         if (armor) P.sphere(e, 3.1, U.shade(armor, -0.12), { mat: 'metal', bias: 0.05 });                                      // elbow cop
         if (O.gloves) P.capsule(lerp3(e, hnd, 0.45), hnd, 3.2, O.gloves, { r2: 3, mat: 'leather', bias: 0.05 });
-        P.sphere(hnd, O.gloves ? 3.2 : 2.8, O.gloves || C.skin, { bias: sx > 0 ? 0.2 : 0.25, mat: O.gloves ? 'leather' : 'skin' });
+        P.ellipsoid(hnd, O.gloves ? [2.9, 3.4, 3.1] : [2.5, 3.1, 2.7], O.gloves || C.skin, { bias: sx > 0 ? 0.2 : 0.25, mat: O.gloves ? 'leather' : 'skin', merge: true });
+        P.sphere(add(hnd, [-sx * 1.5, 0.8, 1.7]), 1.25, O.gloves || C.skin, { bias: sx > 0 ? 0.22 : 0.27, mat: O.gloves ? 'leather' : 'skin', merge: true });   // thumb
       }
 
       /* ---- weapon ---- */
@@ -648,47 +664,99 @@
       }
       function blade0() { return '#dfe7f0'; }
 
-      /* ---- head and hair ---- */
-      const hc = [0, headY, hz];
-      const H = { mat: 'hair', merge: true };
-      // Hats that cover the crown flatten whatever hair would stick up through them.
+      /* ---- head ----
+         A skull that is wider than it is deep, a narrower jaw below it (so the
+         face tapers to a chin instead of being a ball), and ears. */
+      const hc = [0, headY + 1.8, hz];                                   // centre of the skull
+      const mood = anim === 'hit' ? 'hit' : eyesClosed ? 'blink' : (anim === 'attack' || anim === 'cast') ? 'fierce' : 'open';
+      P.ellipsoid(hc, [HRX, HRY, HRZ], C.skin, { mat: 'skin', merge: true, paint: headPaint, layers: headLayers, face: true });
+      P.ellipsoid([0, headY - 7.2, hz + 3.1], [10.2, 7.3, 9.6], C.skin, { mat: 'skin', merge: true, layers: headLayers, paint: costume.mask ? (x, y, z) => (y < -0.1 ? 1 : 0) : null });
+      // The face: laid over skull and jaw together.
+      P.ellipsoid([0, headY - 0.4, hz + 1.3], [HRX + 0.3, 14.4, HRZ + 0.2], C.skin, { overlay: true, decals: FACE[mood], bias: 4 });
+      for (const sx of [-1, 1]) P.ellipsoid([sx * (HRX - 0.5), headY - 2.6, hz - 0.8], [2.5, 3.6, 2.8], C.skin, { mat: 'skin', merge: true, bias: -0.4 });
+
+      /* ---- hair ----
+         A cap that hugs the skull, then locks laid over it: a fringe across the
+         forehead, locks framing the face, a jagged nape, and whatever the style
+         adds (spikes, tails, cowlicks). Each lock is shaded on its own, with a
+         fine line wherever one passes over another. */
+      const hp = (x, y, z, o) => [x * HRX * (o || 1), hc[1] + y * HRY * (o || 1), hz + z * HRZ * (o || 1)];   // a point on (or off) the skull
+      const HL = { mat: 'hair', strands: true };
+      // A lock: thick at the root, curving through `mid` to a point.
+      const lock = (a, b, c, r0, r1, bias) => {
+        const rm = r0 * 0.72 + (r1 || 0.4) * 0.28;
+        P.capsule(a, b, r0, C.hair, Object.assign({ r2: rm, bias: bias || 0 }, HL));
+        P.capsule(b, c, rm, C.hair, Object.assign({ r2: r1 || 0.4, bias: bias || 0 }, HL));
+      };
+      // A single pointed lock (fringe, nape): a cone from root to tip.
+      const spike = (a, c, r0, bias) => P.capsule(a, c, r0, C.hair, Object.assign({ r2: 0.35, bias: bias || 0 }, HL));
       const crownCovered = (hat && !['headband', 'tiara', 'wings'].includes(hat.type)) || ['leafcap', 'crown', 'warhelm', 'bunny'].includes(head.top);
-      if (style !== 'buzz') P.sphere([0, headY + 0.9, hz - 2.2], HR + 1.5, C.hair, Object.assign({ sx: HSX, bias: -1.2 }, H));
-      P.sphere(hc, HR, C.skin, { sx: HSX, sy: HSY, mat: 'skin', paint: headPaint, layers: headLayers, decals: eyesClosed ? faceClosed : faceOpen });
+      const buzz = style === 'buzz', slick = style === 'slick', longBack = style === 'ponytail' || style === 'twintails';
+      const capTest = (x, y, z) => {
+        const ax = Math.abs(x);
+        if (buzz) return (y > 0.36 + (z > 0 ? 0.06 * Math.cos(x * 9) : 0) || (z < 0.2 && y > -0.3)) ? 0 : -1;
+        if (y > (slick ? 0.56 - ax * 0.12 : 0.4)) return 0;                              // crown
+        if (z < 0.22 && y > (longBack ? -0.5 : -0.68)) return 0;                         // back and sides
+        if (ax > 0.82 && y > -0.12) return 0;                                            // temples
+        return -1;
+      };
+      P.ellipsoid([0, hc[1] + 0.9, hz - 0.9], [HRX + (buzz ? 0.7 : 1.5), HRY + (buzz ? 0.7 : 1.7), HRZ + (buzz ? 0.7 : 1.6)], buzz ? U.shade(C.hair, -0.08) : C.hair,
+        { mat: 'hair', paint: capTest, gloss: !buzz, bias: 0.9, strands: true });
+
+      if (!buzz) {
+        // Fringe: how far each lock hangs (0 = brow line), and how much it swings sideways.
+        const FR = {
+          swept: [[-0.62, 0.2, 0.3], [-0.36, 0.02, 0.42], [-0.08, -0.08, 0.46], [0.2, -0.02, 0.4], [0.46, 0.14, 0.26]],
+          spiky: [[-0.6, 0.3, -0.12], [-0.3, 0.16, -0.08], [0, 0.24, 0], [0.3, 0.16, 0.08], [0.6, 0.3, 0.12]],
+          messy: [[-0.58, 0.14, 0.06], [-0.3, -0.02, -0.08], [-0.02, 0.18, 0.1], [0.26, 0.02, -0.04], [0.56, 0.2, 0.1]],
+        }[style] || [[-0.56, 0.12, -0.04], [-0.28, 0.0, 0.03], [0, 0.1, 0.05], [0.28, -0.02, 0.02], [0.56, 0.12, 0.05]];
+        if (!slick) for (const [x0, drop, swing] of FR) {
+          spike(hp(x0 * 0.9, 0.74, 0.66, 1.1), hp(x0 * 1.12 + swing, 0.17 + drop, 0.975, 1.1), style === 'swept' ? 4.6 : 4.2, 0.6);
+        }
+        // Locks framing the face (swept back off it for the slick style).
+        for (const sx of [-1, 1]) {
+          if (slick) lock(hp(sx * 0.7, 0.56, 0.62, 1.12), hp(sx * 0.95, 0.3, 0.2, 1.12), hp(sx * 0.98, 0.05, -0.25, 1.1), 3.2, 0.5, 0.3);
+          else lock(hp(sx * 0.76, 0.5, 0.6, 1.12), hp(sx * 0.99, 0.02, 0.46, 1.1), hp(sx * 0.93, longBack ? -0.78 : -0.52, 0.56, 1.06), 3.5, 0.5, 0.5);
+        }
+        // The nape: a row of locks ending in points (shorter when the hair is tied up).
+        const NA = longBack ? [-1.25, -0.62, 0, 0.62, 1.25] : [-1.45, -0.95, -0.48, 0, 0.48, 0.95, 1.45];
+        NA.forEach((a, i) => {
+          const sn = Math.sin(a), cs = -Math.cos(a), low = longBack ? -0.66 : (slick ? -0.8 : -0.9) + (i % 2) * 0.1;
+          spike(hp(sn * 0.84, -0.34, cs * 0.84, 1.1), hp(sn * (slick ? 1.14 : 1.02), low - 0.06, cs * (slick ? 1.02 : 0.9), 1.1), 3.9, -0.3);
+        });
+      }
       if (style === 'ponytail') {
-        P.sphere([0, headY + 3.5, hz - HR - 0.5], 3, '#e05a6b', { bias: 0.3 });
-        P.capsule([0, headY + 3, hz - HR - 2], [sway * 0.5, headY - 5, hz - HR - 6.5], 4.6, C.hair, Object.assign({ r2: 3.8 }, H));
-        P.capsule([sway * 0.5, headY - 5, hz - HR - 6.5], [sway * 1.3, headY - 15, hz - HR - 6], 3.8, C.hair, Object.assign({ r2: 1.2 }, H));
+        const b0 = hp(0, 0.42, -0.9, 1.12);
+        P.capsule(add(b0, [-2.6, 0, 0]), add(b0, [2.6, 0, 0]), 2.1, '#e05a6b', { bias: 0.2 });                                // the tie
+        lock(add(b0, [0, 0, -1.5]), [sway * 0.5, headY - 4, hz - HRZ - 8], [sway * 1.2, headY - 15, hz - HRZ - 7.5], 4.8, 2.6, -0.2);
+        lock([sway * 1.2, headY - 15, hz - HRZ - 7.5], [sway * 1.9, headY - 21, hz - HRZ - 6], [sway * 2.4, headY - 25, hz - HRZ - 3.5], 2.6, 0.4, -0.2);
+        lock(add(b0, [2.4, -1, -1.5]), [3.4 + sway * 0.6, headY - 6, hz - HRZ - 6.5], [4.2 + sway * 1.5, headY - 17, hz - HRZ - 5], 2.8, 0.4, -0.25);
       } else if (style === 'twintails') {
         for (const sx of [-1, 1]) {
-          P.sphere([sx * (HR + 0.5), headY + 4, hz - 4], 2.6, '#e05a6b', { bias: 0.4 });
-          P.capsule([sx * (HR + 1.5), headY + 3, hz - 5], [sx * (HR + 4) + sway * 0.4, headY - 7, hz - 7], 4.2, C.hair, Object.assign({ r2: 3.6 }, H));
-          P.capsule([sx * (HR + 4) + sway * 0.4, headY - 7, hz - 7], [sx * (HR + 4.5) + sway * 1.1, headY - 19, hz - 7.5], 3.6, C.hair, Object.assign({ r2: 1.1 }, H));
+          const b0 = hp(sx * 0.92, 0.36, -0.3, 1.14);
+          P.sphere(b0, 2.7, '#e05a6b', { bias: 0.5, mat: 'gem' });
+          lock(add(b0, [sx * 1.5, -1, 0]), [sx * (HRX + 6.5) + sway * 0.4, headY - 6, hz - 7], [sx * (HRX + 6) + sway * 1.1, headY - 18, hz - 7.5], 4.4, 2.4, -0.2);
+          lock([sx * (HRX + 6) + sway * 1.1, headY - 18, hz - 7.5], [sx * (HRX + 7.5) + sway * 1.6, headY - 23, hz - 6], [sx * (HRX + 10) + sway * 2, headY - 25, hz - 4], 2.4, 0.4, -0.2);
         }
       } else if (crownCovered) {
-        // (no tufts under a hat)
+        // (nothing sticks up through a hat)
       } else if (style === 'spiky') {
-        // Spikes fanning up and back from the crown.
-        for (const [a, up, len] of [[-1.0, 0.45, 8], [-0.5, 0.8, 10], [0, 1, 11], [0.5, 0.8, 10], [1.0, 0.45, 8], [-0.6, 0.25, 9], [0.6, 0.25, 9], [0, 0.4, 10]]) {
-          const bx = Math.sin(a) * 9.5, bz = hz - 3 + Math.cos(a) * 4 - (up < 0.5 ? 7 : 0);
-          P.capsule([bx, headY + HR - 3.5, bz], [bx * 1.4, headY + HR - 3.5 + len * up, bz - len * (1 - up) * 0.9], 3.4, C.hair, Object.assign({ r2: 0.5, bias: -0.3 }, H));
-        }
-      } else if (style === 'swept') {
-        // A big fringe swept to one side.
-        P.capsule([-7, headY + HR - 3, hz + 6], [10.5, headY + 5, hz + 10], 4, C.hair, Object.assign({ r2: 1.2, bias: 0.7 }, H));
-        P.capsule([-9, headY + HR - 5, hz + 2], [-13, headY + 3, hz + 5], 3.4, C.hair, Object.assign({ r2: 1, bias: 0.6 }, H));
+        for (const [x, y, z, len] of [[0, 0.98, 0.1, 0.62], [-0.5, 0.86, 0.1, 0.6], [0.5, 0.86, 0.1, 0.6], [-0.86, 0.5, -0.1, 0.56], [0.86, 0.5, -0.1, 0.56], [-0.42, 0.78, -0.5, 0.6], [0.42, 0.78, -0.5, 0.6], [0, 0.6, -0.82, 0.62], [-0.72, 0.3, -0.62, 0.5], [0.72, 0.3, -0.62, 0.5]])
+          lock(hp(x, y, z, 0.96), hp(x, y, z, 1.26), hp(x * 1.05, y + 0.12, z - 0.1, 1.26 + len), 4.6, 0.4, z > 0 ? 0.3 : -0.2);
       } else if (style === 'messy') {
-        for (const [x, y, z, r] of [[-7, HR - 2, -2, 5], [6, HR - 1, 0, 5.4], [0, HR + 0.5, -5, 5], [-10, 7, -8, 4.4], [10, 8, -7, 4.4], [3, HR - 4, 8, 4.2], [-5, HR - 3.5, 7, 4]])
-          P.sphere([x, headY + y, hz + z], r, C.hair, Object.assign({ bias: z > 4 ? 0.5 : -0.2 }, H));
-        for (const sx of [-1, 1]) P.capsule([sx * 9, headY + HR - 5, hz - 2], [sx * 14.5, headY + HR + 1, hz - 5], 2.6, C.hair, Object.assign({ r2: 0.5, bias: -0.2 }, H));
+        for (const [x, y, z, tx, ty, tz2] of [[-0.3, 0.95, 0.2, -0.62, 1.3, 0.3], [0.4, 0.95, 0, 0.8, 1.24, -0.15], [0.92, 0.4, 0.1, 1.3, 0.56, 0.1], [-0.92, 0.3, -0.1, -1.32, 0.3, -0.3], [0.1, 0.85, -0.55, 0.3, 1.1, -0.95]])
+          spike(hp(x, y, z, 0.94), hp(tx, ty, tz2), 4.4, z > 0 ? 0.3 : -0.2);
+      } else if (style === 'swept') {
+        lock(hp(0.2, 0.96, 0.2, 1.05), hp(0.75, 1.02, 0.3, 1.16), hp(1.2, 0.8, 0.35, 1.2), 3.6, 0.4, 0.3);                    // one lock lifts off the crown
       } else if (style === 'short') {
-        P.capsule([2, headY + HR - 1, hz - 1], [5, headY + HR + 4, hz - 3], 1.6, C.hair, Object.assign({ r2: 0.4, bias: 0.4 }, H));   // one stray tuft
+        lock(hp(0.1, 1.0, 0, 1.02), hp(0.25, 1.18, -0.1, 1.08), hp(0.55, 1.3, -0.15, 1.1), 2.2, 0.3, 0.2);                    // a single stray tuft
       }
 
       /* ---- hats and headgear: shells fitted round the head ---- */
       // test(x, y, z) says which part of the head the shell covers (unit sphere; y up, z to the face).
-      const shell = (fill, test, o) => P.sphere(hc, HR + ((o && o.t) || 1.25), fill, Object.assign({ sx: HSX, sy: HSY, bias: 1.5, paint: (x, y, z) => test(x, y, z) }, o || {}));
-      const top = headY + HR * HSY;                       // the crown of the head
+      const hatStart = P.prims.length;
+      const shell = (fill, test, o) => { const t = ((o && o.t) || 1.25) + 1.5; return P.ellipsoid([0, hc[1] + 0.5, hz - 0.5], [HRX + t, HRY + t, HRZ + t], fill, Object.assign({ bias: 1.5, paint: (x, y, z) => test(x, y, z) }, o || {})); };
+      const top = hc[1] + HRY + 1.8;                      // the crown of the head (over the hair)
       const band = (fill, at, w, o) => shell(fill, (x, y, z) => (Math.abs(y - at + z * 0.07) < w ? 0 : -1), Object.assign({ t: 0.9 }, o || {}));
       if (hat) {
         const c1 = hat.color;
@@ -775,8 +843,8 @@
           shell(c1, (x, y, z) => (z > -0.25 && Math.abs(y - 0.46 - Math.max(0, 0.25 - Math.abs(x)) * 0.5) < 0.055 ? 0 : -1), { t: 0.9, mat: 'metal' });
           P.sphere([0, headY + HR * 0.56, hz + HR * 0.84], 1.7, '#ff6b8b', { bias: 1.6, mat: 'gem' });
           if (hat.veil) {
-            P.capsule([0, headY + 3, hz - HR * 0.7], [sway * 0.8, shY - 12, tz - 9], 7, hat.veil, { r2: 5.4, flat: true, bias: -1.3 });
-            P.capsule([sway * 0.8, shY - 12, tz - 9], [sway * 0.8, shY - 13.5, tz - 9], 5.4, gold, { r2: 5.5, flat: true, bias: -1.29 });
+            P.capsule([0, headY + 3, hz - HR * 0.7], [sway * 0.8, shY - 12, tz - 9], 5.6, hat.veil, { r2: 7.5, flat: true, bias: -1.3, pleats: 6, pleatDepth: 0.3 });
+            P.capsule([sway * 0.8, shY - 12, tz - 9], [sway * 0.8, shY - 13.5, tz - 9], 7.5, gold, { r2: 7.6, flat: true, bias: -1.29 });
           }
         }
       }
@@ -849,6 +917,9 @@
         P.capsule(m0, add(m0, [4.5, -1.5, 4.5]), 0.8, '#8bc34a', { bias: 1.6 });
         P.sphere(add(m0, [5.6, 0.2, 5.4]), 2.2, '#6a9f3a', { sy: 1.15, bias: 1.62 });
       }
+
+      // Hats sit over the hair: draw them after the fringe and the locks they cover.
+      for (let i = hatStart; i < P.prims.length; i++) if (P.prims[i].bias >= 1.4) P.prims[i].bias += 13;
 
       if (costume.beard) {
         [[-HR * 0.62, HR * 0.6, 6], [-HR * 1.05, HR * 0.52, 5], [-HR * 1.42, HR * 0.4, 3.4]].forEach(([by, bz, r]) => P.sphere([0, headY + by, hz + bz], r, costume.beard, { bias: 0.8, mat: 'hair', merge: true }));

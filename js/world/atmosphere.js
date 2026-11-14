@@ -28,19 +28,19 @@
 
   // Looks for the three anchors of the cycle (display colours).
   const DAY = {
-    top: rgb('#3c8be0'), mid: rgb('#86c2f2'), horizon: rgb('#d8ecf5'), fog: rgb('#d3e8f3'), near: 80, far: 300,
-    sun: rgb('#fff0d2'), sunI: 1.3, hemiSky: rgb('#dcecff'), hemiGround: rgb('#7d9a5a'), hemiI: 0.64,
-    tint: [1, 1, 1], sat: 1.08, sprite: [1, 1, 1], glowCol: rgb('#ffe2b0'), cloudLit: rgb('#ffffff'), cloudDark: rgb('#b9c8de'),
+    top: rgb('#62a2ec'), mid: rgb('#aed3f7'), horizon: rgb('#e9eef8'), fog: rgb('#d9e3f6'), near: 34, far: 300,
+    sun: rgb('#ffe6ba'), sunI: 1.22, hemiSky: rgb('#e9e6ff'), hemiGround: rgb('#a898c0'), hemiI: 0.84,
+    tint: [1.03, 1.0, 0.965], sat: 1.07, sprite: [1, 1, 1], glowCol: rgb('#ffe2b0'), cloudLit: rgb('#fffaf2'), cloudDark: rgb('#c4c8ea'),
   };
   const DUSK = {
-    top: rgb('#3b3a7c'), mid: rgb('#e0805c'), horizon: rgb('#ffcf90'), fog: rgb('#eaa887'), near: 55, far: 250,
-    sun: rgb('#ffa25e'), sunI: 0.95, hemiSky: rgb('#d8a8c4'), hemiGround: rgb('#6b5244'), hemiI: 0.56,
-    tint: [1.05, 0.97, 0.9], sat: 1.1, sprite: [1.0, 0.9, 0.82], glowCol: rgb('#ff9a55'), cloudLit: rgb('#ffc890'), cloudDark: rgb('#7a5a86'),
+    top: rgb('#5a4f9a'), mid: rgb('#ef9a86'), horizon: rgb('#ffd9a6'), fog: rgb('#f0b9a4'), near: 20, far: 220,
+    sun: rgb('#ffab6e'), sunI: 0.9, hemiSky: rgb('#e6b8d6'), hemiGround: rgb('#8a6c8e'), hemiI: 0.74,
+    tint: [1.04, 0.98, 0.93], sat: 1.02, sprite: [1.0, 0.92, 0.86], glowCol: rgb('#ff9a55'), cloudLit: rgb('#ffd0a0'), cloudDark: rgb('#8a68a0'),
   };
   const NIGHT = {
-    top: rgb('#060a22'), mid: rgb('#101f4e'), horizon: rgb('#2a3e78'), fog: rgb('#1d2c58'), near: 45, far: 230,
-    sun: rgb('#a8c2ff'), sunI: 0.56, hemiSky: rgb('#6a86d8'), hemiGround: rgb('#232c52'), hemiI: 0.62,
-    tint: [0.9, 0.96, 1.12], sat: 0.96, sprite: [0.74, 0.8, 1.0], glowCol: rgb('#5878d0'), cloudLit: rgb('#56689e'), cloudDark: rgb('#141c3c'),
+    top: rgb('#0b0c2c'), mid: rgb('#1c2260'), horizon: rgb('#3a3f8a'), fog: rgb('#2a2e6c'), near: 18, far: 210,
+    sun: rgb('#b4c0ff'), sunI: 0.5, hemiSky: rgb('#8088e6'), hemiGround: rgb('#3a3470'), hemiI: 0.72,
+    tint: [0.92, 0.95, 1.12], sat: 0.94, sprite: [0.76, 0.8, 1.0], glowCol: rgb('#5878d0'), cloudLit: rgb('#6a6cb4'), cloudDark: rgb('#1c1c4c'),
   };
   // Weather: [clouds 0..1, rain, snow, fog, storm]
   const WEATHER = {
@@ -345,7 +345,8 @@
       if (post) {
         const pu = post.u;
         pu.fogColor.value.setRGB(fog[0], fog[1], fog[2]);
-        pu.fogNear.value = near; pu.fogFar.value = Math.max(near + 5, far); pu.fogMax.value = 1;
+        pu.fogNear.value = near; pu.fogFar.value = Math.max(near + 5, far); pu.fogMax.value = this.mode === 'fixed' ? 1 : U.lerp(0.78, 1, Math.max(fogW, over * 0.6));
+        pu.pastel.value = 1; pu.soft.value = 0.26 + tw * 0.14; pu.focus.value = this.map && (this.map.cave || this.map.indoor) ? 0.6 : 1;
         const dawn = this.mode === 'fixed' ? 0 : tw;
         pu.mist.value = this.outdoor ? 0.10 + dawn * 0.35 + nightW * 0.2 + fogW * 2.6 + rain * 0.5 : (this.map && this.map.cave ? 0.5 : 0.05);
         pu.mistTop.value = this.outdoor ? 0.4 + fogW * 3 : 0.3; pu.mistFall.value = this.outdoor ? U.lerp(0.42, 0.1, fogW) : 0.8;
@@ -355,8 +356,8 @@
         pu.time.value = this.time;
         pu.tint.value.setRGB(L.tint[0] * dim + (1 - dim) * 0.9, L.tint[1] * dim + (1 - dim) * 0.93, L.tint[2] * dim + (1 - dim) * 0.98);
         pu.saturation.value = L.sat - over * 0.16 - fogW * 0.1;
-        pu.contrast.value = 1.05 - fogW * 0.06;
-        pu.bloom.value = 0.5 + glow * 0.35 + tw * 0.2;
+        pu.contrast.value = 0.97 - fogW * 0.05;
+        pu.bloom.value = 0.42 + glow * 0.35 + tw * 0.2;
         pu.flash.value = fl * 0.35;
         pu.ao.value = 0.75;
       }

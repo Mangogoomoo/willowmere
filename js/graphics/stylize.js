@@ -5,9 +5,9 @@
    adjusted once, before anything is drawn, so houses, trees, terrain, props
    and everything placed with the map editor share:
 
-   - soft "toon" daylight: a short, smooth step from light to shade instead
-     of a long gradient, like hand-painted textures;
-   - brush mottling: a little large-scale colour variation across surfaces;
+   - a painted palette: strong colours are calmed and lifted toward soft,
+     milky mid-tones, with broad warm and cool patches and smaller brush dabs;
+   - soft daylight: a short, smooth step from light to shade;
    - a rim of sky light along edges facing away from the camera;
    - windows and lamps that glow after dark (see NIGHT_GLOW);
    - rain-darkened surfaces, and snow that settles on whatever faces the sky.
@@ -43,7 +43,7 @@
   SC.lights_physical_pars_fragment = SC.lights_physical_pars_fragment.replace(
     'float dotNL = saturate( dot( geometry.normal, directLight.direction ) );\n\tvec3 irradiance = dotNL * directLight.color;',
     `float dotNLraw = dot( geometry.normal, directLight.direction );
-	float dotNL = mix( saturate( dotNLraw ), smoothstep( -0.10, 0.34, dotNLraw ) * 0.86 + 0.14 * saturate( dotNLraw ), 0.8 );
+	float dotNL = mix( saturate( dotNLraw ), smoothstep( -0.16, 0.42, dotNLraw ) * 0.84 + 0.16 * saturate( dotNLraw ), 0.85 );
 	vec3 irradiance = dotNL * directLight.color;`);
 
   // Painted surfaces are matte: keep highlights soft, so smooth shapes don't sparkle at grazing angles.
@@ -71,11 +71,16 @@
 		// World position of this fragment (the view matrix is a rotation plus a move).
 		vec3 wmPos = cameraPosition - vViewPosition * mat3( viewMatrix );
 		vec3 wmN = normalize( normal * mat3( viewMatrix ) );
-		// Brush mottling: two sizes of soft noise, projected along the surface.
+		// A painted palette: strong colours are calmed and lifted toward a soft, milky mid-tone, like gouache.
+		float wmL = dot( diffuseColor.rgb, vec3( 0.2126, 0.7152, 0.0722 ) );
+		diffuseColor.rgb = mix( vec3( wmL ), diffuseColor.rgb, 0.84 ) * 0.86 + vec3( 0.064, 0.056, 0.052 );
+		// Brush work: broad warm and cool patches, then smaller dabs stretched along the surface.
 		vec2 wmUv = abs( wmN.y ) > 0.6 ? wmPos.xz : ( abs( wmN.x ) > abs( wmN.z ) ? wmPos.zy : wmPos.xy );
-		float wmB = wmNoise( wmUv * 0.55 ) * 0.6 + wmNoise( wmUv * 2.3 + 17.0 ) * 0.4;
-		diffuseColor.rgb *= 0.90 + 0.20 * wmB;
-		diffuseColor.rgb = mix( diffuseColor.rgb, diffuseColor.rgb * vec3( 1.04, 1.0, 0.94 ), wmB );
+		float wmWarm = wmNoise( wmUv * 0.11 + 3.7 ), wmCool = wmNoise( wmUv * 0.17 - 11.3 );
+		float wmB = wmNoise( wmUv * vec2( 0.9, 0.42 ) ) * 0.55 + wmNoise( wmUv * vec2( 2.6, 1.3 ) + 17.0 ) * 0.45;
+		diffuseColor.rgb *= 0.87 + 0.26 * wmB;
+		diffuseColor.rgb = mix( diffuseColor.rgb, diffuseColor.rgb * vec3( 1.10, 1.03, 0.84 ), smoothstep( 0.45, 0.85, wmWarm ) * 0.75 );
+		diffuseColor.rgb = mix( diffuseColor.rgb, diffuseColor.rgb * vec3( 0.90, 0.98, 1.12 ), smoothstep( 0.5, 0.9, wmCool ) * 0.6 );
 		// Rain darkens and cools what it soaks.
 		diffuseColor.rgb *= mix( vec3( 1.0 ), vec3( 0.72, 0.76, 0.84 ), max( uStyle.y, 0.0 ) * clamp( wmN.y * 0.6 + 0.6, 0.0, 1.0 ) );
 		// Snow settles on whatever faces the sky (uStyle.y below zero means snow).
