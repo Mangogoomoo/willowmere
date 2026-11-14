@@ -6,6 +6,9 @@
   const h = G.h;
 
   const PATCHES = [
+    { v: '0.49', date: '2026-11-25T12:00', title: 'Action bar fix', notes: [
+      'Fixed: a max-level skill on the action bar dropped to the level of another copy of that skill after logging back in. It now stays at max.',
+    ] },
     { v: '0.48', date: '2026-11-24T12:00', title: 'Songs, shop signs and scrolling', notes: [
       'Song circles are bigger (they reach further) and always fully visible, even on hills. Notes rise from all over the circle, and Apple of Idun sends up apples too.',
       'Songs need an instrument (Bards) or a whip (Dancers) in hand, and stop if you put it away.',

@@ -184,9 +184,7 @@
         if (!s || i >= SLOTS) return;
         const job = this.game.player ? this.game.player.job : 'novice';
         if ((s.type === 'item' && G.Items.get(s.id)) || (s.type === 'skill' && G.Skills.get(s.id) && G.Skills.allowed(s.id, job))) this.slots[i] = s;
-        // Slots saved before they had their own level keep the level picked in the skills window.
-        const sys = this.game.player && this.game.player.skills;
-        if (this.slots[i] && s.type === 'skill' && !s.lv && sys && sys.selected[s.id]) this.slots[i] = Object.assign({}, s, { lv: sys.selected[s.id] });
+        // A skill slot without its own level always uses the highest level learned.
       });
       this.render();
       // Passive skills never belong on the bar (older saves might have one).
