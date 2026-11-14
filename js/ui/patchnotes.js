@@ -6,6 +6,16 @@
   const h = G.h;
 
   const PATCHES = [
+    { v: '0.50', date: '2026-11-26T12:00', title: 'A new look: HD sprites, weather, day and night', notes: [
+      'Every character has been redrawn from scratch as HD pixel art: a taller, slimmer figure with crisp outlines and painted shading, and a new outfit for every job, townsperson and humanoid monster.',
+      'Hats and headgear are redrawn and now fit round the head from every angle (ribbons, bunny ears, crowns, helms, circlets, glasses and the rest).',
+      'Monsters are drawn in the same pixel-art style, and recoloured monsters (Marin, Eclipse and friends) now show their own colours in the world.',
+      'The world has a painted look: soft shading, rounder trees and bushes, fuller grass, and water with ripples and foam along the banks.',
+      'New lighting: soft glow on bright things, contact shadows, and mist that gathers in low ground.',
+      'A day and night cycle (about 36 minutes, the same for everyone): sunrise, sunset, moon and stars. After dark, lamps and windows light up and fireflies come out.',
+      'Weather: clear, cloudy, rain, storms with lightning, fog and snow, changing every few minutes.',
+      'Map editor (Map tab, Atmosphere): set a map to the day and night cycle, always day or always night, and pin its weather.',
+    ] },
     { v: '0.49', date: '2026-11-25T12:00', title: 'Action bar fix', notes: [
       'Fixed: a max-level skill on the action bar dropped to the level of another copy of that skill after logging back in. It now stays at max.',
     ] },

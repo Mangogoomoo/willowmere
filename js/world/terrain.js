@@ -434,7 +434,7 @@
     geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
     geo.computeVertexNormals();
     const mat = new THREE.MeshStandardMaterial({
-      vertexColors: true, map: grassDetailTexture(), roughness: 1, metalness: 0, flatShading: true,
+      vertexColors: true, map: grassDetailTexture(), roughness: 1, metalness: 0,
     });
     setupPaint(mat);
     const mesh = new THREE.Mesh(geo, mat);
@@ -443,14 +443,37 @@
     scene.add(mesh);
 
     // Water: one plane; the terrain hides it everywhere except carved basins.
+    // Its colour deepens away from the banks, light ripples drift across it and foam gathers along the shore.
     const wtex = waterTexture();
-    const water = new THREE.Mesh(
-      new THREE.PlaneGeometry(SIZE - 20, SIZE - 20),
-      new THREE.MeshStandardMaterial({
-        color: '#4fb0e3', map: wtex, transparent: true, opacity: 0.82,
-        roughness: 0.08, metalness: 0.1, depthWrite: false,
-      })
-    );
+    const shoreData = new Uint8Array(N * N * 4);
+    for (let i = 0; i < N * N; i++) shoreData[i * 4] = U.clamp((heights[i] + 3) / 4, 0, 1) * 255;   // heights -3..1
+    const shore = new THREE.DataTexture(shoreData, N, N, THREE.RGBAFormat);
+    shore.magFilter = shore.minFilter = THREE.LinearFilter; shore.needsUpdate = true;
+    const waterMat = new THREE.MeshStandardMaterial({
+      color: '#ffffff', map: wtex, transparent: true, opacity: 0.9,
+      roughness: 0.08, metalness: 0.1, depthWrite: false,
+    });
+    const wu = { uShore: { value: shore }, uShoreHalf: { value: HALF }, uWaterY: { value: C.WATER_LEVEL } };
+    waterMat.onBeforeCompile = (sh) => {
+      Object.assign(sh.uniforms, wu);
+      sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform sampler2D uShore;\nuniform float uShoreHalf;\nuniform float uWaterY;')
+        .replace('#include <color_fragment>', `#include <color_fragment>
+          {
+            vec3 wp = cameraPosition - vViewPosition * mat3( viewMatrix );
+            float t = uStyle.z;
+            float ground = texture2D( uShore, ( wp.xz + uShoreHalf ) / ( 2.0 * uShoreHalf ) ).r * 4.0 - 3.0;
+            float depth = clamp( uWaterY - ground, 0.0, 2.0 );
+            vec3 wcol = mix( vec3( 0.20, 0.72, 0.74 ), vec3( 0.045, 0.27, 0.60 ), smoothstep( 0.05, 1.25, depth ) );
+            // Ripples: where two drifting noise fields cross, a bright thread.
+            float r1 = wmNoise( wp.xz * 1.9 + vec2( t * 0.33, t * 0.21 ) ), r2 = wmNoise( wp.xz * 1.9 - vec2( t * 0.27, -t * 0.31 ) + 7.3 );
+            float web = smoothstep( 0.05, 0.0, abs( r1 - r2 ) ) * ( 0.35 + 0.65 * wmNoise( wp.xz * 0.4 + t * 0.05 ) );
+            float foam = smoothstep( 0.24, 0.03, depth + ( wmNoise( wp.xz * 3.1 + vec2( t * 0.4, 0.0 ) ) - 0.5 ) * 0.2 );
+            diffuseColor.rgb = mix( wcol * ( 0.9 + 0.2 * diffuseColor.rgb ) + web * 0.22, vec3( 1.0 ), foam * 0.8 );
+            diffuseColor.a = clamp( mix( 0.5, 0.93, smoothstep( 0.0, 0.7, depth ) ) + foam * 0.5, 0.0, 1.0 );
+          }`);
+    };
+    waterMat.customProgramCacheKey = () => 'wm-water';
+    const water = new THREE.Mesh(new THREE.PlaneGeometry(SIZE - 20, SIZE - 20), waterMat);
     water.rotation.x = -Math.PI / 2;
     water.position.y = C.WATER_LEVEL;
     water.receiveShadow = true;
@@ -538,7 +561,7 @@
     for (const end of [-1, 1]) {
       parts.push({ geo: box, color: stone, pos: [B.x, -0.2, BRIDGE_Z + end * (B.halfLength - 1.2)], scale: [W + 0.8, 1.2, 2.4], jitter: 0.15 });
     }
-    const m = new THREE.Mesh(U.mergeParts(parts), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, flatShading: true }));
+    const m = new THREE.Mesh(U.mergeParts(parts), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9 }));
     m.castShadow = true; m.receiveShadow = true;
     group.add(m);
     group.userData.collider = m;

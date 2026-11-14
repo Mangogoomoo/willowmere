@@ -66,27 +66,44 @@
       #include <fog_vertex>
     }`;
 
+  /* Pixel-art sampling: texels stay crisp when the sprite is drawn larger than
+     its sheet (edges are one screen pixel wide instead of blurred), and it
+     falls back to smooth mip-mapped sampling when drawn smaller.
+     The sheet holds display colours; `light` is the scene's ambient tint
+     (night, storms), shared by every sprite. */
   const FRAG = `
     uniform sampler2D map;
+    uniform vec2 texSize;
     uniform vec3 color;
+    uniform vec3 light;
     uniform float opacity;
     uniform float alphaTest;
     uniform float silhouette;
+    uniform float display;
     varying vec2 vUv;
     #include <fog_pars_fragment>
     void main() {
-      vec4 tex = texture2D(map, vUv);
+      vec2 px = vUv * texSize;
+      vec2 fw = max(fwidth(px), vec2(1e-5));
+      vec2 sharp = (floor(px) + 0.5 + clamp((fract(px) - 0.5) / fw, -0.5, 0.5)) / texSize;
+      vec2 uv = mix(sharp, vUv, step(1.0, max(fw.x, fw.y)));
+      vec4 tex = texture2D(map, uv);
       if (tex.a < alphaTest) discard;
-      vec4 c = vec4(tex.rgb * color, tex.a * opacity);
+      vec3 rgb = display > 0.5 ? tex.rgb : pow(tex.rgb, vec3(1.0 / 2.2));
+      vec4 c = vec4(rgb * color * light, tex.a * opacity);
       if (silhouette > 0.5) c = vec4(color, 0.5 * opacity);
-      gl_FragColor = linearToOutputTexel(c);
+      gl_FragColor = c;
       #include <fog_fragment>
     }`;
+
+  // Ambient tint for all sprites (set by the atmosphere: night, storms, caves).
+  G.SpriteLight = G.SpriteLight || { value: new THREE.Color(1, 1, 1) };
 
   function makeMaterial(uniforms, ghost) {
     const m = new THREE.ShaderMaterial({
       uniforms, vertexShader: VERT, fragmentShader: FRAG,
       transparent: true, depthWrite: !ghost, fog: !ghost,
+      extensions: { derivatives: true },
     });
     if (ghost) m.depthFunc = THREE.GreaterDepth;   // only where something is in front
     return m;
@@ -102,7 +119,10 @@
         center: { value: new THREE.Vector2(0.5, sheet.footOffset / sheet.worldH) },
         scale: { value: new THREE.Vector2(sheet.worldW * this.scaleK, sheet.worldH * this.scaleK) },
         bias: { value: opts.depthBias == null ? 0.6 : opts.depthBias },
-        alphaTest: { value: 0.32 },
+        alphaTest: { value: 0.5 },
+        texSize: { value: new THREE.Vector2(sheet.texture.image.width, sheet.texture.image.height) },
+        display: { value: sheet.texture.userData.display ? 1 : 0 },
+        light: G.SpriteLight,
       };
       this.uniforms = THREE.UniformsUtils.merge([THREE.UniformsLib.fog, {
         color: { value: new THREE.Color(1, 1, 1) }, opacity: { value: 1 }, silhouette: { value: 0 },
@@ -146,6 +166,8 @@
       if (sheet === this.sheet) return;
       this.sheet = sheet;
       this.uniforms.map.value = sheet.texture;
+      this.uniforms.texSize.value.set(sheet.texture.image.width, sheet.texture.image.height);
+      this.uniforms.display.value = sheet.texture.userData.display ? 1 : 0;
       this.uniforms.scale.value.set(sheet.worldW * this.scaleK, sheet.worldH * this.scaleK);
       this.uniforms.center.value.set(0.5, sheet.footOffset / sheet.worldH);
       this.lastCell = -1;

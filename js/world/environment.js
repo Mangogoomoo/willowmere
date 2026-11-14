@@ -27,15 +27,15 @@
       this.updaters = [];
       this.landmarks = [];
 
-      this.propMat = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.88 });
+      this.propMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.88 });
       this.foliageMat = this.windMaterial(0.035);
       this.grassMat = this.windMaterial(0.16);
       this.grassMat.side = THREE.DoubleSide;
-      this.plainMat = new THREE.MeshStandardMaterial({ flatShading: true, roughness: 0.7 });
+      this.plainMat = new THREE.MeshStandardMaterial({ roughness: 0.7 });
     }
 
     windMaterial(strength) {
-      const m = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.9 });
+      const m = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9 });
       const wind = this.wind;
       m.onBeforeCompile = (shader) => {
         shader.uniforms.uWind = wind;
@@ -126,7 +126,9 @@
       );
       sky.renderOrder = -10;
       sky.frustumCulled = false;
-      this.scene.add(sky);
+      // In the game the sky, sun, moon, stars and clouds are drawn by the Atmosphere (world/atmosphere.js).
+      const live = !!G.Atmosphere;
+      if (!live) this.scene.add(sky); else { sky.geometry.dispose(); sky.material.dispose(); }
       this.sky = sky;
       if (this.map.cave) return;     // no clouds or mountains underground
 
@@ -143,14 +145,18 @@
           const r = 6 + this.rng() * 6;
           parts.push({ geo: ico, color: k % 2 ? '#ffffff' : '#f4f8fb', pos: [(k - n / 2) * 7 + this.rng() * 3, this.rng() * 3, this.rng() * 6 - 3], scale: [r * 1.3, r * 0.7, r] });
         }
+        // (The random numbers are still drawn when the clouds aren't built, so the rest of the map comes out the same.)
+        const a = (i / 16) * Math.PI * 2 + this.rng() * 0.3, rad = 150 + this.rng() * 140, cy = 70 + this.rng() * 45, ry = this.rng() * Math.PI;
+        if (live) continue;
         const m = new THREE.Mesh(U.mergeParts(parts), cloudMat);
-        const a = (i / 16) * Math.PI * 2 + this.rng() * 0.3, rad = 150 + this.rng() * 140;
-        m.position.set(Math.cos(a) * rad, 70 + this.rng() * 45, Math.sin(a) * rad);
-        m.rotation.y = this.rng() * Math.PI;
+        m.position.set(Math.cos(a) * rad, cy, Math.sin(a) * rad);
+        m.rotation.y = ry;
         cloudGroup.add(m);
       }
-      this.scene.add(cloudGroup);
-      this.updaters.push((dt) => { cloudGroup.rotation.y += dt * 0.004; });
+      if (!live) {
+        this.scene.add(cloudGroup);
+        this.updaters.push((dt) => { cloudGroup.rotation.y += dt * 0.004; });
+      }
 
       // Distant mountain ring, softened by fog.
       const mparts = [];
@@ -163,7 +169,7 @@
         mparts.push({ geo: cone, color: col, pos: [Math.cos(a) * rad, h / 2 - 8, Math.sin(a) * rad], rot: [0, this.rng() * 3, 0], scale: [r, h, r], jitter: 0.12 });
         if (h > 80) mparts.push({ geo: cone, color: '#f4f7f8', pos: [Math.cos(a) * rad, h - 8 - h * 0.1, Math.sin(a) * rad], scale: [r * 0.22, h * 0.21, r * 0.22] });
       }
-      const mm = new THREE.Mesh(U.mergeParts(mparts), new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 1 }));
+      const mm = new THREE.Mesh(U.mergeParts(mparts), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1 }));
       this.scene.add(mm);
     }
 
@@ -323,6 +329,7 @@
       add({ geo: new THREE.CylinderGeometry(0.07, 0.09, 2.7, 6), color: '#3c414d', pos: [0, 1.5, 0] });
       add({ geo: box, color: '#ffe9a8', pos: [0, 3.0, 0], scale: [0.36, 0.42, 0.36] });
       add({ geo: new THREE.ConeGeometry(0.34, 0.3, 4), color: '#30343e', pos: [0, 3.36, 0], rot: [0, Math.PI / 4, 0] });
+      (this.lamps || (this.lamps = [])).push({ x, y: 3.2, z });     // lit by the Atmosphere after dark
       this.nav.blockCircle(x, z, 0.18);
     }
 
@@ -815,13 +822,20 @@
     // (add grass, add flowers, or clear). Thousands of pieces, so they stay one batch each.
     coverGeos() {
       if (COVER) return COVER;
+      // A tuft: seven curved blades, dark at the root and sunlit at the tip.
       const v = [], c = [];
-      const base = new THREE.Color('#4e8c3a'), tip = new THREE.Color('#b4e27a');
-      for (let k = 0; k < 4; k++) {
-        const a = (k / 4) * Math.PI + 0.3, ox = Math.cos(a) * 0.12, oz = Math.sin(a) * 0.12;
-        const lean = 0.15 * (k % 2 ? 1 : -1), h = 0.45 + (k % 3) * 0.12;
-        v.push(-ox, 0, -oz, ox, 0, oz, lean * Math.cos(a + 1.57), h, lean * Math.sin(a + 1.57));
-        c.push(base.r, base.g, base.b, base.r, base.g, base.b, tip.r, tip.g, tip.b);
+      const base = new THREE.Color('#3f8436'), midc = new THREE.Color('#6fb84c'), tip = new THREE.Color('#c9ee8a');
+      const push = (p, col) => { v.push(p[0], p[1], p[2]); c.push(col.r, col.g, col.b); };
+      for (let k = 0; k < 7; k++) {
+        const a = k * 2.4 + 0.3, r = k === 0 ? 0 : 0.07 + (k % 3) * 0.045, bx = Math.cos(a) * r, bz = Math.sin(a) * r;
+        const h = 0.42 + ((k * 37) % 5) * 0.075, lean = 0.1 + (k % 4) * 0.045, w = 0.045;
+        const dx = Math.cos(a), dz = Math.sin(a), px = -dz * w, pz = dx * w;                    // lean outward; width across
+        const b0 = [bx - px, 0, bz - pz], b1 = [bx + px, 0, bz + pz];
+        const m0 = [bx + dx * lean * 0.35 - px * 0.7, h * 0.55, bz + dz * lean * 0.35 - pz * 0.7], m1 = [bx + dx * lean * 0.35 + px * 0.7, h * 0.55, bz + dz * lean * 0.35 + pz * 0.7];
+        const t = [bx + dx * lean, h, bz + dz * lean];
+        push(b0, base); push(b1, base); push(m1, midc);
+        push(b0, base); push(m1, midc); push(m0, midc);
+        push(m0, midc); push(m1, midc); push(t, tip);
       }
       const grass = new THREE.BufferGeometry();
       grass.setAttribute('position', new THREE.Float32BufferAttribute(v, 3));
@@ -832,7 +846,7 @@
       const stem = new THREE.CylinderGeometry(0.02, 0.025, 0.36, 4); stem.translate(0, 0.18, 0);
       const head = new THREE.IcosahedronGeometry(0.1, 0); head.translate(0, 0.38, 0);
       COVER = { grass, stem, head,
-        stemMat: new THREE.MeshStandardMaterial({ color: '#ffffff', flatShading: true, roughness: 1 }),
+        stemMat: new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 1 }),
         headMat: new THREE.MeshStandardMaterial({ color: '#ffffff', flatShading: true, roughness: 0.6, emissive: '#222222' }) };
       return COVER;
     }

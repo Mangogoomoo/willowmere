@@ -627,6 +627,13 @@
       if (d.ground) map.ground = d.ground;
       if (d.paint) map.paint = d.paint;
       if (d.atmo) map.atmosphere = Object.assign({}, ATMOS[d.atmo.preset] || base.atmosphere || DAY, d.atmo.custom || {});
+      // Time of day and weather for this map (see world/atmosphere.js): the Day look follows the
+      // day/night cycle unless the map is set to always day or always night; other looks keep their own light.
+      if (d.atmo) {
+        const plain = !ATMOS[d.atmo.preset] && !base.atmosphere;
+        map.time = d.atmo.time || (plain ? 'cycle' : 'fixed');
+        if (d.atmo.weather) map.weather = d.atmo.weather;
+      }
       if (d.music) map.music = d.music;
       // Take-over 1: houses, trees and props; 2: also the gate, spike wall, bridge, rocks and bushes.
       map.takeover = d.takeover === true ? 1 : (d.takeover || 0);

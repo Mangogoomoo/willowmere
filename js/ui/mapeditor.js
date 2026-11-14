@@ -987,6 +987,7 @@
       const at = d.atmo || (d.atmo = { preset: 'day', custom: {} });
       const applyAtmo = () => {
         const g = this.game; g.map.atmosphere = Object.assign({}, CM().ATMOS[at.preset] || CM().DAY, at.custom || {});
+        g.map.time = at.time || (CM().ATMOS[at.preset] ? 'fixed' : 'cycle'); g.map.weather = at.weather || undefined;
         g.applyAtmosphere(g.map); this.changed();
       };
       const presets = [['day', '☀️ Day'], ['dusk', '🌇 Dusk'], ['night', '🌙 Night'], ['misty', '🌫️ Misty'], ['spooky', '👻 Spooky'], ['cave', '🕳️ Dark cave']];
@@ -1001,7 +1002,12 @@
           this.field('Sky light', cur.hemi, (v) => { this.snapshot(); at.custom.hemi = Number(v); applyAtmo(); }, { type: 'number', step: '0.05' }),
           this.field('Music', d.music || '', (v) => { this.snapshot(); d.music = v || undefined; this.game.map.music = d.music; this.changed(); },
             { options: [['', 'Automatic'], ['town', 'Town'], ['meadow', 'Meadow'], ['forest', 'Forest'], ['dungeon', 'Dungeon']] })),
-        h('p.hint', { text: 'Fog, light and music change right away; the sky colours change after saving.' }));
+        h('div.ed-xyz', null,
+          this.field('Time of day', at.time || '', (v) => { this.snapshot(); at.time = v || undefined; applyAtmo(); },
+            { options: [['', 'Automatic'], ['cycle', 'Day and night cycle'], ['day', 'Always day'], ['night', 'Always night']] }),
+          this.field('Weather', at.weather || '', (v) => { this.snapshot(); at.weather = v || undefined; applyAtmo(); },
+            { options: [['', 'Automatic'], ['clear', 'Always clear'], ['cloudy', 'Cloudy'], ['rain', 'Rain'], ['storm', 'Storm'], ['fog', 'Fog'], ['snow', 'Snow']] })),
+        h('p.hint', { text: 'Fog, light, time of day, weather and music change right away. Automatic: the Day look follows the day and night cycle with changing weather; the other looks keep their own light.' }));
       // Map rules.
       const rules = d.rules || (d.rules = {});
       const rule = (key, label) => { const cb = h('input', { type: 'checkbox', checked: !!rules[key], onchange: (e) => { this.snapshot(); rules[key] = e.target.checked; this.changed(); } }); return h('label.ed-rule', null, cb, h('span', { text: label })); };

@@ -107,39 +107,86 @@
     return '#' + h(r) + h(g) + h(b);
   };
 
-  /* Merge several primitive geometries into one flat-shaded, vertex-coloured
-     geometry. parts: [{ geo, color, pos:[x,y,z], rot:[x,y,z], scale:[x,y,z] }].
-     One draw call per merged mesh keeps the town cheap to render. */
+  /* Merge several primitive geometries into one vertex-coloured geometry.
+     parts: [{ geo, color, pos:[x,y,z], rot:[x,y,z], scale:[x,y,z] }].
+     One draw call per merged mesh keeps the town cheap to render.
+
+     Shading: round shapes (cylinders, cones, spheres) keep their smooth
+     normals; boxes and hand-made shapes stay crisp. Plain low-poly balls
+     (leaves, bushes, fruit, blossoms) are swapped for a rounder, slightly
+     lumpy ball shaded lighter on top and darker underneath, which is what
+     gives foliage its soft painted look. */
   const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _e = new THREE.Euler();
-  const _p = new THREE.Vector3(), _s = new THREE.Vector3(), _c = new THREE.Color();
+  const _p = new THREE.Vector3(), _s = new THREE.Vector3(), _c = new THREE.Color(), _n3 = new THREE.Matrix3();
+  const SMOOTH = { CylinderGeometry: 1, ConeGeometry: 1, SphereGeometry: 1, TorusGeometry: 1, CapsuleGeometry: 1, LatheGeometry: 1 };
+  let BLOB = null;
+  function blobGeometry() {
+    if (BLOB) return BLOB;
+    const g0 = new THREE.IcosahedronGeometry(1, 1), g = g0.index ? g0.toNonIndexed() : g0, p = g.attributes.position, nor = new Float32Array(p.count * 3);
+    for (let i = 0; i < p.count; i++) {
+      const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
+      // The same bump for every copy of a corner, so the ball stays closed.
+      const k = 0.9 + 0.2 * hash2(Math.round(x * 97) + Math.round(z * 131), Math.round(y * 113));
+      p.setXYZ(i, x * k, y * k, z * k);
+      nor[i * 3] = x; nor[i * 3 + 1] = y; nor[i * 3 + 2] = z;
+    }
+    g.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+    return (BLOB = g);
+  }
+  // A plain, untouched low-poly ball?
+  function isBall(geo) {
+    if (geo.type !== 'IcosahedronGeometry' || !geo.parameters || geo.parameters.detail) return false;
+    const p = geo.attributes.position, r = geo.parameters.radius || 1;
+    for (let i = 0; i < p.count; i += 7) if (Math.abs(Math.hypot(p.getX(i), p.getY(i), p.getZ(i)) - r) > r * 0.01) return false;
+    return true;
+  }
   U.mergeParts = function (parts) {
     let total = 0;
-    const prepared = parts.map((part) => {
-      let g = part.geo.index ? part.geo.toNonIndexed() : part.geo.clone();
+    const prepared = parts.map((part, pi) => {
+      let g, mode = 'flat', shade = null;
+      _s.set(...(part.scale || [1, 1, 1]));
+      if (part.smooth !== false && isBall(part.geo)) {
+        g = blobGeometry().clone(); mode = 'ball';
+        _s.multiplyScalar(part.geo.parameters.radius || 1);
+        // Top-to-bottom shading, baked into the vertex colours.
+        const n = g.attributes.normal; shade = new Float32Array(n.count);
+        for (let i = 0; i < n.count; i++) shade[i] = n.getY(i) * 0.5 + 0.5;
+      } else {
+        g = part.geo.index ? part.geo.toNonIndexed() : part.geo.clone();
+        if (part.smooth !== false && SMOOTH[part.geo.type] && g.attributes.normal) mode = 'smooth';
+      }
       _p.set(...(part.pos || [0, 0, 0]));
       _e.set(...(part.rot || [0, 0, 0]));
       _q.setFromEuler(_e);
-      _s.set(...(part.scale || [1, 1, 1]));
       _m.compose(_p, _q, _s);
       if (part.matrix) _m.premultiply(part.matrix);
-      g.applyMatrix4(_m);
-      g.computeVertexNormals();
+      if (mode === 'flat') { g.applyMatrix4(_m); g.computeVertexNormals(); }
+      else {
+        // Keep the shape's own normals (turned with it).
+        _n3.getNormalMatrix(_m);
+        g.attributes.position.applyMatrix4(_m);
+        g.attributes.normal.applyNormalMatrix(_n3);
+      }
       total += g.attributes.position.count;
-      return { g, color: part.color, jitter: part.jitter || 0 };
+      return { g, color: part.color, jitter: part.jitter || 0, mode, shade, pi };
     });
     const pos = new Float32Array(total * 3), nor = new Float32Array(total * 3), col = new Float32Array(total * 3);
     let off = 0;
-    prepared.forEach(({ g, color, jitter }) => {
+    prepared.forEach(({ g, color, jitter, mode, shade, pi }) => {
       const n = g.attributes.position.count;
       pos.set(g.attributes.position.array, off * 3);
       nor.set(g.attributes.normal.array, off * 3);
       _c.set(color);
       for (let i = 0; i < n; i++) {
-        // Optional per-face brightness jitter gives a hand-painted low-poly look.
-        const j = jitter ? 1 + (hash2(off + ((i / 3) | 0), 7) - 0.5) * jitter : 1;
-        col[(off + i) * 3] = _c.r * j;
-        col[(off + i) * 3 + 1] = _c.g * j;
-        col[(off + i) * 3 + 2] = _c.b * j;
+        // Flat parts: per-face brightness jitter (a hand-painted low-poly look).
+        // Round parts: one tone for the whole part, so smooth shading stays clean.
+        let j = 1;
+        if (jitter) j = mode === 'flat' ? 1 + (hash2(off + ((i / 3) | 0), 7) - 0.5) * jitter : 1 + (hash2(pi * 13 + 5, 7) - 0.5) * jitter * 0.7;
+        let r = _c.r * j, gg = _c.g * j, b = _c.b * j;
+        if (shade) { const t = shade[i], k = 0.66 + 0.5 * t; r = r * k + 0.05 * t; gg = gg * k + 0.045 * t; b = b * (k - 0.04 * t); }
+        col[(off + i) * 3] = r;
+        col[(off + i) * 3 + 1] = gg;
+        col[(off + i) * 3 + 2] = b;
       }
       off += n;
       g.dispose();

@@ -392,6 +392,26 @@ the published page), Willowmere stays single-player with browser saves.
 Possible next steps: party play, monster skills, ammunition, more dungeons.
 
 
+## Graphics overhaul (v0.50)
+
+The world stays 3D and the characters stay 2D sprites; both were restyled, and nothing in the UI or the game rules changed.
+
+**Characters: HD pixel art.** `spriteRig.js` is now a small software renderer. Each frame is rasterised one pixel at a time from the same rig of spheres and capsules (plus tapered capsules and flat polygons), so edges are crisp, shading falls into clean tone bands with hue-shifted shadows, and a one-pixel outline runs round the silhouette and between overlapping parts. Sheets are baked at 1.5x (`Config.SPRITE_RES`) and sampled with a pixel-art filter, stored as 16-bit textures to keep video memory where it was.
+
+- The human figure is new: about three heads tall, with tapered limbs, a painted hairline and large eyes. Every job, townsperson and humanoid monster has a new outfit, described in `COSTUMES` (in `spriteFactory.js`) from a wardrobe of parts: torso styles, skirts and coats, sleeves, armour, mantles, capes, tabards, sashes and so on.
+- Hats and headgear are shells fitted round the head, so they sit correctly from all eight directions.
+- Monsters go through the same renderer. Recoloured monsters now get their own texture (before, they only differed in the database page).
+
+**World.** `stylize.js` adjusts three.js's shader chunks once, so every lit surface (including everything placed with the map editor) gets soft toon shading, brush mottling, a rim of sky light, windows and lamps that glow at night, rain-darkened and snow-covered surfaces. `utils.js` `mergeParts` keeps smooth normals on round shapes and swaps plain low-poly balls for rounder, top-lit foliage. Grass tufts and water (depth colour, ripples, shore foam) are new.
+
+**Lighting and fog.** `postfx.js` draws the scene off-screen and finishes it: distance fog, drifting ground mist, light scattered round the sun, contact shading, bloom, a colour grade and a light vignette. Quality: high = 4x anti-aliasing, bloom and contact shading; medium = bloom; low = fog and grade only.
+
+**Time of day and weather.** `atmosphere.js` owns the sky (gradient, sun, moon, stars, clouds), the sun/moon light and the weather (clear, cloudy, rain, storm, fog, snow). Both come from the clock, so everyone on a map sees the same sky without any server work; the server still builds maps exactly as before. A full day lasts 36 minutes and weather changes every 6.
+
+- Outdoor maps follow the cycle. Caves, indoor maps and maps with a special look (dusk, spooky, misty...) keep their own fixed light.
+- Map editor, Map tab, Atmosphere: **Time of day** (Automatic, Day and night cycle, Always day, Always night) and **Weather** (Automatic or pinned). In map data these are `atmo.time` and `atmo.weather`; a built-in map can set `time` / `weather` directly in `maps.js`.
+- For testing, from the browser console: `game.atmosphere.override = { hour: 22, weather: 'storm' }`.
+
 ## Project layout
 
     index.html                 page + HUD markup, loads modules in order
@@ -409,8 +429,11 @@ Possible next steps: party play, monster skills, ammunition, more dungeons.
     js/data/quests.js          guild quest definitions
     js/world/terrain.js        height field, ground mesh, water, streets, bridge
     js/world/navgrid.js        navigation grid, A*, line-of-sight smoothing
-    js/world/environment.js    town, props, vegetation, sky
-    js/graphics/spriteRig.js   procedural sprite painter + sheet baker
+    js/world/environment.js    town, props, vegetation
+    js/world/atmosphere.js     sky, time of day, weather, lamps
+    js/graphics/stylize.js     painted look for all lit surfaces (shader chunks)
+    js/graphics/postfx.js      fog, mist, bloom, contact shading, colour grade
+    js/graphics/spriteRig.js   pixel-art sprite renderer + sheet baker
     js/graphics/spriteFactory.js  character designs and animations
     js/graphics/directionalSprite.js  8-direction camera-aware billboards
     js/graphics/effects.js     particles, rings, hit flashes, level-up, shadows

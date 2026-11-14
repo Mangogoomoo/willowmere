@@ -73,8 +73,8 @@
       this.terrain = TR.build(this.mapRoot);
       this.nav = new G.NavGrid(C.WORLD_SIZE, C.NAV_CELL);
       this.markTerrainObstacles();
-      this.applyAtmosphere(map);
       this.env = new G.Environment(this.mapRoot, this.nav, map).build();
+      this.applyAtmosphere(map);
       this.monsters = new G.MonsterManager(this, map.spawns);
       this.npcs = new G.NPCManager(this, map.npcs || []);
       this.portals = new G.Portals(this, map.portals || []);
@@ -87,14 +87,7 @@
 
     // Fog, light and sky per map (caves are dim and close).
     applyAtmosphere(map) {
-      const a = map.atmosphere;
-      const fog = this.scene.fog;
-      fog.color.copy(G.Utils.displayColor(a ? a.fog : C.SKY_HORIZON));
-      fog.near = a ? a.near : 90;
-      fog.far = a ? a.far : 300;
-      this.hemi.intensity = a ? a.hemi : 0.62;
-      this.hemi.groundColor.set(a ? a.ground : '#6b8f45');
-      this.sun.intensity = a ? a.sun : 1.28;
+      this.atmosphere.setMap(map, this.env);
     }
 
     unloadMap() {
@@ -148,12 +141,18 @@
       this.camera.focus.set(0, 2.5, -66);
       this.camera3.position.set(-26, 13, -36);
       this.camera3.lookAt(this.camera.focus);
-      this.renderer.render(this.scene, this.camera3);
+      this.camera3.updateMatrixWorld();
+      // The title backdrop always shows fair weather; the real weather takes over once the game begins.
+      if (!this.atmosphere.override.weather) { this.atmosphere.override.weather = 'clear'; this.atmosphere.titleWeather = true; }
+      this.atmosphere.update(0, this.camera.focus);
+      this.placeSun(this.camera.focus);
+      this.post.render(this.scene, this.camera3);
     }
 
     /* Create or load the character, then start playing.
        choice: { type: 'new', name, appearance } | { type: 'load', data } */
     begin(choice) {
+      if (this.atmosphere.titleWeather) { this.atmosphere.override = {}; this.atmosphere.titleWeather = false; }
       const data = choice.type === 'load' ? choice.data : { name: choice.name, appearance: choice.appearance };
       this.save.slot = choice.slot || 0;   // which character slot this session writes to
       this.save.charId = choice.charId || null;
@@ -238,9 +237,11 @@
       this.container.appendChild(r.domElement);
       this.renderer = r;
 
+      // Sprite sheets are baked at HD resolution where the graphics card can hold them.
+      if (r.capabilities.maxTextureSize < 8192) C.SPRITE_RES = 1.25;
+      // Fog, bloom and the colour grade are applied after the scene is drawn (see postfx.js).
+      this.post = new G.PostFX(r);
       const scene = new THREE.Scene();
-      scene.fog = new THREE.Fog(0xffffff, 90, 300);
-      scene.fog.color.copy(G.Utils.displayColor(C.SKY_HORIZON));
       this.scene = scene;
       this.camera3 = new THREE.PerspectiveCamera(C.CAMERA.fov, 1, 0.1, 900);
 
@@ -257,6 +258,17 @@
       scene.add(sun, sun.target);
       this.sun = sun;
       this.sunOffset = new THREE.Vector3(38, 78, 30);
+      // Sky, time of day and weather drive the lights from here on.
+      this.atmosphere = new G.Atmosphere(this);
+    }
+
+    // Keep the shadow frustum centred on a point (snapped to texels to avoid shimmer).
+    placeSun(f) {
+      const snap = 72 / 2048;
+      const fx = Math.round(f.x / snap) * snap, fz = Math.round(f.z / snap) * snap;
+      this.sun.target.position.set(fx, 0, fz);
+      this.sun.position.set(fx + this.sunOffset.x, this.sunOffset.y, fz + this.sunOffset.z);
+      this.sun.target.updateMatrixWorld();
     }
 
     markTerrainObstacles() {
@@ -279,6 +291,7 @@
     onResize() {
       const w = window.innerWidth, h = window.innerHeight;
       this.renderer.setSize(w, h);
+      this.post.setSize(w, h, this.renderer.getPixelRatio());
       this.camera3.aspect = w / h;
       this.camera3.updateProjectionMatrix();
       if (this.overlay) this.overlay.resize(w, h, Math.min(window.devicePixelRatio || 1, 2));
@@ -351,6 +364,8 @@
         if (this.sun.shadow.map) { this.sun.shadow.map.dispose(); this.sun.shadow.map = null; }
       }
       r.setPixelRatio(Math.min(window.devicePixelRatio || 1, Q.dpr));
+      this.post.setQuality(level);
+      this.atmosphere.setQuality(level);
       this.onResize();
       G.SaveSystem.setPrefs({ quality: level });
       if (!silent) this.log.add(`Graphics quality: ${level}.`, 'system');
@@ -414,12 +429,10 @@
       if (G.Net.ws) G.Net.update(dt);
       this.trackPerformance(dt);
 
-      // Keep the shadow frustum centred on the player (snapped to texels to avoid shimmer).
+      // Time of day and weather, then the shadow frustum centred on the player.
       const f = this.camera.focus;
-      const snap = 72 / 2048;
-      const fx = Math.round(f.x / snap) * snap, fz = Math.round(f.z / snap) * snap;
-      this.sun.target.position.set(fx, 0, fz);
-      this.sun.position.set(fx + this.sunOffset.x, this.sunOffset.y, fz + this.sunOffset.z);
+      this.atmosphere.update(dt, f);
+      this.placeSun(f);
 
       this.loot.update(dt, this.time);
       this.save.update(dt);
@@ -430,7 +443,7 @@
       this.effects.update(dt, this.time);
       this.updateZone();
 
-      this.renderer.render(this.scene, this.camera3);
+      this.post.render(this.scene, this.camera3);
       this.overlay.draw(dt);
       G.Vending.update();   // shop signs, placed with the camera this frame was drawn with
       this.hud.update();
