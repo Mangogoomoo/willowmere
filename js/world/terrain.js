@@ -304,18 +304,24 @@
   }
 
   /* ---------- textures ---------- */
+  // Ground detail: soft brush dabs of lighter and darker tone, then short blade strokes over them (multiplies the ground colour).
   function grassDetailTexture() {
-    const s = 256, c = U.makeCanvas(s, s), x = c.getContext('2d');
-    x.fillStyle = '#fff'; x.fillRect(0, 0, s, s);
+    const s = 512, c = U.makeCanvas(s, s), x = c.getContext('2d');
+    x.fillStyle = '#e9e9e9'; x.fillRect(0, 0, s, s);
     const rng = U.mulberry32(11);
-    for (let i = 0; i < 2600; i++) {
-      const v = 205 + rng() * 50 | 0;
-      x.strokeStyle = `rgb(${v},${v},${v})`;
-      x.lineWidth = 1 + rng() * 1.5;
-      const px = rng() * s, py = rng() * s;
-      x.beginPath(); x.moveTo(px, py); x.lineTo(px + (rng() - 0.5) * 4, py - 3 - rng() * 5); x.stroke();
+    for (let i = 0; i < 520; i++) {
+      const v = 196 + rng() * 59 | 0, px = rng() * s, py = rng() * s, rx = 10 + rng() * 26, ry = 5 + rng() * 12, a = rng() * Math.PI;
+      x.fillStyle = `rgba(${v},${v},${v},0.5)`;
+      for (const ox of [-s, 0, s]) for (const oy of [-s, 0, s]) { x.beginPath(); x.ellipse(px + ox, py + oy, rx, ry, a, 0, Math.PI * 2); x.fill(); }   // wraps at the edges
     }
-    return U.canvasTexture(c, { repeat: [60, 60], anisotropy: 4 });
+    for (let i = 0; i < 5200; i++) {
+      const v = 190 + rng() * 65 | 0;
+      x.strokeStyle = `rgba(${v},${v},${v},0.9)`;
+      x.lineWidth = 1 + rng() * 1.6;
+      const px = rng() * s, py = rng() * s;
+      x.beginPath(); x.moveTo(px, py); x.quadraticCurveTo(px + (rng() - 0.5) * 3, py - 4, px + (rng() - 0.5) * 7, py - 5 - rng() * 8); x.stroke();
+    }
+    return U.canvasTexture(c, { repeat: [40, 40], anisotropy: 4 });
   }
   function cobbleTexture() {
     const s = 256, c = U.makeCanvas(s, s), x = c.getContext('2d');

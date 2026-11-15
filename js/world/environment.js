@@ -242,48 +242,89 @@
       return (p) => { p.matrix = m; parts.push(p); };
     }
 
+    /* A timber-framed cottage: stone plinth, plastered walls, a shingled roof of two
+       overhanging slopes with bargeboards, timbered gables, a brick chimney, a plank
+       door under a little porch roof with a lantern, and shuttered windows with
+       flower boxes. (Only the look lives here; the footprint it blocks is unchanged.) */
     house(parts, x, z, rot, o) {
       const add = this.place(parts, x, z, rot, 0.2);
       const { w, d, h } = o;
-      const top = 0.5 + h;
-      add({ geo: box, color: '#a39b8f', pos: [0, 0.25, 0], scale: [w + 0.4, 0.5, d + 0.4], jitter: 0.12 });
-      add({ geo: box, color: o.wall, pos: [0, 0.5 + h / 2, 0], scale: [w, h, d] });
-      // timber frame
-      for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
-        add({ geo: box, color: o.trim, pos: [sx * (w / 2 - 0.05), 0.5 + h / 2, sz * (d / 2 - 0.05)], scale: [0.32, h, 0.32] });
+      const top = 0.5 + h, trim = o.trim, trimDark = U.shade(o.trim, -0.2), roofDark = U.shade(o.roof, -0.32);
+      // plinth and walls
+      add({ geo: box, color: '#a39b8f', pos: [0, 0.3, 0], scale: [w + 0.5, 0.6, d + 0.5], tex: 'stone' });
+      add({ geo: box, color: o.wall, pos: [0, 0.5 + h / 2, 0], scale: [w, h, d], tex: 'plaster' });
+      // timber frame: corner posts, a sill beam, a beam under the eaves (and between storeys), studs and braces
+      for (const sx of [-1, 1]) for (const sz of [-1, 1]) add({ geo: box, color: trim, pos: [sx * (w / 2 - 0.04), 0.5 + h / 2, sz * (d / 2 - 0.04)], scale: [0.34, h, 0.34] });
+      const beams = [0.72, top - 0.14].concat(h > 4 ? [0.5 + h * 0.52] : []);
+      for (const by of beams) {
+        for (const sz of [-1, 1]) add({ geo: box, color: trim, pos: [0, by, sz * (d / 2 + 0.03)], scale: [w + 0.12, 0.26, 0.12] });
+        for (const sx of [-1, 1]) add({ geo: box, color: trim, pos: [sx * (w / 2 + 0.03), by, 0], scale: [0.12, 0.26, d + 0.12] });
       }
-      const band = 0.5 + h * (h > 4 ? 0.52 : 0.98);
-      add({ geo: box, color: o.trim, pos: [0, band, d / 2 + 0.02], scale: [w + 0.1, 0.26, 0.12] });
-      add({ geo: box, color: o.trim, pos: [0, band, -d / 2 - 0.02], scale: [w + 0.1, 0.26, 0.12] });
-      add({ geo: box, color: o.trim, pos: [w / 2 + 0.02, band, 0], scale: [0.12, 0.26, d + 0.1] });
-      add({ geo: box, color: o.trim, pos: [-w / 2 - 0.02, band, 0], scale: [0.12, 0.26, d + 0.1] });
-      // roof (ridge runs left-right) with eaves
-      const rh = Math.min(w, d) * 0.62;
-      add({ geo: U.prismGeometry(d + 1.1, w + 0.9, rh), color: o.roof, pos: [0, top, 0], rot: [0, Math.PI / 2, 0], jitter: 0.14 });
-      add({ geo: box, color: U.shade(o.roof, -0.3), pos: [0, top + rh - 0.05, 0], scale: [w + 0.95, 0.18, 0.3] });
-      add({ geo: box, color: '#9b8f80', pos: [w * 0.27, top + rh * 0.55, -d * 0.18], scale: [0.62, rh * 1.15, 0.62], jitter: 0.1 });
-      add({ geo: box, color: '#6f665c', pos: [w * 0.27, top + rh * 1.12, -d * 0.18], scale: [0.75, 0.15, 0.75] });
-      // door + step
-      add({ geo: box, color: '#5a3520', pos: [0, 0.5 + 0.95, d / 2 + 0.05], scale: [1.15, 1.9, 0.14] });
-      add({ geo: box, color: o.trim, pos: [0, 0.5 + 1.95, d / 2 + 0.07], scale: [1.45, 0.18, 0.18] });
-      add({ geo: box, color: '#e8c35a', pos: [0.38, 0.5 + 0.95, d / 2 + 0.14], scale: [0.1, 0.1, 0.06] });
-      add({ geo: box, color: '#b3aa9c', pos: [0, 0.1, d / 2 + 0.55], scale: [1.6, 0.2, 0.7] });
-      // windows with flower boxes
+      for (const sz of [-1, 1]) for (const sx of [-1, 1]) {
+        // a stud beside the door, and a brace leaning into each corner
+        add({ geo: box, color: trim, pos: [sx * Math.min(1.0, w * 0.17), 0.5 + h / 2, sz * (d / 2 + 0.03)], scale: [0.2, h, 0.1] });
+        add({ geo: box, color: trim, pos: [sx * (w / 2 - 0.62), top - 0.85, sz * (d / 2 + 0.03)], rot: [0, 0, sx * 0.72], scale: [0.16, 1.5, 0.1] });
+      }
+      // roof: two slopes meeting at a ridge that runs left to right, overhanging all round
+      const rh = Math.min(w, d) * 0.66, span = d + 1.7, len = w + 1.5;
+      const ang = Math.atan2(rh, span / 2), sl = Math.hypot(rh, span / 2) + 0.25;
+      for (const sz of [1, -1]) {
+        const rx = sz > 0 ? ang : Math.PI - ang;
+        add({ geo: box, color: o.roof, pos: [0, top + rh / 2 + 0.12, sz * span / 4], rot: [rx, 0, 0], scale: [len, 0.2, sl], tex: 'shingle' });
+        // bargeboards on the gable ends, and a board along the eaves
+        for (const sx of [-1, 1]) add({ geo: box, color: trimDark, pos: [sx * (len / 2 + 0.02), top + rh / 2 + 0.06, sz * span / 4], rot: [rx, 0, 0], scale: [0.14, 0.34, sl], tex: 'wood' });
+        add({ geo: box, color: trimDark, pos: [0, top - 0.05, sz * (span / 2 + 0.02)], scale: [len, 0.2, 0.14], tex: 'wood' });
+      }
+      add({ geo: box, color: roofDark, pos: [0, top + rh + 0.14, 0], scale: [len + 0.1, 0.24, 0.42], tex: 'none' });
+      // gables: plaster with a king post and a collar beam
+      const gh = rh - 0.1;
+      for (const sx of [-1, 1]) {
+        add({ geo: U.prismGeometry(d, 0.16, gh), color: o.wall, pos: [sx * (w / 2 - 0.08), top, 0], rot: [0, Math.PI / 2, 0], tex: 'plaster' });
+        add({ geo: box, color: trim, pos: [sx * (w / 2 + 0.03), top + gh * 0.45, 0], scale: [0.12, gh * 0.9, 0.2] });
+        add({ geo: box, color: trim, pos: [sx * (w / 2 + 0.03), top + gh * 0.42, 0], scale: [0.12, 0.2, d * 0.56] });
+        for (const sz of [-1, 1]) add({ geo: box, color: trim, pos: [sx * (w / 2 + 0.03), top + gh * 0.2, sz * d * 0.2], rot: [sz * -0.9, 0, 0], scale: [0.12, 0.16, d * 0.34] });
+        // a round attic window
+        add({ geo: new THREE.CylinderGeometry(0.34, 0.34, 0.1, 10), color: '#a8dcff', pos: [sx * (w / 2 + 0.06), top + gh * 0.68, 0], rot: [0, 0, Math.PI / 2], tex: 'none', smooth: false });
+      }
+      // chimney: brick, with a stone cap and a pot
+      const cx = w * 0.27, cz = -d * 0.2, ch = rh * 1.25;
+      add({ geo: box, color: '#b0705a', pos: [cx, top + ch / 2, cz], scale: [0.7, ch, 0.7], tex: 'brick' });
+      add({ geo: box, color: '#8f867a', pos: [cx, top + ch + 0.08, cz], scale: [0.88, 0.16, 0.88], tex: 'none' });
+      add({ geo: new THREE.CylinderGeometry(0.16, 0.2, 0.34, 8), color: '#a8553e', pos: [cx, top + ch + 0.33, cz], tex: 'none' });
+      // door: planks in a frame, a porch roof, a lantern and a stone step
+      const fz = d / 2;
+      add({ geo: box, color: '#6a4126', pos: [0, 0.5 + 0.98, fz + 0.05], scale: [1.2, 1.95, 0.14], tex: 'wood' });
+      for (const sx of [-1, 1]) add({ geo: box, color: trimDark, pos: [sx * 0.7, 0.5 + 1.0, fz + 0.08], scale: [0.18, 2.1, 0.2] });
+      add({ geo: box, color: trimDark, pos: [0, 0.5 + 2.1, fz + 0.08], scale: [1.6, 0.2, 0.22] });
+      add({ geo: box, color: '#3a2a22', pos: [0, 0.5 + 1.5, fz + 0.13], scale: [0.4, 0.34, 0.04], tex: 'none' });                     // a little window in the door
+      add({ geo: box, color: '#e8c35a', pos: [0.4, 0.5 + 0.95, fz + 0.15], scale: [0.1, 0.1, 0.07], tex: 'none' });
+      add({ geo: box, color: o.roof, pos: [0, 0.5 + 2.55, fz + 0.5], rot: [0.5, 0, 0], scale: [2.0, 0.12, 1.1], tex: 'shingle' });       // porch roof
+      for (const sx of [-1, 1]) add({ geo: box, color: trimDark, pos: [sx * 0.9, 0.5 + 2.2, fz + 0.42], rot: [-0.75, 0, 0], scale: [0.1, 0.1, 0.9] });
+      add({ geo: box, color: '#30343e', pos: [1.05, 0.5 + 1.75, fz + 0.2], scale: [0.06, 0.06, 0.3], tex: 'none' });
+      add({ geo: box, color: '#ffe9a8', pos: [1.05, 0.5 + 1.55, fz + 0.32], scale: [0.2, 0.28, 0.2], tex: 'none' });                 // lantern (lit at night)
+      add({ geo: box, color: '#b3aa9c', pos: [0, 0.1, fz + 0.6], scale: [1.9, 0.22, 0.8], tex: 'stone' });
+      // windows: frame, glass, glazing bars, shutters, and a flower box
       const flowers = ['#ff6b8b', '#ffd84d', '#ff8f4d', '#b38cff'];
+      const shutter = U.shade(o.roof, -0.12);
       const win = (px, py, pz, ry) => {
         const nx = Math.sin(ry), nz = Math.cos(ry); // outward normal
-        const at = (o, dy) => [px + nx * o, py + (dy || 0), pz + nz * o];
+        const at = (out, dy, side) => [px + nx * out + nz * (side || 0), py + (dy || 0), pz + nz * out - nx * (side || 0)];
         const r = [0, ry, 0];
-        add({ geo: box, color: o.trim, pos: at(0.05), rot: r, scale: [1.08, 1.08, 0.1] });
-        add({ geo: box, color: '#a8dcff', pos: at(0.09), rot: r, scale: [0.8, 0.8, 0.06] });
-        add({ geo: box, color: '#fff8ea', pos: at(0.13), rot: r, scale: [0.07, 0.8, 0.03] });
-        add({ geo: box, color: '#8a5a36', pos: at(0.22, -0.6), rot: r, scale: [1.0, 0.22, 0.3] });
-        add({ geo: box, color: flowers[(this._win = (this._win || 0) + 1) % 4], pos: at(0.22, -0.44), rot: r, scale: [0.85, 0.14, 0.2] });
+        add({ geo: box, color: trim, pos: at(0.05), rot: r, scale: [1.12, 1.16, 0.12] });
+        add({ geo: box, color: '#a8dcff', pos: at(0.1), rot: r, scale: [0.84, 0.88, 0.06], tex: 'none' });
+        add({ geo: box, color: '#fff8ea', pos: at(0.14), rot: r, scale: [0.07, 0.88, 0.03], tex: 'none' });
+        add({ geo: box, color: '#fff8ea', pos: at(0.14, 0.08), rot: r, scale: [0.84, 0.07, 0.03], tex: 'none' });
+        for (const sd of [-1, 1]) add({ geo: box, color: shutter, pos: at(0.1, 0, sd * 0.8), rot: r, scale: [0.42, 1.1, 0.08], tex: 'wood' });
+        add({ geo: box, color: '#8a5a36', pos: at(0.24, -0.66), rot: r, scale: [1.1, 0.24, 0.32] });
+        const fc = flowers[(this._win = (this._win || 0) + 1) % 4];
+        for (const sd of [-0.32, 0, 0.32]) {
+          add({ geo: new THREE.IcosahedronGeometry(0.17, 0), color: sd ? fc : '#6fbf4a', pos: at(0.26, -0.46, sd), tex: 'none' });
+        }
       };
-      const wy = 0.5 + Math.min(1.9, h * 0.55);
-      win(-w * 0.3, wy, d / 2, 0); win(w * 0.3, wy, d / 2, 0);
+      const wy = 0.5 + Math.min(1.95, h * 0.55);
+      win(-w * 0.31, wy, d / 2, 0); win(w * 0.31, wy, d / 2, 0);
       win(w / 2, wy, 0, Math.PI / 2); win(-w / 2, wy, 0, -Math.PI / 2);
-      if (h > 4) { win(-w * 0.3, wy + 2.1, d / 2, 0); win(w * 0.3, wy + 2.1, d / 2, 0); win(0, wy + 2.1, -d / 2, Math.PI); }
+      if (h > 4) { win(-w * 0.31, wy + 2.1, d / 2, 0); win(w * 0.31, wy + 2.1, d / 2, 0); win(0, wy + 2.1, -d / 2, Math.PI); }
       this.nav.blockRect(x, z, w / 2 + 0.2, d / 2 + 0.2, rot);
     }
 
@@ -436,28 +477,29 @@
     treeGeometries() {
       if (this._treeGeo) return this._treeGeo;
       const ico = (r) => new THREE.IcosahedronGeometry(r, 0);
-      const trunk = new THREE.CylinderGeometry(0.2, 0.32, 2.2, 6);
+      // A trunk that flares at the roots, with two boughs reaching into the crown.
+      const trunk = (c) => [
+        { geo: new THREE.CylinderGeometry(0.2, 0.3, 2.3, 8), color: c, pos: [0, 1.25, 0] },
+        { geo: new THREE.CylinderGeometry(0.3, 0.52, 0.5, 8), color: U.shade(c, -0.1), pos: [0, 0.25, 0] },
+        { geo: new THREE.CylinderGeometry(0.09, 0.15, 1.3, 6), color: c, pos: [0.42, 2.25, 0.1], rot: [0, 0, -0.75] },
+        { geo: new THREE.CylinderGeometry(0.08, 0.14, 1.2, 6), color: c, pos: [-0.36, 2.4, -0.15], rot: [0.3, 0, 0.7] },
+      ];
+      // A crown of many leaf masses: darker and fuller below, small sunlit ones on top.
+      const crown = (dark, mid, light) => [
+        [0, 2.95, 0, 1.4, mid], [0.95, 2.55, 0.35, 1.0, dark], [-0.85, 2.5, 0.45, 0.95, dark], [0.2, 2.45, -0.95, 0.95, dark], [-0.5, 2.7, -0.7, 0.85, mid],
+        [0.6, 3.5, -0.2, 0.9, mid], [-0.55, 3.6, 0.2, 0.85, light], [0.1, 4.05, 0.05, 0.75, light], [0.75, 3.05, 0.85, 0.7, light], [-1.25, 2.95, -0.15, 0.6, mid], [1.3, 3.1, -0.4, 0.55, light],
+      ].map(([x, y, z, r, c]) => ({ geo: ico(r), color: c, pos: [x, y, z], jitter: 0.16 }));
+      // A fir: drooping tiers, wide at the bottom, each a little lighter than the one below.
+      const fir = () => {
+        const out = [{ geo: new THREE.CylinderGeometry(0.16, 0.3, 1.5, 8), color: '#6f4830', pos: [0, 0.75, 0] }];
+        const tiers = [[1.6, 1.25, 1.7, '#2f7a4c'], [1.4, 1.2, 2.35, '#37855a'], [1.15, 1.15, 3.0, '#3f9163'], [0.9, 1.1, 3.6, '#4a9e6c'], [0.62, 1.1, 4.2, '#56ab76'], [0.34, 0.9, 4.8, '#62b880']];
+        for (const [r, hh, y, c] of tiers) out.push({ geo: new THREE.ConeGeometry(r, hh, 9), color: c, pos: [0, y, 0], jitter: 0.1 });
+        return out;
+      };
       this._treeGeo = {
-        round: U.mergeParts([
-          { geo: trunk, color: '#8b5a33', pos: [0, 1.1, 0] },
-          { geo: ico(1.45), color: '#4ea84a', pos: [0, 2.9, 0], jitter: 0.22 },
-          { geo: ico(1.05), color: '#5cbd52', pos: [0.75, 2.4, 0.35], jitter: 0.22 },
-          { geo: ico(1.0), color: '#67c95a', pos: [-0.55, 3.55, -0.25], jitter: 0.22 },
-          { geo: ico(0.85), color: '#56b24d', pos: [-0.7, 2.3, 0.5], jitter: 0.22 },
-        ]),
-        blossom: U.mergeParts([
-          { geo: trunk, color: '#7a4a35', pos: [0, 1.1, 0] },
-          { geo: ico(1.5), color: '#f6b3cf', pos: [0, 2.95, 0], jitter: 0.18 },
-          { geo: ico(1.05), color: '#fbc9dd', pos: [0.8, 2.45, 0.3], jitter: 0.18 },
-          { geo: ico(1.0), color: '#f29dc1', pos: [-0.6, 3.6, -0.2], jitter: 0.18 },
-          { geo: ico(0.9), color: '#fcd6e5', pos: [-0.7, 2.35, 0.5], jitter: 0.18 },
-        ]),
-        pine: U.mergeParts([
-          { geo: new THREE.CylinderGeometry(0.18, 0.28, 1.6, 6), color: '#7a4c2c', pos: [0, 0.8, 0] },
-          { geo: new THREE.ConeGeometry(1.5, 2.0, 7), color: '#3c8a52', pos: [0, 2.2, 0], jitter: 0.15 },
-          { geo: new THREE.ConeGeometry(1.15, 1.8, 7), color: '#46995c', pos: [0, 3.25, 0], jitter: 0.15 },
-          { geo: new THREE.ConeGeometry(0.75, 1.4, 7), color: '#52a867', pos: [0, 4.2, 0], jitter: 0.15 },
-        ]),
+        round: U.mergeParts(trunk('#7d5236').concat(crown('#3f9a48', '#55b550', '#7fd05e'))),
+        blossom: U.mergeParts(trunk('#74483a').concat(crown('#ee9dc0', '#f6b6d1', '#fde0ec'))),
+        pine: U.mergeParts(fir()),
       };
       return this._treeGeo;
     }

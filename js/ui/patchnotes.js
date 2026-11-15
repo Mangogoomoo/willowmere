@@ -11,6 +11,7 @@
       'Hats and headgear are redrawn and now fit round the head from every angle, with the fringe showing underneath (ribbons, bunny ears, crowns, helms, circlets, glasses and the rest).',
       'Monsters are drawn in the same pixel-art style, and recoloured monsters (Marin, Eclipse and friends) now show their own colours in the world.',
       'The world has a soft, painted look: a gentler palette with warm light and violet shadows, rounder trees and bushes, fuller grass, and water with ripples and foam along the banks.',
+      'The town is rebuilt: timber-framed cottages with shingled roofs, stone plinths, brick chimneys, porches, lanterns and shuttered windows. Roofs, walls, stonework and wood everywhere have painted detail, and trees have fuller, layered crowns.',
       'New lighting: soft glow and soft focus, contact shadows, pale haze in the distance and mist that gathers in low ground.',
       'A day and night cycle (about 36 minutes, the same for everyone): sunrise, sunset, moon and stars. After dark, lamps and windows light up and fireflies come out.',
       'Weather: clear, cloudy, rain, storms with lightning, fog and snow, changing every few minutes.',

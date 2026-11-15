@@ -118,6 +118,21 @@
      gives foliage its soft painted look. */
   const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _e = new THREE.Euler();
   const _p = new THREE.Vector3(), _s = new THREE.Vector3(), _c = new THREE.Color(), _n3 = new THREE.Matrix3();
+  /* Surface kinds (part.tex): the painted pattern a part gets in the world shader (graphics/stylize.js).
+     Parts that don't say are guessed from their colour and shape: browns are wood, greys are masonry
+     (boxes, cylinders) or natural rock (anything irregular). Use tex: 'none' for a plain surface. */
+  const KINDS = { none: 0, plaster: 1, shingle: 2, wood: 3, stone: 4, brick: 5, thatch: 6, rock: 7 };
+  const _hsl = { h: 0, s: 0, l: 0 };
+  function kindOf(part, mode) {
+    if (part.tex != null) return KINDS[part.tex] || 0;
+    if (mode === 'ball') return 0;
+    _c.set(part.color).getHSL(_hsl);
+    const t = part.geo.type;
+    if (_hsl.h > 0.03 && _hsl.h < 0.125 && _hsl.s > 0.22 && _hsl.s < 0.8 && _hsl.l > 0.14 && _hsl.l < 0.6) return 3;
+    if (_hsl.s < 0.13 && _hsl.l > 0.28 && _hsl.l < 0.8) return (t === 'BoxGeometry' || t === 'CylinderGeometry') ? 4 : (t === 'ConeGeometry' || t === 'SphereGeometry' ? 0 : 7);
+    return 0;
+  }
+  U.SURFACE_KINDS = KINDS;
   const SMOOTH = { CylinderGeometry: 1, ConeGeometry: 1, SphereGeometry: 1, TorusGeometry: 1, CapsuleGeometry: 1, LatheGeometry: 1 };
   let BLOB = null;
   function blobGeometry() {
@@ -168,12 +183,13 @@
         g.attributes.normal.applyNormalMatrix(_n3);
       }
       total += g.attributes.position.count;
-      return { g, color: part.color, jitter: part.jitter || 0, mode, shade, pi };
+      return { g, color: part.color, jitter: part.jitter || 0, mode, shade, pi, kind: kindOf(part, mode) };
     });
-    const pos = new Float32Array(total * 3), nor = new Float32Array(total * 3), col = new Float32Array(total * 3);
+    const pos = new Float32Array(total * 3), nor = new Float32Array(total * 3), col = new Float32Array(total * 3), kinds = new Float32Array(total);
     let off = 0;
-    prepared.forEach(({ g, color, jitter, mode, shade, pi }) => {
+    prepared.forEach(({ g, color, jitter, mode, shade, pi, kind }) => {
       const n = g.attributes.position.count;
+      if (kind) kinds.fill(kind, off, off + n);
       pos.set(g.attributes.position.array, off * 3);
       nor.set(g.attributes.normal.array, off * 3);
       _c.set(color);
@@ -195,6 +211,7 @@
     out.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     out.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
     out.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    out.setAttribute('wmKind', new THREE.BufferAttribute(kinds, 1));
     out.computeBoundingSphere();
     out.computeBoundingBox();
     return out;
