@@ -927,8 +927,17 @@
       for (let i = hatStart; i < P.prims.length; i++) if (P.prims[i].bias >= 1.4) P.prims[i].bias += 13;
 
       if (costume.beard) {
-        [[-HR * 0.62, HR * 0.6, 6], [-HR * 1.05, HR * 0.52, 5], [-HR * 1.42, HR * 0.4, 3.4]].forEach(([by, bz, r]) => P.sphere([0, headY + by, hz + bz], r, costume.beard, { bias: 0.8, mat: 'hair', merge: true }));
-        P.sphere([0, headY - HR * 0.38, hz + HR * 0.86], 3.6, costume.beard, { sy: 0.42, sx: 1.5, bias: 0.9, mat: 'hair', merge: true });
+        /* A beard that follows the jaw: a shell just outside the jaw, cut away round the mouth, above the
+           cheeks and at the back, so it reads as a trimmed full beard from every side. Then a moustache
+           of two tapered sweeps and a short tuft at the chin. */
+        const BH = { mat: 'hair', strands: true };
+        P.ellipsoid([0, headY - 7.9, hz + 3.0], [11, 8.4, 10.6], costume.beard, Object.assign({ bias: 0.8, paint: (x, y, z) => {
+          if (z < -0.3 || y > 0.12 - Math.max(0, z) * 0.22) return -1;               // back of the head and the cheeks stay clear
+          if (z > 0.5 && y > -0.46 && Math.abs(x) < 0.42) return -1;                 // the mouth
+          return 0;
+        } }, BH));
+        P.capsule([0, headY - 14.5, hz + 9.5], [0, headY - 18.5, hz + 8.6], 3.6, costume.beard, Object.assign({ r2: 1.2, bias: 0.82 }, BH));
+        for (const sx of [-1, 1]) P.capsule([sx * 0.4, headY - HR * 0.4, hz + HR * 0.93], [sx * 4.6, headY - HR * 0.6, hz + HR * 0.76], 1.5, costume.beard, Object.assign({ r2: 0.5, bias: 0.95 }, BH));
       }
     };
   }
