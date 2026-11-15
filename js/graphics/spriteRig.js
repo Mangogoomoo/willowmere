@@ -93,6 +93,23 @@
   }
   // Outline colour: a dark, slightly violet version of the colour it surrounds.
   const lineCache = new Map();
+  /* Painted shading: the band is continuous, so tones melt into each other like a soft render instead of
+     stepping like pixel art. Each threshold is a soft ramp. */
+  const SOFT = 0.2;
+  function ramp(l, ts) { let b = 0; for (const t of ts) { const k = (l - t + SOFT) / (2 * SOFT); b += k <= 0 ? 0 : k >= 1 ? 1 : k * k * (3 - 2 * k); } return b; }
+  function mixRGB(a, b, k) {
+    if (k <= 0) return a; if (k >= 1) return b;
+    const r = ((a >> 16) & 255) + ((((b >> 16) & 255) - ((a >> 16) & 255)) * k), g = ((a >> 8) & 255) + ((((b >> 8) & 255) - ((a >> 8) & 255)) * k), bl = (a & 255) + (((b & 255) - (a & 255)) * k);
+    return (r << 16) | (g << 8) | bl;
+  }
+  function toneF(rgb, bf, mat) {
+    if (mat === MAT.flat) return rgb;
+    bf = bf < 0 ? 0 : bf > 4 ? 4 : bf;
+    const b0 = Math.floor(bf), f = bf - b0;
+    const c0 = tone(rgb, b0, mat);
+    return f > 0.01 && b0 < 4 ? mixRGB(c0, tone(rgb, b0 + 1, mat), f) : c0;
+  }
+
   function lineOf(rgb, k) {
     const key = rgb * 4 + (k > 0.6 ? 1 : 0);
     let out = lineCache.get(key);
@@ -120,7 +137,7 @@
     B.flag = new Uint8Array(n);      // 1 = no outline between this and neighbours of the same colour, 2 = never outlined
     B.col = new Uint32Array(n);
     B.lb = new Int8Array(n);         // light bias: cloth folds and strand shading
-    B.band = new Uint8Array(n);
+    B.band = new Float32Array(n);
     B.img = null;
     B.x0 = 0; B.y0 = 0; B.x1 = w - 1; B.y1 = h - 1;   // the area drawn on last time (cleared before the next frame)
     return B;
@@ -174,6 +191,7 @@
       return [x2, y2, z1];
     }
     _posePoint(p) {
+      if (this.warp) p = this.warp(p);          // proportions (see SpriteFactory: longer legs and body)
       if (!this.pose) return p;
       const P = this.pose, pv = P.pivot;
       const r = this._poseDir(p[0] - pv[0], p[1] - pv[1], p[2] - pv[2]);
@@ -204,21 +222,21 @@
        all: strands (hair locks), noShadow / noCast (drop shadows), gloss (hair shine)
        poly: flat polygon from 3D points; n = its normal in rig space (for shading). */
     sphere(c, r, fill, opts) {
-      this.prims.push(Object.assign({ type: 'sphere', c, r, fill, sx: 1, sy: 1, bias: 0, pose: this.pose }, opts || {}));
+      this.prims.push(Object.assign({ type: 'sphere', c, r, fill, sx: 1, sy: 1, bias: 0, pose: this.pose, warp: this.warp }, opts || {}));
     }
     // A true 3D ellipsoid: r = [rx, ry, rz] along the rig's own axes, so a head can be wider than it is deep
     // and a torso flat, and they look right from every side. Takes paint, layers and decals like a sphere.
     ellipsoid(c, r, fill, opts) {
-      this.prims.push(Object.assign({ type: 'ell', c, r3: r, fill, bias: 0, pose: this.pose }, opts || {}));
+      this.prims.push(Object.assign({ type: 'ell', c, r3: r, fill, bias: 0, pose: this.pose, warp: this.warp }, opts || {}));
     }
     capsule(a, b, r, fill, opts) {
-      this.prims.push(Object.assign({ type: 'capsule', a, b, r, fill, bias: 0, pose: this.pose }, opts || {}));
+      this.prims.push(Object.assign({ type: 'capsule', a, b, r, fill, bias: 0, pose: this.pose, warp: this.warp }, opts || {}));
     }
     poly(pts, fill, opts) {
-      this.prims.push(Object.assign({ type: 'poly', pts, fill, bias: 0, pose: this.pose }, opts || {}));
+      this.prims.push(Object.assign({ type: 'poly', pts, fill, bias: 0, pose: this.pose, warp: this.warp }, opts || {}));
     }
     custom(at, draw, bias, radius) {
-      this.prims.push({ type: 'custom', c: at, draw, bias: bias || 0, pose: this.pose, radius: radius || 26 });
+      this.prims.push({ type: 'custom', c: at, draw, bias: bias || 0, pose: this.pose, warp: this.warp, radius: radius || 26 });
     }
 
     /* Draw the frame into ctx. rect = { x, y, w, h } is the frame's area on the
@@ -235,6 +253,7 @@
 
       for (const p of this.prims) {
         this.pose = p.pose === undefined ? finalPose : p.pose;
+        this.warp = p.warp || null;
         if (p.type === 'capsule') {
           p.pa = this.proj(p.a); p.pb = this.proj(p.b);
           p.depth = (p.pa.depth + p.pb.depth) / 2 + p.bias;
@@ -251,6 +270,7 @@
       let order = 0;
       for (const [p] of sorted) {
         this.pose = p.pose === undefined ? finalPose : p.pose;
+        this.warp = p.warp || null;
         order++;
         if (p.type === 'sphere') this._sphere(buf, p, order);
         else if (p.type === 'ell') this._ellipsoid(buf, p, order);
@@ -258,7 +278,7 @@
         else if (p.type === 'poly') this._poly(buf, p, order);
         else this._custom(buf, p);
       }
-      this.pose = finalPose;
+      this.pose = finalPose; this.warp = null;
       this.ox = ox0; this.oy = oy0;
       this._finish(ctx, rect, buf);
     }
@@ -578,35 +598,43 @@
         const l = (ax * LX + ay * LY + az * LZ) / LN + lb[i] / 127;
         let band;
         if (m === MAT.metal || m === MAT.gem) {
-          band = l > 0.93 ? 4 : l > 0.62 ? 3 : l > 0.22 ? 2 : l > -0.18 ? 1 : l > -0.62 ? 0 : 1;   // a rim of bounced light
+          band = Math.max(ramp(l, [-0.18, 0.22, 0.62, 0.93]), l < -0.55 ? Math.min(1, (-0.55 - l) * 5) : 0);   // a rim of bounced light
         } else if (m === MAT.jelly) {
-          band = l > 0.9 ? 4 : l > 0.58 ? 3 : l > 0.02 ? 2 : l > -0.5 ? 1 : 2;                     // glows through at the far edge
+          band = Math.max(ramp(l, [-0.5, 0.02, 0.58, 0.9]), l < -0.45 ? Math.min(2, (-0.45 - l) * 8) : 0);      // glows through at the far edge
         } else if (m === MAT.hair) {
-          band = l > 0.74 ? 3 : l > 0.16 ? 2 : l > -0.3 ? 1 : 0;
+          band = ramp(l, [-0.3, 0.16, 0.74]);
           if (flag[i] & 32) {
-            // The classic jagged band of shine round the crown.
+            // A soft sheen round the crown.
             const ring = ay - 0.50 + 0.05 * Math.sin(ax * 19) + 0.03 * Math.sin(ax * 43 + 1);
-            if (az > 0.25 && ring > 0 && ring < 0.11) band = Math.min(4, band + (ring > 0.03 && ring < 0.08 ? 2 : 1));
+            if (az > 0.25 && ring > -0.02 && ring < 0.13) band = Math.min(4, band + 1.3 * Math.sin((ring + 0.02) / 0.15 * Math.PI));
           }
         } else if (m === MAT.skin) {
-          band = l > 0.97 ? 4 : l > 0.80 ? 3 : l > 0.10 ? 2 : l > -0.42 ? 1 : 0;
+          band = ramp(l, [-0.42, 0.10, 0.80, 0.97]);
         } else {
-          band = l > 0.95 ? 4 : l > 0.66 ? 3 : l > 0.16 ? 2 : l > -0.3 ? 1 : 0;
+          band = ramp(l, [-0.3, 0.16, 0.66, 0.95]);
         }
         bands[i] = band;
       }
       // Drop shadows: a part lying in front, on the side the light comes from, darkens what is behind it
       // (the fringe on the forehead, the head on the shoulders, an arm across the chest).
       const k = this.S / 1.25, sx = Math.max(1, Math.round(0.8 * k)), sy = Math.max(1, Math.round(1.9 * k)), so = sy * W + sx;
+      const R = Math.max(2, Math.round(2.6 * k)), AO_OFF = [-R, R, -R * W, R * W, -R - R * W, R - R * W, -R + R * W, R + R * W];
       for (let y = Y0; y <= Y1; y++) for (let x = X0; x <= X1; x++) {
         const i = y * W + x;
         if (!id[i]) continue;
         let b = bands[i];
         if (b > 0 && x >= sx && y >= sy && mat[i] !== MAT.flat && !(flag[i] & 8)) {
           const j = i - so;
-          if (id[j] > id[i] && dep[j] - dep[i] > 2.2 && !(flag[j] & 16)) b--;
+          if (id[j] > id[i] && dep[j] - dep[i] > 2.2 && !(flag[j] & 16)) b -= 0.9;
+          // Ambient occlusion: tucked-in places (under the chin, between arm and body) darken softly.
+          let occ = 0;
+          for (let a = 0; a < 8; a++) {
+            const q = i + AO_OFF[a];
+            if (q >= 0 && q < id.length && id[q] && id[q] !== id[i] && dep[q] - dep[i] > 1.5) occ++;
+          }
+          b -= occ * 0.09;
         }
-        col[i] = tone(alb[i], b, mat[i]);
+        col[i] = toneF(alb[i], b, mat[i]);
       }
       // 2. Lines between overlapping parts: drawn on the part that lies behind.
       for (let y = Y0; y <= Y1; y++) for (let x = X0; x <= X1; x++) {
@@ -646,7 +674,7 @@
           else if (y > 0 && id[i - W]) nb = i - W;
           else if (y + 1 < H && id[i + W]) nb = i + W;
           if (nb < 0) continue;
-          c = lineOf(alb[nb], 0.3);
+          c = lineOf(alb[nb], 0.42);
         }
         out[o] = (c >> 16) & 255; out[o + 1] = (c >> 8) & 255; out[o + 2] = c & 255; out[o + 3] = 255;
       }
@@ -731,6 +759,7 @@
           const col = cell % cols, row = (cell / cols) | 0;
           const t = a.loop === false ? (a.frames > 1 ? f / (a.frames - 1) : 1) : f / a.frames;
           painter.begin(theta, col * fw + def.originX * k, row * fh + def.originY * k);
+          painter.warp = null;
           def.draw(painter, a.name, t, f);
           painter.render(ctx, { x: col * fw, y: row * fh, w: fw, h: fh, direct: true });
         }

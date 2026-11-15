@@ -29,9 +29,11 @@
        glow:  colour of lit windows and lamps (linear rgb) and its strength */
   const style = new Float32Array([0, 0, 0, 1]);
   const glow = new Float32Array([1.0, 0.62, 0.26, 0]);
+  // light: [strength of the drifting cloud and canopy shade on sunlit ground 0..1, unused, unused, unused]
+  const light = new Float32Array([0, 0, 0, 0]);
   for (const id of ['physical', 'standard']) {
     const lib = THREE.ShaderLib[id];
-    if (lib) { lib.uniforms.uStyle = { value: style }; lib.uniforms.uGlow = { value: glow }; }
+    if (lib) { lib.uniforms.uStyle = { value: style }; lib.uniforms.uGlow = { value: glow }; lib.uniforms.uLight = { value: light }; }
   }
 
   // Vertex colours that light up at night (authored hex colours, compared in linear space).
@@ -45,8 +47,16 @@
   SC.lights_physical_pars_fragment = SC.lights_physical_pars_fragment.replace(
     'float dotNL = saturate( dot( geometry.normal, directLight.direction ) );\n\tvec3 irradiance = dotNL * directLight.color;',
     `float dotNLraw = dot( geometry.normal, directLight.direction );
-	float dotNL = mix( saturate( dotNLraw ), smoothstep( -0.16, 0.42, dotNLraw ) * 0.84 + 0.16 * saturate( dotNLraw ), 0.85 );
-	vec3 irradiance = dotNL * directLight.color;`);
+	float dotNL = mix( saturate( dotNLraw ), smoothstep( -0.08, 0.3, dotNLraw ) * 0.88 + 0.12 * saturate( dotNLraw ), 0.85 );
+	vec3 irradiance = dotNL * directLight.color;
+	#ifdef STANDARD
+	{
+		// Shade from passing clouds and unseen canopy: big soft patches of light and shadow drifting over the land.
+		vec3 wmLp = cameraPosition + geometry.position * mat3( viewMatrix );
+		float wmC = wmNoise( wmLp.xz * 0.045 + vec2( uStyle.z * 0.012, uStyle.z * 0.007 ) ) * 0.65 + wmNoise( wmLp.xz * 0.11 - vec2( uStyle.z * 0.02, 0.0 ) ) * 0.35;
+		irradiance *= mix( 1.0, smoothstep( 0.36, 0.6, wmC ) * 0.75 + 0.25, uLight.x );
+	}
+	#endif`);
 
   // Painted surfaces are matte: keep highlights soft, so smooth shapes don't sparkle at grazing angles.
   for (const id of ['physical', 'standard']) {
@@ -68,6 +78,7 @@
 #ifdef STANDARD
 	uniform vec4 uStyle;
 	uniform vec4 uGlow;
+	uniform vec4 uLight;
 	float wmHash( vec2 p ) { return fract( sin( dot( p, vec2( 127.1, 311.7 ) ) ) * 43758.5453 ); }
 	float wmNoise( vec2 p ) {
 		vec2 i = floor( p ), f = fract( p ); f = f * f * ( 3.0 - 2.0 * f );
@@ -81,14 +92,14 @@
 		// World position of this fragment (the view matrix is a rotation plus a move).
 		vec3 wmPos = cameraPosition - vViewPosition * mat3( viewMatrix );
 		vec3 wmN = normalize( normal * mat3( viewMatrix ) );
-		// A painted palette: strong colours are calmed and lifted toward a soft, milky mid-tone, like gouache.
+		// A painted palette: colours a little deeper and richer than the flat tints the models are built with.
 		float wmL = dot( diffuseColor.rgb, vec3( 0.2126, 0.7152, 0.0722 ) );
-		diffuseColor.rgb = mix( vec3( wmL ), diffuseColor.rgb, 0.84 ) * 0.86 + vec3( 0.064, 0.056, 0.052 );
+		diffuseColor.rgb = mix( vec3( wmL ), diffuseColor.rgb, 0.96 ) * 0.94;
 		// Brush work: broad warm and cool patches, then smaller dabs stretched along the surface.
 		vec2 wmUv = abs( wmN.y ) > 0.6 ? wmPos.xz : ( abs( wmN.x ) > abs( wmN.z ) ? wmPos.zy : wmPos.xy );
 		float wmWarm = wmNoise( wmUv * 0.11 + 3.7 ), wmCool = wmNoise( wmUv * 0.17 - 11.3 );
 		float wmB = wmNoise( wmUv * vec2( 0.9, 0.42 ) ) * 0.55 + wmNoise( wmUv * vec2( 2.6, 1.3 ) + 17.0 ) * 0.45;
-		diffuseColor.rgb *= 0.87 + 0.26 * wmB;
+		diffuseColor.rgb *= 0.84 + 0.32 * wmB;
 		diffuseColor.rgb = mix( diffuseColor.rgb, diffuseColor.rgb * vec3( 1.10, 1.03, 0.84 ), smoothstep( 0.45, 0.85, wmWarm ) * 0.75 );
 		diffuseColor.rgb = mix( diffuseColor.rgb, diffuseColor.rgb * vec3( 0.90, 0.98, 1.12 ), smoothstep( 0.5, 0.9, wmCool ) * 0.6 );
 		float wmK = floor( vWmKind + 0.5 );
@@ -143,5 +154,5 @@
 	}
 #endif`;
 
-  G.Stylize = { style, glow };
+  G.Stylize = { style, glow, light };
 })(window.G = window.G || {});

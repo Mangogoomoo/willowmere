@@ -173,7 +173,7 @@
       this.pillarTarget = null;
 
       this.shadowGeo = new THREE.PlaneGeometry(1, 1);
-      this.shadowMat = new THREE.MeshBasicMaterial({ map: U.radialTexture(64, 0.2, 1.0), color: '#1d2a14', transparent: true, opacity: 0.42, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
+      this.shadowMat = new THREE.MeshBasicMaterial({ map: U.radialTexture(64, 0.2, 1.0), color: '#161a2c', transparent: true, opacity: 0.34, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
       this.time = 0;
       this.ambientT = 0;
     }

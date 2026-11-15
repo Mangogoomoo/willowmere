@@ -4,6 +4,8 @@
 (function (G) {
   'use strict';
   const U = G.Utils, C = G.Config;
+  // The server builds the same terrain to simulate monsters; it has no canvas to paint textures on.
+  const HEADLESS = typeof navigator !== 'undefined' && navigator.userAgent === 'node';
 
   // The world's size can differ per map (the map editor can grow a map in any direction).
   let SIZE = C.WORLD_SIZE, HALF = SIZE / 2;
@@ -197,6 +199,20 @@
     tile(10, () => { speckle('#eef3f6', ['#e2e9ee', '#f8fbfc', '#d8e2e8'], 300, 3, 12); });
     tile(11, () => { for (let r = 0; r < 8; r++) { const v = 120 + rng() * 30 | 0; x.fillStyle = `rgb(${v + 30},${v},${v - 40})`; x.fillRect(0, r * 32, T, 32); x.fillStyle = 'rgba(60,35,20,0.6)'; x.fillRect(0, r * 32, T, 2);
       const off = rng() * T; x.fillRect(off, r * 32, 2, 32); x.fillRect((off + T / 2) % T, r * 32, 2, 32); for (let k = 0; k < 6; k++) { x.fillStyle = 'rgba(70,45,25,0.25)'; x.fillRect(rng() * T, r * 32 + 6 + rng() * 20, 30 + rng() * 40, 1.5); } } });
+    // Grass, dark grass, dirt, cobblestone and sand: the same painted textures as the rest of the ground.
+    const GT = HEADLESS ? null : groundTextures().canvases;
+    if (GT) {
+      const tmp = U.makeCanvas(T, T), tx = tmp.getContext('2d');
+      const fromMod = (i, src, hex) => {
+        tx.clearRect(0, 0, T, T); tx.drawImage(src, 0, 0, T, T);
+        const im = tx.getImageData(0, 0, T, T), q = im.data, col = new THREE.Color(hex), lin = [col.r, col.g, col.b];
+        for (let k = 0; k < q.length; k += 4) for (let ch = 0; ch < 3; ch++) q[k + ch] = Math.min(255, Math.pow(Math.min(1, lin[ch] * q[k + ch] / 127.5), 1 / 2.2) * 255);
+        tx.putImageData(im, 0, 0);
+        x.drawImage(tmp, (i % 4) * T, Math.floor(i / 4) * T);
+      };
+      fromMod(0, GT.grass, '#728a48'); fromMod(1, GT.grass, '#4f6e40'); fromMod(2, GT.dirt, '#d49c60'); fromMod(4, GT.sand, '#dfc28c');
+      x.drawImage(cobbleCanvas || (cobbleCanvas = paintCobbles(512, 12)), 0, 0, 512, 512, 3 * T, 0, T, T);
+    }
     paintAtlas = c;
     return c;
   }
@@ -209,13 +225,49 @@
     if (d) for (const [k, v] of Object.entries(d)) { const [px, pz] = k.split(',').map(Number); writePaint(px, pz, v[0], v[1], true); }
     const atlas = new THREE.CanvasTexture(buildPaintAtlas()); atlas.minFilter = THREE.LinearFilter; atlas.generateMipmaps = false;
     atlas.flipY = false;   // tile rows are read top-down, like they're drawn
-    const uniforms = { uPaintIdx: { value: paintIdxTex }, uPaintCov: { value: paintCovTex }, uAtlas: { value: atlas }, uHalf: { value: HALF }, uSize: { value: paintSize } };
+    const GT = groundTextures(), lin = (k) => COL[k].clone();
+    const uniforms = { uPaintIdx: { value: paintIdxTex }, uPaintCov: { value: paintCovTex }, uAtlas: { value: atlas }, uHalf: { value: HALF }, uSize: { value: paintSize },
+      uGrassTex: { value: GT.grass }, uDirtTex: { value: GT.dirt }, uRockTex: { value: GT.rock }, uSandTex: { value: GT.sand },
+      uDirt: { value: lin('dirt') }, uDirtDark: { value: lin('dirtDark') }, uSand: { value: lin('sand') }, uCliff: { value: lin(M.cave ? 'wall' : 'cliff') }, uCave: { value: M.cave ? 1 : 0 } };
     mat.onBeforeCompile = (sh) => {
       Object.assign(sh.uniforms, uniforms);
-      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec2 vPaintPos;')
-        .replace('#include <begin_vertex>', '#include <begin_vertex>\nvPaintPos = (modelMatrix * vec4(transformed, 1.0)).xz;');
-      sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec2 vPaintPos;\nuniform sampler2D uPaintIdx;\nuniform sampler2D uPaintCov;\nuniform sampler2D uAtlas;\nuniform float uHalf;\nuniform float uSize;')
+      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec2 vPaintPos;\nvarying vec4 vGroundW;\nattribute vec3 wmGround;')
+        .replace('#include <begin_vertex>', '#include <begin_vertex>\nvec4 wmWp = modelMatrix * vec4(transformed, 1.0); vPaintPos = wmWp.xz; vGroundW = vec4(wmGround, wmWp.y);');
+      sh.fragmentShader = sh.fragmentShader.replace('#include <common>', `#include <common>
+        varying vec2 vPaintPos; varying vec4 vGroundW;
+        uniform sampler2D uPaintIdx; uniform sampler2D uPaintCov; uniform sampler2D uAtlas; uniform float uHalf; uniform float uSize;
+        uniform sampler2D uGrassTex; uniform sampler2D uDirtTex; uniform sampler2D uRockTex; uniform sampler2D uSandTex;
+        uniform vec3 uDirt; uniform vec3 uDirtDark; uniform vec3 uSand; uniform vec3 uCliff; uniform float uCave;
+        float gnz( vec2 p ) { vec2 i = floor( p ), f = fract( p ); f = f * f * ( 3.0 - 2.0 * f );
+          float a = fract( sin( dot( i, vec2( 127.1, 311.7 ) ) ) * 43758.5453 ), b = fract( sin( dot( i + vec2( 1.0, 0.0 ), vec2( 127.1, 311.7 ) ) ) * 43758.5453 );
+          float c = fract( sin( dot( i + vec2( 0.0, 1.0 ), vec2( 127.1, 311.7 ) ) ) * 43758.5453 ), d = fract( sin( dot( i + vec2( 1.0, 1.0 ), vec2( 127.1, 311.7 ) ) ) * 43758.5453 );
+          return mix( mix( a, b, f.x ), mix( c, d, f.x ), f.y ); }`)
         .replace('#include <color_fragment>', `#include <color_fragment>
+          {
+            // Painted ground: each surface has its own hand-painted texture; the vertex colour tints the grass.
+            vec2 gp = vPaintPos;
+            mat2 rot = mat2( 0.8, 0.6, -0.6, 0.8 );
+            float far = smoothstep( 25.0, 85.0, length( vViewPosition ) );
+            vec3 big = texture2D( uGrassTex, rot * gp / 41.0 ).rgb * 2.0;
+            float bigL = dot( big, vec3( 0.333 ) );
+            vec3 grass = mix( texture2D( uGrassTex, gp / 10.0 ).rgb * 2.0, vec3( 0.9 ), far * 0.6 ) * mix( 0.78, 1.18, clamp( ( bigL - 0.6 ) * 1.6, 0.0, 1.0 ) );
+            vec3 base = diffuseColor.rgb * ( uCave > 0.5 ? texture2D( uRockTex, gp / 5.0 ).rgb * 2.0 : grass );
+            float n1 = gnz( gp * 0.9 ), n2 = gnz( gp * 3.1 + 7.0 );
+            vec3 dt = texture2D( uDirtTex, gp / 7.0 ).rgb * 2.0;
+            vec3 dirt = mix( uDirt, uDirtDark, smoothstep( 0.3, 0.8, gnz( gp * 0.35 ) ) * 0.7 ) * dt;
+            float gl = dot( grass, vec3( 0.333 ) );
+            float wd = smoothstep( 0.3, 0.72, vGroundW.x + ( n1 - 0.5 ) * 0.5 + ( n2 - 0.5 ) * 0.22 - ( gl - 0.9 ) * 0.5 * ( 1.0 - far ) );
+            base = mix( base, dirt, wd );
+            // A darker, damp rim where grass meets dirt, like a painted edge.
+            base *= 1.0 - 0.1 * smoothstep( 0.0, 0.5, wd ) * smoothstep( 1.0, 0.5, wd );
+            float ws = smoothstep( 0.35, 0.65, vGroundW.y + ( n1 - 0.5 ) * 0.35 );
+            base = mix( base, uSand * texture2D( uSandTex, gp / 4.0 ).rgb * 2.0, ws );
+            float wr = smoothstep( 0.3, 0.7, vGroundW.z + ( n2 - 0.5 ) * 0.4 );
+            vec3 rk = texture2D( uRockTex, vec2( gp.x + gp.y * 0.7, vGroundW.w * 1.4 + gp.y * 0.3 ) / 5.0 ).rgb * 2.0;
+            if ( uCave < 0.5 ) base = mix( base, uCliff * rk, wr );
+            else base = mix( base, diffuseColor.rgb * rk, wr );
+            diffuseColor.rgb = base;
+          }
           {
             // Blend the four nearest painted cells, each with its own texture and strength.
             vec2 pp = vPaintPos + uHalf - 0.5;
@@ -234,7 +286,7 @@
                 wsum += w * cov;
               }
             }
-            if (wsum > 0.001) diffuseColor.rgb = mix(diffuseColor.rgb, acc / wsum, clamp(wsum, 0.0, 1.0));
+            if (wsum > 0.001) diffuseColor.rgb = mix(diffuseColor.rgb, acc / wsum, smoothstep(0.0, 1.0, clamp(wsum + (gnz(vPaintPos * 1.7) - 0.5) * 0.35 * (1.0 - step(0.98, wsum)), 0.0, 1.0)));
           }`);
     };
     // A fresh shader per map load, so it is always wired to this load's paint textures
@@ -323,26 +375,159 @@
     }
     return U.canvasTexture(c, { repeat: [40, 40], anisotropy: 4 });
   }
-  function cobbleTexture() {
-    const s = 256, c = U.makeCanvas(s, s), x = c.getContext('2d');
-    x.fillStyle = '#7d7366'; x.fillRect(0, 0, s, s);
-    const rng = U.mulberry32(5), n = 7, cell = s / n;
-    for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
-      const off = (j % 2) * cell * 0.5;
-      const w = cell * (0.8 + rng() * 0.12), h = cell * (0.78 + rng() * 0.12);
-      const px = i * cell + off + (cell - w) / 2, py = j * cell + (cell - h) / 2;
-      const tint = 168 + rng() * 40 | 0;
-      const draw = (ox) => {
-        x.fillStyle = `rgb(${tint + 8},${tint + 2},${tint - 12})`;
-        x.beginPath();
-        if (x.roundRect) x.roundRect(px + ox, py, w, h, 9); else x.rect(px + ox, py, w, h);
-        x.fill();
-        x.fillStyle = 'rgba(255,255,255,0.18)';
-        x.fillRect(px + ox + 5, py + 4, w * 0.5, 3);
-      };
-      draw(0); if (px + w > s) draw(-s);
+  /* ---------- painted ground textures ----------
+     Each is a "modulator" around 1.0 (stored halved, so up to 2x brighter): the shader multiplies it with the
+     surface colour, so a map's own palette still decides the hue while the texture brings clumps, cracks and stones. */
+  let groundTex = null;
+  function modCanvas(s, base) {
+    const c = U.makeCanvas(s, s), x = c.getContext('2d');
+    x.fillStyle = mc(base); x.fillRect(0, 0, s, s);
+    return [c, x];
+  }
+  const mc = (m, a) => `rgba(${Math.min(255, m[0] * 127.5) | 0},${Math.min(255, m[1] * 127.5) | 0},${Math.min(255, m[2] * 127.5) | 0},${a == null ? 1 : a})`;
+  // Draw something at every wrapped position so the tile repeats seamlessly.
+  function wrap(s, draw) { for (const ox of [-s, 0, s]) for (const oy of [-s, 0, s]) draw(ox, oy); }
+  function blob(x, s, px, py, r, m, a) {
+    wrap(s, (ox, oy) => {
+      const g = x.createRadialGradient(px + ox, py + oy, 0, px + ox, py + oy, r);
+      g.addColorStop(0, mc(m, a)); g.addColorStop(1, mc(m, 0));
+      x.fillStyle = g; x.fillRect(px + ox - r, py + oy - r, r * 2, r * 2);
+    });
+  }
+  function paintGrass(s) {
+    const [c, x] = modCanvas(s, [0.86, 0.88, 0.82]), rng = U.mulberry32(41);
+    for (let i = 0; i < 70; i++) blob(x, s, rng() * s, rng() * s, 30 + rng() * 70, rng() < 0.5 ? [0.66, 0.76, 0.84] : [1.08, 1.08, 0.86], 0.55);
+    // Fine blades.
+    for (let i = 0; i < 4200; i++) {
+      const v = rng(), px = rng() * s, py = rng() * s, len = 5 + rng() * 9, lean = (rng() - 0.5) * 5;
+      x.strokeStyle = mc(v < 0.4 ? [0.62, 0.72, 0.78] : v < 0.8 ? [0.98, 1.02, 0.9] : [1.2, 1.18, 0.86], 0.85);
+      x.lineWidth = 1.2 + rng() * 1.4;
+      wrap(s, (ox, oy) => { x.beginPath(); x.moveTo(px + ox, py + oy); x.quadraticCurveTo(px + ox + lean * 0.3, py + oy - len * 0.6, px + ox + lean, py + oy - len); x.stroke(); });
     }
-    return U.canvasTexture(c, { anisotropy: 4 });
+    // Clover and leaf clumps: a soft shadow, the leaves, then a sunlit edge on each.
+    for (let i = 0; i < 150; i++) {
+      const cx = rng() * s, cy = rng() * s, n = 3 + (rng() * 4 | 0), r = 6 + rng() * 7, teal = rng() < 0.3;
+      const leaves = [];
+      for (let k = 0; k < n; k++) { const a = k / n * Math.PI * 2 + rng() * 0.6, d = r * (0.55 + rng() * 0.3); leaves.push([cx + Math.cos(a) * d, cy + Math.sin(a) * d * 0.8, r * (0.7 + rng() * 0.35), a]); }
+      wrap(s, (ox, oy) => {
+        x.fillStyle = mc([0.42, 0.52, 0.62], 0.55);
+        for (const [lx, ly, lr] of leaves) { x.beginPath(); x.ellipse(lx + ox + 2.5, ly + oy + 3.5, lr, lr * 0.75, 0, 0, 7); x.fill(); }
+        for (const [lx, ly, lr, a] of leaves) {
+          x.fillStyle = mc(teal ? [0.74, 0.92, 0.96] : [0.94, 1.02, 0.86]);
+          x.beginPath(); x.ellipse(lx + ox, ly + oy, lr, lr * 0.72, a, 0, 7); x.fill();
+          x.fillStyle = mc(teal ? [0.95, 1.12, 1.05] : [1.24, 1.22, 0.9], 0.9);
+          x.beginPath(); x.ellipse(lx + ox - lr * 0.25, ly + oy - lr * 0.25, lr * 0.5, lr * 0.3, a, 0, 7); x.fill();
+          x.strokeStyle = mc([0.6, 0.7, 0.72], 0.7); x.lineWidth = 1;
+          x.beginPath(); x.moveTo(lx + ox, ly + oy); x.lineTo(lx + ox - Math.cos(a) * lr * 0.8, ly + oy - Math.sin(a) * lr * 0.6); x.stroke();
+        }
+      });
+    }
+    return c;
+  }
+  function paintDirt(s) {
+    const [c, x] = modCanvas(s, [1.0, 1.0, 1.0]), rng = U.mulberry32(43);
+    for (let i = 0; i < 60; i++) blob(x, s, rng() * s, rng() * s, 25 + rng() * 60, rng() < 0.5 ? [0.84, 0.8, 0.84] : [1.12, 1.1, 1.0], 0.6);
+    for (let i = 0; i < 2600; i++) { const px = rng() * s, py = rng() * s; x.fillStyle = mc(rng() < 0.5 ? [0.86, 0.84, 0.86] : [1.1, 1.08, 1.02], 0.6); x.fillRect(px, py, 2, 2); }
+    // Dry cracks.
+    for (let i = 0; i < 22; i++) {
+      let px = rng() * s, py = rng() * s, a = rng() * 7; const pts = [[px, py]];
+      for (let k = 0; k < 6; k++) { a += (rng() - 0.5) * 1.4; px += Math.cos(a) * (8 + rng() * 10); py += Math.sin(a) * (8 + rng() * 10); pts.push([px, py]); }
+      wrap(s, (ox, oy) => {
+        for (const [col, dy, w] of [[[1.16, 1.12, 1.02], 1.5, 1.2], [[0.6, 0.55, 0.62], 0, 1.6 + rng()]]) {
+          x.strokeStyle = mc(col, 0.85); x.lineWidth = w; x.beginPath();
+          pts.forEach(([qx, qy], k) => (k ? x.lineTo(qx + ox, qy + oy + dy) : x.moveTo(qx + ox, qy + oy + dy))); x.stroke();
+        }
+      });
+    }
+    // Pebbles and a few flat stones, lit from the top left.
+    for (let i = 0; i < 170; i++) {
+      const px = rng() * s, py = rng() * s, big = i < 14, r = big ? 7 + rng() * 9 : 1.6 + rng() * 4, a = rng() * 3, tone = 0.95 + rng() * 0.25;
+      wrap(s, (ox, oy) => {
+        x.fillStyle = mc([0.5, 0.48, 0.56], 0.6); x.beginPath(); x.ellipse(px + ox + r * 0.3, py + oy + r * 0.45, r, r * 0.7, a, 0, 7); x.fill();
+        x.fillStyle = mc([tone * 0.98, tone * 1.02, tone * 1.12]); x.beginPath(); x.ellipse(px + ox, py + oy, r, r * 0.7, a, 0, 7); x.fill();
+        x.fillStyle = mc([tone * 1.18, tone * 1.2, tone * 1.24], 0.8); x.beginPath(); x.ellipse(px + ox - r * 0.25, py + oy - r * 0.22, r * 0.55, r * 0.35, a, 0, 7); x.fill();
+      });
+    }
+    return c;
+  }
+  function paintRock(s) {
+    const [c, x] = modCanvas(s, [0.95, 0.95, 0.97]), rng = U.mulberry32(47);
+    // Angular plates with a lit upper edge and dark cracks, and moss in the hollows.
+    for (let i = 0; i < 55; i++) {
+      const cx = rng() * s, cy = rng() * s, r = 20 + rng() * 40, n = 5 + (rng() * 3 | 0), tone = 0.85 + rng() * 0.3;
+      const pts = []; for (let k = 0; k < n; k++) { const a = k / n * 6.283 + rng() * 0.5; pts.push([cx + Math.cos(a) * r * (0.7 + rng() * 0.3), cy + Math.sin(a) * r * (0.6 + rng() * 0.3)]); }
+      wrap(s, (ox, oy) => {
+        const path = () => { x.beginPath(); pts.forEach(([px, py], k) => (k ? x.lineTo(px + ox, py + oy) : x.moveTo(px + ox, py + oy))); x.closePath(); };
+        path(); x.fillStyle = mc([tone, tone, tone * 1.04]); x.fill();
+        x.strokeStyle = mc([0.5, 0.48, 0.56], 0.9); x.lineWidth = 2.5; x.stroke();
+        x.save(); path(); x.clip(); x.fillStyle = mc([tone * 1.22, tone * 1.2, tone * 1.12], 0.8); x.fillRect(cx + ox - r, cy + oy - r, r * 2, r * 0.5); x.restore();
+      });
+    }
+    for (let i = 0; i < 40; i++) blob(x, s, rng() * s, rng() * s, 12 + rng() * 26, [0.7, 1.02, 0.62], 0.7);
+    return c;
+  }
+  function paintSand(s) {
+    const [c, x] = modCanvas(s, [1.0, 1.0, 1.0]), rng = U.mulberry32(53);
+    for (let i = 0; i < 40; i++) blob(x, s, rng() * s, rng() * s, 30 + rng() * 60, rng() < 0.5 ? [0.9, 0.88, 0.9] : [1.08, 1.06, 1.0], 0.6);
+    for (let i = 0; i < 5000; i++) { x.fillStyle = mc(rng() < 0.5 ? [0.82, 0.8, 0.84] : [1.14, 1.12, 1.06], 0.7); x.fillRect(rng() * s, rng() * s, 1.5, 1.5); }
+    for (let i = 0; i < 40; i++) { const px = rng() * s, py = rng() * s, w = 30 + rng() * 50; x.strokeStyle = mc([0.86, 0.84, 0.88], 0.6); x.lineWidth = 2; wrap(s, (ox, oy) => { x.beginPath(); x.moveTo(px + ox, py + oy); x.quadraticCurveTo(px + ox + w / 2, py + oy - 5, px + ox + w, py + oy); x.stroke(); }); }
+    return c;
+  }
+  function groundTextures() {
+    if (groundTex) return groundTex;
+    const mk = (canvas) => {
+      const t = canvas ? new THREE.CanvasTexture(canvas) : new THREE.DataTexture(new Uint8Array([128, 128, 128, 255]), 1, 1);
+      t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 4; t.needsUpdate = true; return t;
+    };
+    const S = 512;
+    groundTex = HEADLESS ? { grass: mk(), dirt: mk(), rock: mk(), sand: mk(), canvases: null }
+      : (() => { const cv = { grass: paintGrass(S), dirt: paintDirt(S), rock: paintRock(S), sand: paintSand(S) };
+        return { grass: mk(cv.grass), dirt: mk(cv.dirt), rock: mk(cv.rock), sand: mk(cv.sand), canvases: cv }; })();
+    return groundTex;
+  }
+
+  /* Cobblestones: irregular rounded stones (a jittered Voronoi pattern), pale and weathered, set in mossy grout. */
+  let cobbleCanvas = null;
+  function paintCobbles(s, n) {
+    const c = U.makeCanvas(s, s); if (HEADLESS) return c;
+    const x = c.getContext('2d'), img = x.createImageData(s, s), d = img.data, rng = U.mulberry32(77);
+    const cell = s / n, pts = [];
+    for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
+      const t = rng(), base = t < 0.35 ? [206, 200, 180] : t < 0.6 ? [190, 192, 182] : t < 0.85 ? [184, 192, 170] : [214, 198, 172];
+      const v = 0.86 + rng() * 0.2;
+      pts.push([(i + 0.15 + rng() * 0.7) * cell, (j + 0.15 + rng() * 0.7) * cell, base.map((q) => q * v), rng()]);
+    }
+    for (let py = 0; py < s; py++) for (let px = 0; px < s; px++) {
+      const ci = Math.floor(px / cell), cj = Math.floor(py / cell);
+      let d1 = 1e9, d2 = 1e9, best = null, bx = 0, by = 0;
+      for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) {
+        const ii = (ci + di + n) % n, jj = (cj + dj + n) % n, p = pts[jj * n + ii];
+        const qx = p[0] + (ci + di - ii) * cell, qy = p[1] + (cj + dj - jj) * cell;
+        const dd = (px - qx) * (px - qx) + (py - qy) * (py - qy);
+        if (dd < d1) { d2 = d1; d1 = dd; best = p; bx = qx; by = qy; } else if (dd < d2) d2 = dd;
+      }
+      const edge = (Math.sqrt(d2) - Math.sqrt(d1)) * 0.5;            // distance to the stone's border
+      const o = (py * s + px) * 4;
+      const nz = U.noise2(px * 0.09, py * 0.09) * 0.16 + U.noise2(px * 0.4, py * 0.4) * 0.06;
+      if (edge < 2.2) {                                              // grout: dark green-grey, mossy in places
+        const m = U.noise2(px * 0.05 + 9, py * 0.05) > 0.55 ? [96, 112, 70] : [104, 108, 92];
+        d[o] = m[0] * (0.85 + nz); d[o + 1] = m[1] * (0.85 + nz); d[o + 2] = m[2] * (0.85 + nz);
+      } else {
+        // Rounded top: light on the upper-left rim, shade on the lower-right.
+        const r = Math.hypot(px - bx, py - by) || 1, ux = (px - bx) / r, uy = (py - by) / r;
+        const rim = 1 - U.smoothstep(2.2, 7, edge);
+        const lit = -(ux * 0.6 + uy * 0.8) * rim;
+        const k = (0.92 + nz + lit * 0.32) * (1 - rim * 0.12);
+        d[o] = best[2][0] * k; d[o + 1] = best[2][1] * k; d[o + 2] = best[2][2] * k;
+      }
+      d[o + 3] = 255;
+    }
+    x.putImageData(img, 0, 0);
+    return c;
+  }
+  function cobbleTexture() {
+    cobbleCanvas = cobbleCanvas || paintCobbles(512, 12);
+    return U.canvasTexture(cobbleCanvas, { anisotropy: 4 });
   }
   function plankTexture() {
     const c = U.makeCanvas(128, 256), x = c.getContext('2d');
@@ -373,9 +558,9 @@
 
   /* ---------- colours ---------- */
   const DEFAULT_PALETTE = {
-    grassA: '#79c257', grassB: '#9ad566', grassDark: '#5e9e44', meadow: '#bcd86a',
-    town: '#8fcf68', dirt: '#c9a06b', dirtDark: '#b08754', sand: '#e0cd93',
-    bed: '#6d8a63', cliff: '#8f9c78', cliffHi: '#6f8a5a',
+    grassA: '#728a48', grassB: '#7f9450', grassDark: '#4f6e40', meadow: '#98a058',
+    town: '#748c4a', dirt: '#d49c60', dirtDark: '#b4804e', sand: '#dfc28c',
+    bed: '#5d7a5a', cliff: '#8b8577', cliffHi: '#5c7a40',
     floor: '#7d7366', floorDark: '#625a50', wall: '#4b4540', moss: '#5f7a4a',
   };
   const COL = {};
@@ -390,6 +575,29 @@
     // Moss creeping along the foot of the walls.
     const foot = U.smoothstep(0.25, 0.9, h) * (1 - U.smoothstep(1.2, 3, h));
     if (foot > 0 && U.noise2(x * 0.4, z * 0.4) > 0.45) _c.lerp(COL.moss, foot * 0.8);
+    return _c;
+  }
+
+  // Grass tint alone (no paths, sand or rock) plus how much of each of those lies here.
+  const _gw = [0, 0, 0];
+  function groundParts(x, z, h) {
+    _gw[0] = _gw[1] = _gw[2] = 0;
+    if (M.cave) { caveColor(x, z, h); _gw[2] = U.smoothstep(0.5, 3.5, h); return _c; }
+    const n1 = U.fbm(x * 0.045, z * 0.045, 3);
+    _c.copy(COL.grassA).lerp(COL.grassB, U.smoothstep(0.35, 0.7, n1));
+    const patch = U.noise2(x * 0.09 + 40, z * 0.09);
+    if (patch > 0.72) _c.lerp(COL.meadow, U.smoothstep(0.72, 0.85, patch) * 0.7);
+    if (h > 1.2) _c.lerp(COL.grassDark, U.smoothstep(1.2, 4.5, h) * 0.6);
+    const tf = townFactor(x, z);
+    if (tf > 0) _c.lerp(COL.town, tf * 0.8);
+    if (h < C.WATER_LEVEL) _c.lerp(COL.bed, U.smoothstep(C.WATER_LEVEL, C.WATER_LEVEL - 0.6, h));
+    if (!M.noPaths) {
+      const pd = pathDistance(x, z);
+      _gw[0] = 1 - U.smoothstep(1.2, 3.0, pd + (U.noise2(x * 0.6, z * 0.6) - 0.5) * 1.2);
+    }
+    if (h < 0.1) _gw[1] = U.smoothstep(0.1, -0.3, h) * (h < C.WATER_LEVEL ? U.smoothstep(C.WATER_LEVEL - 0.6, C.WATER_LEVEL, h) : 1);
+    const b = boundaryAmount(x, z);
+    if (b > 0) _gw[2] = U.smoothstep(2, 12, b);
     return _c;
   }
 
@@ -428,19 +636,21 @@
     geo.rotateX(-Math.PI / 2);
     groundGeo = geo;
     const pos = geo.attributes.position;
-    const colors = new Float32Array(pos.count * 3);
+    const colors = new Float32Array(pos.count * 3), weights = new Float32Array(pos.count * 3);
     for (let i = 0; i < pos.count; i++) {
       const x = pos.getX(i), z = pos.getZ(i);
       const ix = Math.round((x + HALF) / STEP), iz = Math.round((z + HALF) / STEP);
       const h = heights[iz * N + ix];
       pos.setY(i, h);
-      const c = groundColor(x, z, h);
+      const c = groundParts(x, z, h);
       colors[i * 3] = c.r; colors[i * 3 + 1] = c.g; colors[i * 3 + 2] = c.b;
+      weights[i * 3] = _gw[0]; weights[i * 3 + 1] = _gw[1]; weights[i * 3 + 2] = _gw[2];
     }
     geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    geo.setAttribute('wmGround', new THREE.BufferAttribute(weights, 3));
     geo.computeVertexNormals();
     const mat = new THREE.MeshStandardMaterial({
-      vertexColors: true, map: grassDetailTexture(), roughness: 1, metalness: 0,
+      vertexColors: true, roughness: 1, metalness: 0,
     });
     setupPaint(mat);
     const mesh = new THREE.Mesh(geo, mat);
@@ -490,7 +700,7 @@
     // Cobbled plaza and streets.
     const ctex = cobbleTexture();
     const plazaTex = ctex.clone(); plazaTex.needsUpdate = true;
-    plazaTex.wrapS = plazaTex.wrapT = THREE.RepeatWrapping; plazaTex.repeat.set(5, 5);
+    plazaTex.wrapS = plazaTex.wrapT = THREE.RepeatWrapping; plazaTex.repeat.set(5.8, 5.8);
     const plaza = new THREE.Mesh(new THREE.CircleGeometry(13, 48),
       new THREE.MeshStandardMaterial({ map: plazaTex, roughness: 0.95, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }));
     plaza.rotation.x = -Math.PI / 2;
@@ -501,7 +711,7 @@
     STREETS.forEach(([x1, z1, x2, z2, w]) => {
       const len = Math.hypot(x2 - x1, z2 - z1);
       const t = ctex.clone(); t.needsUpdate = true;
-      t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(w / 2.6, len / 2.6);
+      t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(w / 4.5, len / 4.5);
       const m = new THREE.Mesh(new THREE.PlaneGeometry(w, len),
         new THREE.MeshStandardMaterial({ map: t, roughness: 0.95, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 }));
       m.rotation.order = 'YXZ';

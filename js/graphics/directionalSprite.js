@@ -66,10 +66,7 @@
       #include <fog_vertex>
     }`;
 
-  /* Pixel-art sampling: texels stay crisp when the sprite is drawn larger than
-     its sheet (edges are one screen pixel wide instead of blurred), and it
-     falls back to smooth mip-mapped sampling when drawn smaller.
-     The sheet holds display colours; `light` is the scene's ambient tint
+  /* The sheet holds display colours; `light` is the scene's ambient tint
      (night, storms), shared by every sprite. */
   const FRAG = `
     uniform sampler2D map;
@@ -83,17 +80,37 @@
     varying vec2 vUv;
     #include <fog_pars_fragment>
     void main() {
-      vec2 px = vUv * texSize;
-      vec2 fw = max(fwidth(px), vec2(1e-5));
-      vec2 sharp = (floor(px) + 0.5 + clamp((fract(px) - 0.5) / fw, -0.5, 0.5)) / texSize;
-      vec2 uv = mix(sharp, vUv, step(1.0, max(fw.x, fw.y)));
-      vec4 tex = texture2D(map, uv);
+      // Painted sprites: plain smooth sampling.
+      vec4 tex = texture2D(map, vUv);
       if (tex.a < alphaTest) discard;
       vec3 rgb = display > 0.5 ? tex.rgb : pow(tex.rgb, vec3(1.0 / 2.2));
       vec4 c = vec4(rgb * color * light, tex.a * opacity);
       if (silhouette > 0.5) c = vec4(color, 0.5 * opacity);
       gl_FragColor = c;
       #include <fog_fragment>
+    }`;
+
+  /* Cast shadow: in the sun's shadow pass the quad faces the sun, so the character's silhouette falls
+     across the ground as a long shadow, like everything else in the world. */
+  const SHADOW_VERT = `
+    uniform vec2 center;
+    uniform vec2 scale;
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      vec2 local = (position.xy - (center - 0.5)) * scale;
+      vec4 mv = viewMatrix * vec4((modelMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz, 1.0);
+      mv.xy += local;
+      gl_Position = projectionMatrix * mv;
+    }`;
+  const SHADOW_FRAG = `
+    #include <packing>
+    uniform sampler2D map;
+    uniform float opacity;
+    varying vec2 vUv;
+    void main() {
+      if (texture2D(map, vUv).a < 0.5 || opacity < 0.5) discard;
+      gl_FragColor = packDepthToRGBA(gl_FragCoord.z);
     }`;
 
   // Ambient tint for all sprites (set by the atmosphere: night, storms, caves).
@@ -135,6 +152,12 @@
       this.mesh = new THREE.Mesh(geo, this.material);
       this.mesh.frustumCulled = false;
       this.mesh.renderOrder = 2;
+      this.mesh.castShadow = opts.castShadow !== false;
+      this.material.shadowSide = THREE.DoubleSide;   // the quad faces the sun in the shadow pass
+      this.mesh.customDepthMaterial = new THREE.ShaderMaterial({
+        uniforms: { map: shared.map, center: shared.center, scale: shared.scale, opacity: this.uniforms.opacity },
+        vertexShader: SHADOW_VERT, fragmentShader: SHADOW_FRAG,
+      });
 
       if (opts.silhouette) {
         const gu = Object.assign({}, shared, {
@@ -251,6 +274,7 @@
     dispose() {
       this.mesh.geometry.dispose();
       this.material.dispose();
+      this.mesh.customDepthMaterial.dispose();
       if (this.ghost) this.ghost.material.dispose();
     }
   }

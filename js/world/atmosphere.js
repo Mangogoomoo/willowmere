@@ -28,19 +28,19 @@
 
   // Looks for the three anchors of the cycle (display colours).
   const DAY = {
-    top: rgb('#62a2ec'), mid: rgb('#aed3f7'), horizon: rgb('#e9eef8'), fog: rgb('#d9e3f6'), near: 34, far: 300,
-    sun: rgb('#ffe6ba'), sunI: 1.22, hemiSky: rgb('#e9e6ff'), hemiGround: rgb('#a898c0'), hemiI: 0.84,
-    tint: [1.03, 1.0, 0.965], sat: 1.07, sprite: [1, 1, 1], glowCol: rgb('#ffe2b0'), cloudLit: rgb('#fffaf2'), cloudDark: rgb('#c4c8ea'),
+    top: rgb('#3f8ee6'), mid: rgb('#8cc4f4'), horizon: rgb('#d9ecf7'), fog: rgb('#cfe2f2'), near: 95, far: 360,
+    sun: rgb('#ffe6b4'), sunI: 1.05, hemiSky: rgb('#8eaaff'), hemiGround: rgb('#6d6a98'), hemiI: 0.78,
+    tint: [1.02, 1.0, 0.97], sat: 1.06, sprite: [1, 1, 1], glowCol: rgb('#ffe2b0'), cloudLit: rgb('#ffffff'), cloudDark: rgb('#b9c8e6'),
   };
   const DUSK = {
-    top: rgb('#5a4f9a'), mid: rgb('#ef9a86'), horizon: rgb('#ffd9a6'), fog: rgb('#f0b9a4'), near: 20, far: 220,
-    sun: rgb('#ffab6e'), sunI: 0.9, hemiSky: rgb('#e6b8d6'), hemiGround: rgb('#8a6c8e'), hemiI: 0.74,
-    tint: [1.04, 0.98, 0.93], sat: 1.02, sprite: [1.0, 0.92, 0.86], glowCol: rgb('#ff9a55'), cloudLit: rgb('#ffd0a0'), cloudDark: rgb('#8a68a0'),
+    top: rgb('#3f3a86'), mid: rgb('#e8825c'), horizon: rgb('#ffcf8c'), fog: rgb('#e9a682'), near: 60, far: 280,
+    sun: rgb('#ffa060'), sunI: 0.95, hemiSky: rgb('#c89ad0'), hemiGround: rgb('#6a5490'), hemiI: 0.7,
+    tint: [1.06, 0.97, 0.9], sat: 1.1, sprite: [1.0, 0.9, 0.82], glowCol: rgb('#ff9a55'), cloudLit: rgb('#ffc890'), cloudDark: rgb('#7a5a90'),
   };
   const NIGHT = {
-    top: rgb('#0b0c2c'), mid: rgb('#1c2260'), horizon: rgb('#3a3f8a'), fog: rgb('#2a2e6c'), near: 18, far: 210,
-    sun: rgb('#b4c0ff'), sunI: 0.5, hemiSky: rgb('#8088e6'), hemiGround: rgb('#3a3470'), hemiI: 0.72,
-    tint: [0.92, 0.95, 1.12], sat: 0.94, sprite: [0.76, 0.8, 1.0], glowCol: rgb('#5878d0'), cloudLit: rgb('#6a6cb4'), cloudDark: rgb('#1c1c4c'),
+    top: rgb('#070a26'), mid: rgb('#141c58'), horizon: rgb('#2c3884'), fog: rgb('#202a66'), near: 50, far: 260,
+    sun: rgb('#a8bcff'), sunI: 0.55, hemiSky: rgb('#6c7ee6'), hemiGround: rgb('#2c2c6c'), hemiI: 0.5,
+    tint: [0.9, 0.95, 1.14], sat: 1.05, sprite: [0.72, 0.78, 1.0], glowCol: rgb('#5878d0'), cloudLit: rgb('#5a66aa'), cloudDark: rgb('#161a44'),
   };
   // Weather: [clouds 0..1, rain, snow, fog, storm]
   const WEATHER = {
@@ -237,7 +237,7 @@
     /* Hour of the day, 0..24 (6 = sunrise, 18 = sunset). */
     hour() {
       if (this.override.hour != null) return this.override.hour;
-      if (this.mode === 'day') return 12.8;
+      if (this.mode === 'day') return 14.6;
       if (this.mode === 'night') return 0.6;
       const u = ((Date.now() / 1000) % CYCLE) / CYCLE;
       return u < DAY_PART ? 6 + (u / DAY_PART) * 12 : (18 + ((u - DAY_PART) / (1 - DAY_PART)) * 12) % 24;
@@ -269,7 +269,7 @@
       if (this.mode === 'fixed') {
         const F = this.fixed;
         L = Object.assign({ tint: [1, 1, 1], sat: 1.04, sprite: [1, 1, 1], glowCol: [0, 0, 0], cloudLit: mix3(F.horizon, [1, 1, 1], 0.3), cloudDark: mix3(F.top, F.mid, 0.5) }, F);
-        this.lightDir.set(38, 78, 30).normalize();
+        this.lightDir.set(52, 46, 38).normalize();
         sunPos.set(0, -1, 0);
         nightW = F.dark; glow = F.dark > 0.35 ? 1 : 0;
         starAmt = this.outdoor ? U.smoothstep(0.6, 0.9, F.dark) : 0;
@@ -277,7 +277,7 @@
       } else {
         const hour = this.hour(), isDay = hour >= 6 && hour < 18;
         const a = isDay ? ((hour - 6) / 12) * Math.PI : (((hour + 6) % 24) / 12) * Math.PI;      // 0..pi across the sky
-        const arc = new THREE.Vector3(Math.cos(a) * 0.92, Math.sin(a) + 0.1, 0.4 - Math.sin(a) * 0.12).normalize();
+        const arc = new THREE.Vector3(Math.cos(a) * 0.92, Math.sin(a) * 0.38 + 0.06, 0.58 - Math.sin(a) * 0.08).normalize();   // never overhead: shadows stay long
         const e = isDay ? Math.sin(a) : -Math.sin(a) * 0.7;                                      // sun elevation
         if (isDay) { sunPos.copy(arc); moonPos.set(-arc.x, -arc.y, -arc.z); } else { moonPos.set(arc.x, arc.y, -arc.z).normalize(); sunPos.set(-arc.x, -arc.y * 0.4 - 0.05, arc.z).normalize(); }
         dayW = U.smoothstep(0.0, 0.42, e); nightW = U.smoothstep(0.04, -0.24, e); tw = Math.max(0, 1 - dayW - nightW);
@@ -286,7 +286,7 @@
         for (const k of ['top', 'mid', 'horizon', 'fog', 'sun', 'hemiSky', 'hemiGround', 'tint', 'sprite', 'glowCol', 'cloudLit', 'cloudDark']) L[k] = blend3(D[k], DUSK[k], NIGHT[k], dayW, tw, nightW);
         for (const k of ['near', 'far', 'hemiI', 'sat']) L[k] = blend1(D[k], DUSK[k], NIGHT[k], dayW, tw, nightW);
         // The light is the sun by day and the moon by night; it fades out as one sets and the other takes over.
-        if (e > -0.04) { this.lightDir.copy(sunPos); if (this.lightDir.y < 0.16) this.lightDir.setY(0.16).normalize(); L.sunI = blend1(D.sunI, DUSK.sunI, 0, dayW, tw, nightW) * U.smoothstep(-0.04, 0.16, e); }
+        if (e > -0.04) { this.lightDir.copy(sunPos); if (this.lightDir.y < 0.2) this.lightDir.setY(0.2).normalize(); L.sunI = blend1(D.sunI, DUSK.sunI, 0, dayW, tw, nightW) * U.smoothstep(-0.04, 0.16, e); }
         else { this.lightDir.copy(moonPos); if (this.lightDir.y < 0.3) this.lightDir.setY(0.3).normalize(); L.sunI = NIGHT.sunI * U.smoothstep(-0.04, -0.2, e); L.sun = NIGHT.sun; }
         moonAmt = nightW; starAmt = nightW * (1 - clouds * 0.9);
         sunDisc = mix3(mix3(DUSK.sun, [1, 0.97, 0.88], dayW), [0, 0, 0], U.smoothstep(-0.02, -0.14, e));
@@ -337,6 +337,7 @@
       this.night = nightW; this.glow = glow;
       if (S) {
         S.style[0] = nightW; S.style[1] = snow > 0.05 ? -Math.min(1, snow * 1.1) : wet;   // rain soaks, snow settles S.style[2] = this.time; S.style[3] = this.mode === 'fixed' ? 0.5 : 0.35 + dayW * 0.65;
+        S.light[0] = this.outdoor ? Math.max(0, dayW + tw * 0.6) * (1 - over) * 0.85 : 0;
         const gc = new THREE.Color(1.0, 0.66, 0.3).convertSRGBToLinear();
         S.glow[0] = gc.r; S.glow[1] = gc.g; S.glow[2] = gc.b; S.glow[3] = glow * 1.7;
       }
@@ -345,8 +346,8 @@
       if (post) {
         const pu = post.u;
         pu.fogColor.value.setRGB(fog[0], fog[1], fog[2]);
-        pu.fogNear.value = near; pu.fogFar.value = Math.max(near + 5, far); pu.fogMax.value = this.mode === 'fixed' ? 1 : U.lerp(0.78, 1, Math.max(fogW, over * 0.6));
-        pu.pastel.value = 1; pu.soft.value = 0.26 + tw * 0.14; pu.focus.value = this.map && (this.map.cave || this.map.indoor) ? 0.6 : 1;
+        pu.fogNear.value = near; pu.fogFar.value = Math.max(near + 5, far); pu.fogMax.value = this.mode === 'fixed' ? 1 : U.lerp(0.55, 1, Math.max(fogW, over * 0.6));
+        pu.pastel.value = 1; pu.soft.value = 0.12 + tw * 0.14; pu.ink.value = this.map && this.map.cave ? 0.5 : 0.75; pu.focus.value = this.map && (this.map.cave || this.map.indoor) ? 0.6 : 1;
         const dawn = this.mode === 'fixed' ? 0 : tw;
         pu.mist.value = this.outdoor ? 0.10 + dawn * 0.35 + nightW * 0.2 + fogW * 2.6 + rain * 0.5 : (this.map && this.map.cave ? 0.5 : 0.05);
         pu.mistTop.value = this.outdoor ? 0.4 + fogW * 3 : 0.3; pu.mistFall.value = this.outdoor ? U.lerp(0.42, 0.1, fogW) : 0.8;
@@ -356,7 +357,7 @@
         pu.time.value = this.time;
         pu.tint.value.setRGB(L.tint[0] * dim + (1 - dim) * 0.9, L.tint[1] * dim + (1 - dim) * 0.93, L.tint[2] * dim + (1 - dim) * 0.98);
         pu.saturation.value = L.sat - over * 0.16 - fogW * 0.1;
-        pu.contrast.value = 0.97 - fogW * 0.05;
+        pu.contrast.value = 1.05 - fogW * 0.08 - over * 0.04;
         pu.bloom.value = 0.42 + glow * 0.35 + tw * 0.2;
         pu.flash.value = fl * 0.35;
         pu.ao.value = 0.75;

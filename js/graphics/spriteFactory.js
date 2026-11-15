@@ -208,7 +208,7 @@
        mouth and a touch of blush. One set per expression. */
     const LASH = '#2b1a26', skinDark = U.shade(NV.skin, -0.3);
     function eye(sx, mood) {
-      const w = 3.0, h = 4.5;
+      const w = 2.7, h = 3.8;
       return {
         n: norm([sx * 0.45, -0.2, 0.87]), draw(ctx) {
           ctx.lineCap = 'round'; ctx.lineJoin = 'round';
@@ -357,8 +357,13 @@
       P.setPose(0, 0, [0, 0, 0], [0, LIFT, 0]);
     }
 
+    // Proportions: everything below the shoulders is drawn taller (longer legs, body and arms), so the
+    // figure stands about three heads high instead of a big-headed chibi.
+    const STRETCH = 1.2, warp = (p) => (p[1] < SH ? [p[0], p[1] * STRETCH, p[2]] : [p[0], p[1] + SH * (STRETCH - 1), p[2]]);
     return function drawNovice(P, anim, t) {
+      P.warp = null;
       if (look.mount) drawPeco(P, anim, t);
+      P.warp = warp;
       const C = NV;
       let bob = 0, swing = 0, liftL = 0, liftR = 0, lean = 0, handR = null, handL = null, drop = 0, twist = 0;
       let eyesClosed = false;
@@ -928,317 +933,323 @@
     };
   }
 
-  /* ===================================================== PORING (original jelly slime) */
-  const PR = { body: '#ff9cb8', light: '#ffe1ea', dark: '#e8678f', outline: '#b8476c' };
-  function poringFace(squint, closed) {
-    return [
-      eyeDecal([0.34, 0.12, 0.93], null, closed ? { closed: true } : squint ? { squint: 1 } : { w: 2.4, h: 3.5, outer: '#2b1a24' }),
-      eyeDecal([-0.34, 0.12, 0.93], null, closed ? { closed: true } : squint ? { squint: -1 } : { w: 2.4, h: 3.5, outer: '#2b1a24' }),
-      {
-        n: norm([0, -0.12, 0.99]), draw(ctx) {
-          ctx.beginPath(); ctx.moveTo(-2.4, 0.6); ctx.quadraticCurveTo(0, -3.2, 2.4, 0.6); ctx.closePath();
-          ctx.fillStyle = '#8f2f4b'; ctx.fill();
-          ell(ctx, 0, -1.4, 1.2, 0.7, '#ff7d9b');
-        },
-      },
-      blush([0.6, -0.05, 0.8], 2.8), blush([-0.6, -0.05, 0.8], 2.8),
-    ];
-  }
-  const PORING_FACE = poringFace(false), PORING_SQUINT = poringFace(true), PORING_BLINK = poringFace(false, true);
+  /* ===================================================== MONSTERS
+     Redrawn for the painted look: fuller shapes, more parts, soft materials (jelly, fur, chitin, cloth). */
+  const lerp3m = (a, b, k) => [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k];
+  // Glossy, simple eyes: a dark oval with a big catch-light, the RO3 way.
+  const gloss = (n, w, h, col) => ({ n: norm(n), draw(ctx) {
+    ell(ctx, 0, 0, w, h, col || '#241820');
+    ell(ctx, 0, -h * 0.35, w * 0.7, h * 0.4, 'rgba(120,90,140,0.45)');
+    ell(ctx, -w * 0.28, h * 0.32, w * 0.42, h * 0.3, '#ffffff');
+    ell(ctx, w * 0.35, -h * 0.3, w * 0.16, w * 0.16, 'rgba(255,255,255,0.8)');
+  } });
+  const shut = (n, w) => ({ n: norm(n), draw(ctx) { ctx.beginPath(); ctx.arc(0, 1.2, w || 2.4, Math.PI * 1.15, Math.PI * 1.85); ctx.strokeStyle = '#2a1c25'; ctx.lineWidth = 1.1; ctx.lineCap = 'round'; ctx.stroke(); } });
+  const squeeze = (n, sx2) => ({ n: norm(n), draw(ctx) { ctx.beginPath(); ctx.moveTo(-2 * sx2, 1.5); ctx.lineTo(1.6 * sx2, 0); ctx.lineTo(-2 * sx2, -1.5); ctx.strokeStyle = '#2a1c25'; ctx.lineWidth = 1.2; ctx.lineCap = 'round'; ctx.stroke(); } });
+  const faceSet = (eyes, extra) => ({
+    open: eyes.map(([n, w, h, c]) => gloss(n, w, h, c)).concat(extra || []),
+    blink: eyes.map(([n, w]) => shut(n, w)).concat(extra || []),
+    hit: eyes.map(([n], i) => squeeze(n, i ? -1 : 1)).concat(extra || []),
+  });
 
+  /* ---- PORING: a glossy drop of jelly with a curled tip, an open little mouth and a sheen across the top. */
+  const PR = { body: '#ff8fb0', light: '#ffe1ea', dark: '#d9577f' };
+  const poringMouth = { n: norm([0, -0.2, 0.98]), draw(ctx) {
+    ctx.beginPath(); ctx.moveTo(-2.6, 0.8); ctx.quadraticCurveTo(0, -3.6, 2.6, 0.8); ctx.quadraticCurveTo(0, 0.2, -2.6, 0.8); ctx.fillStyle = '#7a2440'; ctx.fill();
+    ell(ctx, 0, -1.6, 1.4, 0.8, '#ff6f92');
+  } };
+  const PORING_F = faceSet([[[0.33, 0.14, 0.93], 2.3, 3.6], [[-0.33, 0.14, 0.93], 2.3, 3.6]], [poringMouth, blush([0.62, -0.05, 0.78], 2.6), blush([-0.62, -0.05, 0.78], 2.6)]);
   const makePoring = (PR, leaf) => function drawJelly(P, anim, t) { drawPoringWith(P, anim, t, PR, leaf); };
   function drawPoring(P, anim, t) { drawPoringWith(P, anim, t, PR, false); }
   function drawPoringWith(P, anim, t, PR, leaf) {
     const r = 17;
-    let y = 0, sx = 1, sy = 1, z = 0, squint = false, alpha = 1;
-    if (anim === 'idle') {
-      const s = Math.sin(t * TAU); sx = 1 + 0.045 * s; sy = 1 - 0.055 * s;
-    } else if (anim === 'walk') {
-      const h = Math.sin(t * Math.PI);
-      y = h * 9;
-      sx = 1.16 - 0.26 * h; sy = 0.84 + 0.28 * h;
-    } else if (anim === 'attack') {
-      if (t < 0.35) { const k = t / 0.35; sx = 1 + 0.22 * k; sy = 1 - 0.24 * k; }
-      else if (t < 0.7) { const k = (t - 0.35) / 0.35; sx = 0.88; sy = 1.14; z = Math.sin(k * Math.PI) * 10; y = Math.sin(k * Math.PI) * 5; }
+    let y = 0, sx = 1, sy = 1, z = 0, face = 'open';
+    if (anim === 'idle') { const s2 = Math.sin(t * TAU); sx = 1 + 0.05 * s2; sy = 1 - 0.06 * s2; if (t >= 0.82) face = 'blink'; }
+    else if (anim === 'walk') { const h = Math.sin(t * Math.PI); y = h * 10; sx = 1.18 - 0.28 * h; sy = 0.82 + 0.3 * h; }
+    else if (anim === 'attack') {
+      if (t < 0.35) { const k = t / 0.35; sx = 1 + 0.24 * k; sy = 1 - 0.26 * k; }
+      else if (t < 0.7) { const k = (t - 0.35) / 0.35; sx = 0.86; sy = 1.16; z = Math.sin(k * Math.PI) * 11; y = Math.sin(k * Math.PI) * 6; }
       else { const k = (t - 0.7) / 0.3; sx = 1 + 0.08 * (1 - k); sy = 1 - 0.08 * (1 - k); }
-    } else if (anim === 'hit') {
-      sx = 1.24; sy = 0.76; z = -3; squint = true;
-    } else if (anim === 'die') {
-      squint = true; sx = 1 + 0.85 * t; sy = 1 - 0.78 * t;
-    }
-    const cy = r * sy + y;
-    P.capsule([0, cy + r * sy - 3, z - 2], [0, cy + r * sy + 3.5, z - 5.5], 4.4, PR.body, { r2: 2.4, mat: 'jelly', merge: true, bias: -0.5 });
+    } else if (anim === 'hit') { sx = 1.26; sy = 0.74; z = -3; face = 'hit'; }
+    else if (anim === 'die') { face = 'hit'; sx = 1 + 0.9 * t; sy = 1 - 0.8 * t; }
+    const cy = r * sy * 0.92 + y, top = cy + r * sy * 0.95;
+    // The body: a drop, fuller at the bottom, with a lighter, glowing belly where light passes through.
+    P.sphere([0, cy, z], r, PR.body, { sx: sx * 1.04, sy: sy * 0.92, mat: 'jelly', merge: true, decals: PORING_F[face],
+      paint: (x2, y2, z2) => (y2 < -0.35 && z2 > -0.2 ? 1 : 0), layers: [{ fill: PR.light, mat: 'jelly' }] });
+    // The curled tip.
+    P.capsule([0, top - 4, z - 1], [1.2, top + 3.5, z - 3.5], 5, PR.body, { r2: 2.8, mat: 'jelly', merge: true, bias: -0.3 });
+    P.capsule([1.2, top + 3.5, z - 3.5], [-1.8, top + 6.5, z - 4], 2.8, PR.body, { r2: 1.4, mat: 'jelly', merge: true, bias: -0.32 });
     if (leaf) {
-      P.capsule([0, cy + r * sy + 3, z - 5], [-5, cy + r * sy + 8, z - 3], 2.6, '#6fbf4a', { outline: '#2f6e1f', bias: -0.4 });
-      P.capsule([0, cy + r * sy + 3, z - 5], [5, cy + r * sy + 9, z - 4], 2.6, '#7fd05a', { outline: '#2f6e1f', bias: -0.45 });
+      P.capsule([0, top + 2, z - 4], [-6, top + 7, z - 2], 2.8, '#5fae3c', { r2: 1, mat: 'cloth', bias: -0.2 });
+      P.capsule([0, top + 2, z - 4], [6, top + 8, z - 3], 2.8, '#76c44e', { r2: 1, mat: 'cloth', bias: -0.25 });
     }
-    const blink = anim === 'idle' && t >= 0.8;
-    P.sphere([0, cy, z], r, PR.body, { sx, sy, mat: 'jelly', merge: true, decals: squint ? PORING_SQUINT : blink ? PORING_BLINK : PORING_FACE, alpha });
+    // Sheen: a bright streak across the upper left and a small second glint.
     P.custom([0, cy, z], (ctx, c) => {
-      ctx.save(); ctx.translate(c.x - r * sx * P.S * 0.42, c.y - r * sy * P.S * 0.5); ctx.scale(P.S / 1.25, P.S / 1.25); ctx.rotate(-0.6);
-      ell(ctx, 0, 0, 5.5 * sx, 3 * sy, 'rgba(255,255,255,0.85)');
-      ell(ctx, 7, 2.5, 1.6, 1.4, 'rgba(255,255,255,0.75)');
+      ctx.save(); ctx.translate(c.x - r * sx * P.S * 0.42, c.y - r * sy * P.S * 0.42); ctx.scale(P.S / 1.25, P.S / 1.25); ctx.rotate(-0.7);
+      ell(ctx, 0, 0, 6 * sx, 2.6 * sy, 'rgba(255,255,255,0.8)');
+      ell(ctx, 8.5, 1.5, 1.5, 1.3, 'rgba(255,255,255,0.7)');
       ctx.restore();
     }, 0.05);
   }
 
-  /* ===================================================== LUNATIC (original moon-bunny) */
-  const LN = { fur: '#fbfbff', shadow: '#c9cbe6', outline: '#7c80aa', inner: '#ffb1c6', eye: '#e2364a' };
-  function lunaticFace(squint, closed) {
-    return [
-      eyeDecal([0.42, 0.08, 0.9], squint || closed ? null : '#f04a5c', closed ? { closed: true } : squint ? { squint: 1 } : { w: 2.3, h: 3.0, outer: '#5a1420' }),
-      eyeDecal([-0.42, 0.08, 0.9], squint || closed ? null : '#f04a5c', closed ? { closed: true } : squint ? { squint: -1 } : { w: 2.3, h: 3.0, outer: '#5a1420' }),
-      { n: norm([0, -0.1, 1]), draw(ctx) { ctx.beginPath(); ctx.moveTo(-1.4, 0.6); ctx.lineTo(1.4, 0.6); ctx.lineTo(0, -0.9); ctx.closePath(); ctx.fillStyle = '#ff7f9d'; ctx.fill(); } },
-      {
-        n: norm([0, -0.34, 0.94]), draw(ctx) {
-          ctx.beginPath(); ctx.arc(-1.1, 0.6, 1.1, Math.PI * 1.1, Math.PI * 1.95); ctx.arc(1.1, 0.6, 1.1, Math.PI * 1.05, Math.PI * 1.9);
-          ctx.strokeStyle = '#8a4a5e'; ctx.lineWidth = 0.8; ctx.stroke();
-        },
-      },
-      blush([0.62, -0.22, 0.75], 2.4), blush([-0.62, -0.22, 0.75], 2.4),
-    ];
-  }
-  const LUNA_FACE = lunaticFace(false), LUNA_SQUINT = lunaticFace(true), LUNA_BLINK = lunaticFace(false, true);
-
+  /* ---- LUNATIC: a round, fluffy moon-rabbit: chest ruff, cheek tufts, long ears with dusky tips, red eyes. */
+  const LN = { fur: '#f6f5fb', shade: '#d9d6ea', inner: '#ffb0c4', tip: '#9a92b8' };
+  const LUNA_F = faceSet([[[0.42, 0.1, 0.9], 2.2, 3.0, '#c42a40'], [[-0.42, 0.1, 0.9], 2.2, 3.0, '#c42a40']], [
+    { n: norm([0, -0.1, 1]), draw(ctx) { ctx.beginPath(); ctx.moveTo(-1.3, 0.6); ctx.lineTo(1.3, 0.6); ctx.lineTo(0, -0.8); ctx.closePath(); ctx.fillStyle = '#ff7f9d'; ctx.fill(); } },
+    { n: norm([0, -0.32, 0.95]), draw(ctx) { ctx.beginPath(); ctx.arc(-1, 0.6, 1, Math.PI * 1.1, Math.PI * 1.95); ctx.arc(1, 0.6, 1, Math.PI * 1.05, Math.PI * 1.9); ctx.strokeStyle = '#8a4a5e'; ctx.lineWidth = 0.7; ctx.stroke();
+      ctx.strokeStyle = 'rgba(120,110,140,0.6)'; ctx.lineWidth = 0.4; for (const sx2 of [-1, 1]) for (const dy of [-0.6, 0.4]) { ctx.beginPath(); ctx.moveTo(sx2 * 2.4, dy); ctx.lineTo(sx2 * 6.5, dy * 2.2); ctx.stroke(); } } },
+    blush([0.6, -0.22, 0.76], 2.3), blush([-0.6, -0.22, 0.76], 2.3),
+  ]);
   function drawLunatic(P, anim, t) {
-    let y = 0, z = 0, sx = 1, sy = 1, ear = 0, earBack = 0, squint = false;
-    if (anim === 'idle') {
-      ear = Math.sin(t * TAU) * 1.4; sy = 1 + Math.sin(t * TAU) * 0.02;
-    } else if (anim === 'walk') {
-      const h = Math.sin(t * Math.PI);
-      y = h * 8; earBack = h * 5; sx = 1.08 - 0.12 * h; sy = 0.92 + 0.14 * h;
-    } else if (anim === 'attack') {
-      if (t < 0.35) { sy = 1 - t * 0.4; earBack = -2; }
-      else if (t < 0.7) { const k = Math.sin(((t - 0.35) / 0.35) * Math.PI); z = k * 11; y = k * 4; earBack = k * 6; }
-    } else if (anim === 'hit') {
-      z = -3; sx = 1.12; sy = 0.88; squint = true; earBack = -3;
-    } else if (anim === 'die') {
-      squint = true;
-      const e = Math.min(1, t * 1.4);
-      P.setPose(0, -Math.PI / 2 * 0.92 * e * e, [0, 12, 0], [0, -1.5 * e, 0]);
-    }
-    const by = 12 * sy + y;
-    // hind feet, tail, body
-    P.sphere([7.5, 2.8 + y * 0.35, -3 + z], 4.6, LN.fur, { sy: 0.65, mat: 'fur', merge: true });
-    P.sphere([-7.5, 2.8 + y * 0.35, -3 + z], 4.6, LN.fur, { sy: 0.65, mat: 'fur', merge: true });
-    P.sphere([0, by, -1 + z], 12.5, LN.fur, { sx, sy: sy * 0.96, mat: 'fur', merge: true });
-    P.sphere([0, by + 1, -13.5 + z], 4.6, LN.fur, { mat: 'fur', merge: true });
-    P.sphere([5, 3 + y * 0.5, 8 + z], 3.1, LN.fur, { sy: 0.8, mat: 'fur', merge: true, bias: 0.3 });
-    P.sphere([-5, 3 + y * 0.5, 8 + z], 3.1, LN.fur, { sy: 0.8, mat: 'fur', merge: true, bias: 0.3 });
-    // head and ears
-    const hy = by + 15, hz = 4 + z;
-    P.sphere([0, hy, hz], 11, LN.fur, { dark: LN.shadow, outline: LN.outline, decals: squint ? LUNA_SQUINT : (anim === 'idle' && t >= 0.8) ? LUNA_BLINK : LUNA_FACE, bias: 0.5 });
-    for (const s of [1, -1]) {
-      const base = [s * 4.4, hy + 8, hz - 2];
-      const tip = [s * (7 + ear * (s > 0 ? 1 : -0.6)), hy + 30 - Math.abs(earBack) * 0.4, hz - 6 - earBack];
-      P.capsule(base, tip, 3.7, LN.fur, { r2: 2.6, mat: 'fur', merge: true, bias: 0.1 });
-      P.capsule(add(base, [0, 2, 1.3]), add(tip, [0, -2.5, 1.2]), 1.55, LN.inner, { r2: 1.1, line: false, bias: 0.12 });
+    let y = 0, z = 0, sx = 1, sy = 1, ear = 0, earBack = 0, face = 'open';
+    if (anim === 'idle') { ear = Math.sin(t * TAU) * 1.4; sy = 1 + Math.sin(t * TAU) * 0.025; if (t >= 0.82) face = 'blink'; }
+    else if (anim === 'walk') { const h = Math.sin(t * Math.PI); y = h * 8; earBack = h * 5; sx = 1.08 - 0.12 * h; sy = 0.92 + 0.14 * h; }
+    else if (anim === 'attack') { if (t < 0.35) { sy = 1 - t * 0.4; earBack = -2; } else if (t < 0.7) { const k = Math.sin(((t - 0.35) / 0.35) * Math.PI); z = k * 11; y = k * 4; earBack = k * 6; } }
+    else if (anim === 'hit') { z = -3; sx = 1.12; sy = 0.88; face = 'hit'; earBack = -3; }
+    else if (anim === 'die') { face = 'hit'; const e = Math.min(1, t * 1.4); P.setPose(0, -Math.PI / 2 * 0.92 * e * e, [0, 12, 0], [0, -1.5 * e, 0]); }
+    const F = { mat: 'fur', merge: true }, by = 12 * sy + y;
+    for (const s2 of [1, -1]) P.ellipsoid([s2 * 7.5, 3 + y * 0.35, -2 + z], [4, 2.8, 6.5], LN.fur, F);                      // big hind feet
+    P.ellipsoid([0, by, -1 + z], [12.5 * sx, 12 * sy, 11.5], LN.fur, F);
+    P.sphere([0, by + 1, -13 + z], 5, LN.fur, Object.assign({ bias: -0.2 }, F));                                      // cotton tail
+    for (let i = 0; i < 5; i++) { const a = (i - 2) * 0.42; P.sphere([Math.sin(a) * 7, by + 4 - Math.abs(i - 2) * 1.2, z + 8 + Math.cos(a) * 2], 4.2, LN.fur, Object.assign({ bias: 0.3 }, F)); }   // chest ruff
+    for (const s2 of [1, -1]) P.ellipsoid([s2 * 4.8, 3 + y * 0.5, 9 + z], [2.6, 2.4, 3.4], LN.fur, Object.assign({ bias: 0.35 }, F));   // front paws
+    const hy = by + 14.5, hz = 4 + z;
+    P.ellipsoid([0, hy, hz], [11.5, 10.5, 10.5], LN.fur, { mat: 'fur', merge: true, decals: LUNA_F[face], bias: 0.5 });
+    for (const s2 of [1, -1]) P.sphere([s2 * 8.5, hy - 3.5, hz + 3], 4, LN.fur, { mat: 'fur', merge: true, bias: 0.52 });   // cheek tufts
+    for (const s2 of [1, -1]) {
+      const base = [s2 * 4.4, hy + 8, hz - 2], tip = [s2 * (7.5 + ear * (s2 > 0 ? 1 : -0.6)), hy + 31 - Math.abs(earBack) * 0.4, hz - 6 - earBack];
+      P.capsule(base, tip, 3.9, LN.fur, { r2: 2.7, mat: 'fur', merge: true, bias: 0.1, paint: (tt) => (tt > 0.8 ? 1 : 0), layers: [{ fill: LN.tip, mat: 'fur' }] });
+      P.capsule(add(base, [0, 2, 1.4]), add(tip, [0, -4.5, 1.2]), 1.6, LN.inner, { r2: 1.1, line: false, bias: 0.12 });
     }
   }
 
-
-  /* ===================================================== FABRE (caterpillar) */
-  const FB = { body: '#8fd14f', alt: '#b4e46e', outline: '#3f7a1f', head: '#9cdb5a' };
-  const FABRE_FACE = [
-    eyeDecal([0.4, 0.15, 0.9], null, { w: 2.2, h: 3.0, outer: '#203018' }), eyeDecal([-0.4, 0.15, 0.9], null, { w: 2.2, h: 3.0, outer: '#203018' }),
-    { n: norm([0, -0.3, 0.95]), draw(ctx) { ctx.beginPath(); ctx.arc(0, 1, 2, Math.PI * 1.15, Math.PI * 1.85); ctx.strokeStyle = '#2b4a18'; ctx.lineWidth = 1; ctx.stroke(); } },
-    blush([0.62, -0.15, 0.78], 2.2), blush([-0.62, -0.15, 0.78], 2.2),
-  ];
+  /* ---- FABRE: a plump caterpillar of six soft segments with orange spots, stubby feet and a pair of feelers. */
+  const FB = { body: '#86c44a', alt: '#9fd65c', belly: '#d8ec9a', spot: '#ff9a3a' };
+  const FABRE_F = faceSet([[[0.4, 0.15, 0.9], 2.2, 3], [[-0.4, 0.15, 0.9], 2.2, 3]], [
+    { n: norm([0, -0.32, 0.95]), draw(ctx) { ctx.beginPath(); ctx.arc(0, 1, 2, Math.PI * 1.15, Math.PI * 1.85); ctx.strokeStyle = '#2b4a18'; ctx.lineWidth = 0.9; ctx.stroke(); } },
+    blush([0.62, -0.15, 0.78], 2.1), blush([-0.62, -0.15, 0.78], 2.1),
+  ]);
+  const FABRE_SPOTS = [[0.55, 0.55, 0.62], [-0.55, 0.55, 0.62], [0.75, 0.45, -0.4], [-0.75, 0.45, -0.4]].map((n) => ({ n: norm(n), draw(ctx) { ell(ctx, 0, 0, 1.9, 1.6, FB.spot); ell(ctx, -0.4, 0.4, 0.7, 0.5, '#ffe0a0'); } }));
   function drawFabre(P, anim, t) {
-    let lunge = 0, squash = 1, wave = 0;
+    let lunge = 0, squash = 1, wave = 0, face = 'open';
     if (anim === 'walk') wave = t * TAU;
-    else if (anim === 'idle') wave = t * TAU * 0.5;
+    else if (anim === 'idle') { wave = t * TAU * 0.5; if (t > 0.8) face = 'blink'; }
     else if (anim === 'attack') lunge = Math.sin(Math.min(1, t * 1.6) * Math.PI) * 8;
-    else if (anim === 'hit') squash = 0.75;
-    else if (anim === 'die') { squash = 1 - t * 0.7; P.setPose(0, -t * 0.4, [0, 6, 0], [0, 0, 0]); }
-    const segs = [[0, 7.5], [-6.5, 7], [-12.5, 6.2], [-17.5, 5]];
-    segs.slice().reverse().forEach(([z, r], i) => {
-      const k = segs.length - 1 - i, amp = anim === 'walk' ? 2.2 : 0.6;
-      const y = r * squash + Math.max(0, Math.sin(wave + k * 1.4)) * amp;
-      P.sphere([0, y, z + lunge * (1 - k * 0.25)], r, k % 2 ? FB.alt : FB.body, { sy: squash, outline: FB.outline });
-      for (const sx of [-1, 1]) P.sphere([sx * r * 0.7, 1.6, z + lunge * (1 - k * 0.25)], 1.6, '#5a8f2f', { bias: -0.2, outline: FB.outline });
+    else if (anim === 'hit') { squash = 0.75; face = 'hit'; }
+    else if (anim === 'die') { face = 'hit'; squash = 1 - t * 0.7; P.setPose(0, -t * 0.4, [0, 6, 0], [0, 0, 0]); }
+    const segs = [[1, 7.4], [-4.8, 7.2], [-10.2, 6.8], [-15.2, 6.1], [-19.6, 5.2], [-23.2, 4]];
+    segs.slice().reverse().forEach(([zz, r], i) => {
+      const k = segs.length - 1 - i, amp = anim === 'walk' ? 2.4 : 0.6;
+      const yy = r * squash + Math.max(0, Math.sin(wave + k * 1.2)) * amp, zp = zz + lunge * Math.max(0, 1 - k * 0.22);
+      P.sphere([0, yy, zp], r, k % 2 ? FB.alt : FB.body, { sy: squash, merge: false, decals: k > 0 && k < 5 ? FABRE_SPOTS : null,
+        paint: (x2, y2) => (y2 < -0.45 ? 1 : 0), layers: [{ fill: FB.belly }] });
+      for (const s2 of [-1, 1]) P.ellipsoid([s2 * r * 0.62, 1.4, zp + 0.5], [1.5, 1.5, 2], '#5f962f', { bias: -0.2 });
     });
-    const hy = 9 * squash + (anim === 'walk' ? Math.max(0, Math.sin(wave - 1.4)) * 2 : 0), hz = 7 + lunge;
-    P.sphere([0, hy, hz], 8.2, FB.head, { sy: squash, decals: FABRE_FACE, outline: FB.outline, bias: 0.5 });
-    for (const sx of [-1, 1]) {
-      P.capsule([sx * 3, hy + 6, hz - 1], [sx * 6, hy + 13, hz - 3], 0.8, '#3f7a1f', { bias: 0.3 });
-      P.sphere([sx * 6, hy + 13.5, hz - 3], 2, '#ffd84a', { bias: 0.35 });
+    const hy = 10 * squash + (anim === 'walk' ? Math.max(0, Math.sin(wave - 1.2)) * 2 : 0), hz = 7.5 + lunge;
+    P.sphere([0, hy, hz], 8.4, '#a6dc62', { sy: squash, decals: FABRE_F[face], bias: 0.5 });
+    for (const s2 of [-1, 1]) {
+      P.capsule([s2 * 3, hy + 6, hz - 1], [s2 * 6.5, hy + 14, hz - 4], 0.8, '#3f7a1f', { r2: 0.6, bias: 0.3 });
+      P.sphere([s2 * 6.8, hy + 14.5, hz - 4.2], 1.9, '#ff9a3a', { bias: 0.35 });
     }
   }
 
-  /* ===================================================== PUPA (cocoon) */
-  const PUPA_BANDS = [];
-  for (let i = -2; i <= 2; i++) for (let a = 0; a < 8; a++) {
-    const ang = (a / 8) * TAU, y = i * 0.32;
-    const r = Math.sqrt(1 - y * y);
-    PUPA_BANDS.push({ n: norm([Math.sin(ang) * r, y, Math.cos(ang) * r]), minD: -0.1, draw(ctx) { ctx.fillStyle = 'rgba(120,90,40,0.55)'; ctx.fillRect(-4.6, -0.7, 9.2, 1.4); } });
+  /* ---- PUPA: a chrysalis bound in silk and a curled leaf, hanging from a twig stub, its seams glowing faintly. */
+  const PUPA_RIDGES = [];
+  for (let i = -3; i <= 3; i++) for (let a = 0; a < 9; a++) {
+    const ang = (a / 9) * TAU, yy = i * 0.26, r = Math.sqrt(1 - yy * yy);
+    PUPA_RIDGES.push({ n: norm([Math.sin(ang) * r, yy, Math.cos(ang) * r]), minD: -0.1, draw(ctx) { ctx.fillStyle = 'rgba(90,70,30,0.45)'; ctx.fillRect(-4, -0.5, 8, 1); ctx.fillStyle = 'rgba(255,240,200,0.4)'; ctx.fillRect(-4, 0.5, 8, 0.6); } });
   }
   function drawPupa(P, anim, t) {
     let rz = Math.sin(t * TAU) * 0.08, sy = 1.45;
     if (anim === 'hit') rz = 0.25 * (t < 0.5 ? 1 : -1);
     if (anim === 'die') { sy = 1.45 - t * 0.9; rz = t * 0.6; }
     P.setPose(0, rz, [0, 0, 0], [0, 0, 0]);
-    P.sphere([0, 11 * sy, 0], 11, '#dcc58f', { sx: 0.85, sy, decals: PUPA_BANDS, outline: '#7a5a28', light: '#fff2cc' });
-    P.capsule([0, 22 * sy, -1], [1.5, 22 * sy + 6, -2], 1.8, '#c9ae6e', { outline: '#7a5a28' });
+    P.sphere([0, 11 * sy, 0], 11, '#c9b77e', { sx: 0.82, sy, decals: PUPA_RIDGES, mat: 'leather' });
+    // A curled leaf wrapped round one side, and silk threads across.
+    P.capsule([7, 3, 4], [5, 24 * sy * 0.62, 7], 4.6, '#6f9a3c', { r2: 2.2, flat: true, bias: 0.4, mat: 'cloth' });
+    P.capsule([5, 24 * sy * 0.62, 7], [1, 27 * sy * 0.65, 8], 2.2, '#86b04a', { r2: 0.8, bias: 0.42 });
+    for (const [y0, y1] of [[0.25, 0.4], [0.55, 0.45], [0.7, 0.85]]) P.capsule([-9, 22 * sy * y0, 2], [9, 22 * sy * y1, 4], 0.45, '#f4f0e4', { bias: 0.6, line: false });
+    P.capsule([0, 22 * sy, -1], [1.5, 22 * sy + 7, -2], 1.8, '#8a6a3a', { r2: 1.1, mat: 'leather' });
+    P.capsule([1.5, 22 * sy + 7, -2], [-3, 22 * sy + 9, -2], 1.1, '#6a4a2a', { r2: 0.8, mat: 'leather' });
   }
 
-  /* ===================================================== GEOGRAPHER (man-eating sunflower) */
-  const GEO_FACE = [
-    eyeDecal([0.36, 0.3, 0.86], '#2a1a08', { w: 2.4, h: 3, outer: '#120a02' }), eyeDecal([-0.36, 0.3, 0.86], '#2a1a08', { w: 2.4, h: 3, outer: '#120a02' }),
-    { n: norm([0, -0.28, 0.96]), draw(ctx) {
-      ctx.beginPath(); ctx.ellipse(0, 0, 6, 3.4, 0, 0, TAU); ctx.fillStyle = '#3a0a10'; ctx.fill();
-      ctx.fillStyle = '#fff8e8';
-      for (let i = -2; i <= 2; i++) { ctx.beginPath(); ctx.moveTo(i * 2.2 - 0.9, -2.6); ctx.lineTo(i * 2.2 + 0.9, -2.6); ctx.lineTo(i * 2.2, -0.6); ctx.closePath(); ctx.fill(); }
-      for (let i = -1; i <= 1; i++) { ctx.beginPath(); ctx.moveTo(i * 2.6 - 0.9, 2.6); ctx.lineTo(i * 2.6 + 0.9, 2.6); ctx.lineTo(i * 2.6, 0.7); ctx.closePath(); ctx.fill(); }
+  /* ---- GEOGRAPHER: a man-eating sunflower: a thorny vine stem, broad leaves, two rings of petals and a fanged maw. */
+  const GEO_F = faceSet([[[0.36, 0.34, 0.86], 2.4, 2.4, '#1a0a02'], [[-0.36, 0.34, 0.86], 2.4, 2.4, '#1a0a02']], [
+    { n: norm([0, -0.25, 0.97]), draw(ctx) {
+      ctx.beginPath(); ctx.ellipse(0, 0, 6.4, 3.8, 0, 0, TAU); ctx.fillStyle = '#3a0812'; ctx.fill();
+      ell(ctx, 0, -1.6, 3.4, 1.4, '#a8243a');
+      ctx.fillStyle = '#fff6e0';
+      for (let i = -2; i <= 2; i++) { ctx.beginPath(); ctx.moveTo(i * 2.3 - 1, 3.2); ctx.lineTo(i * 2.3 + 1, 3.2); ctx.lineTo(i * 2.3, 0.6); ctx.closePath(); ctx.fill(); }
+      for (let i = -1; i <= 1; i++) { ctx.beginPath(); ctx.moveTo(i * 2.6 - 0.9, -3.2); ctx.lineTo(i * 2.6 + 0.9, -3.2); ctx.lineTo(i * 2.6, -1); ctx.closePath(); ctx.fill(); }
     } },
-  ];
+  ]);
   const GEO_SEEDS = [];
-  for (let i = 0; i < 14; i++) { const a = i * 2.4, r = 0.25 + (i % 4) * 0.12; GEO_SEEDS.push({ n: norm([Math.cos(a) * r, Math.sin(a) * r + 0.45, 0.8]), minD: 0.2, draw(ctx) { ell(ctx, 0, 0, 0.9, 0.9, '#4a2e10'); } }); }
+  for (let i = 0; i < 18; i++) { const a = i * 2.4, r = 0.3 + (i % 5) * 0.1; GEO_SEEDS.push({ n: norm([Math.cos(a) * r, Math.sin(a) * r * 0.6 + 0.5, 0.8]), minD: 0.2, draw(ctx) { ell(ctx, 0, 0, 0.9, 0.9, '#3a2208'); ell(ctx, -0.2, 0.3, 0.4, 0.3, '#8a5a24'); } }); }
   function drawGeographer(P, anim, t) {
-    let sway = Math.sin(t * TAU) * 2.5, lunge = 0, dip = 0, tilt = 0;
+    let sway = Math.sin(t * TAU) * 2.5, lunge = 0, dip = 0, tilt = 0, face = 'open';
     if (anim === 'attack') { const k = Math.sin(Math.min(1, t * 1.4) * Math.PI); lunge = k * 14; dip = k * 8; }
-    else if (anim === 'hit') { lunge = -4; tilt = 3; }
-    else if (anim === 'die') P.setPose(0, t * 1.1, [0, 0, 0], [0, -3 * t, 0]);
-    const G1 = '#4f9a32', G2 = '#2f6a1e', OUT = '#1f4a12';
-    // Leaves round the foot, and two on the stem.
-    for (let i = 0; i < 5; i++) {
-      const a = (i / 5) * TAU + 0.4;
-      P.sphere([Math.sin(a) * 11, 3, Math.cos(a) * 9 - 2], 7, i % 2 ? G1 : G2, { sx: 1.5, sy: 0.32, outline: OUT, bias: i % 2 ? 0.3 : -0.2 });
+    else if (anim === 'hit') { lunge = -4; tilt = 3; face = 'hit'; }
+    else if (anim === 'die') { face = 'hit'; P.setPose(0, t * 1.1, [0, 0, 0], [0, -3 * t, 0]); }
+    const G1 = '#4a8a30', G2 = '#2f6422';
+    for (let i = 0; i < 6; i++) { const a = (i / 6) * TAU + 0.4; P.ellipsoid([Math.sin(a) * 11, 2.6, Math.cos(a) * 9 - 2], [8, 1.8, 4.5], i % 2 ? G1 : G2, { bias: i % 2 ? 0.3 : -0.2, paint: (x2) => (Math.abs(x2) < 0.06 ? 1 : 0), layers: [{ fill: '#8ac060' }] }); }
+    const top = [sway, 54 - dip, lunge];
+    const s1 = [0, 2, 0], s2 = [sway * 0.5 - 2, 28 - dip * 0.5, lunge * 0.4], s3 = [top[0], top[1] - 8, top[2] - 1];
+    P.capsule(s1, s2, 3.6, G1, { r2: 3.1 }); P.capsule(s2, s3, 3.1, G1, { r2: 2.6 });
+    for (let i = 0; i < 6; i++) { const q = lerp3m(i < 3 ? s1 : s2, i < 3 ? s2 : s3, (i % 3) / 3 + 0.2), sd = i % 2 ? 1 : -1; P.capsule(q, add(q, [sd * 3, 1.5, 1]), 0.9, '#d6c070', { r2: 0.2, bias: 0.2 }); }   // thorns
+    for (const sx2 of [-1, 1]) P.ellipsoid([sx2 * 9 + sway * 0.4, 26 - dip * 0.5, lunge * 0.3 + 1], [8.5, 2.4, 4.6], G2, { bias: 0.4, paint: (x2) => (Math.abs(x2 * 1) < 0.05 ? 1 : 0), layers: [{ fill: '#7ab050' }] });
+    for (let i = 0; i < 14; i++) {
+      const a = (i / 14) * TAU + tilt * 0.05, ix = Math.cos(a), iy = Math.sin(a);
+      P.capsule([top[0] + ix * 12, top[1] + iy * 12, top[2] - 3], [top[0] + ix * 23, top[1] + iy * 23, top[2] - 5], 3.8, i % 2 ? '#ffb21a' : '#ff9a10', { r2: 1.6, bias: 0.55 });
     }
-    const top = [sway, 52 - dip, lunge];
-    P.capsule([0, 2, 0], [sway * 0.5, 28 - dip * 0.5, lunge * 0.4], 3.4, G1, { outline: OUT });
-    P.capsule([sway * 0.5, 28 - dip * 0.5, lunge * 0.4], [top[0], top[1] - 8, top[2] - 1], 3, G1, { outline: OUT });
-    for (const sx of [-1, 1]) P.sphere([sx * 9 + sway * 0.4, 26 - dip * 0.5, lunge * 0.3 + 1], 6, G2, { sx: 1.6, sy: 0.45, outline: OUT, bias: 0.4 });
-    // Petals round the face, then the face itself (a seed disc with a toothy mouth).
-    for (let i = 0; i < 12; i++) {
-      const a = (i / 12) * TAU + tilt * 0.05, ix = Math.cos(a), iy = Math.sin(a);
-      P.capsule([top[0] + ix * 12, top[1] + iy * 12, top[2] - 2], [top[0] + ix * 21, top[1] + iy * 21, top[2] - 3.5], 3.6, i % 2 ? '#ffd23a' : '#ffc21a', { outline: '#b8780a', bias: 0.6 });
-    }
-    P.sphere([top[0], top[1], top[2] - tilt], 13, '#7a5222', { decals: GEO_FACE.concat(GEO_SEEDS), outline: '#3a220a', light: '#a8783a', bias: 0.9 });
+    for (let i = 0; i < 12; i++) { const a = (i / 12 + 1 / 24) * TAU, ix = Math.cos(a), iy = Math.sin(a); P.capsule([top[0] + ix * 11, top[1] + iy * 11, top[2] - 1.5], [top[0] + ix * 17, top[1] + iy * 17, top[2] - 2], 3, '#ffd440', { r2: 1.4, bias: 0.6 }); }
+    P.sphere([top[0], top[1], top[2] - tilt], 13, '#6a4418', { sy: 0.95, decals: GEO_F[face].concat(GEO_SEEDS), bias: 0.9, mat: 'leather' });
   }
 
-  /* ===================================================== ROCKER (grasshopper) */
-  const RK = { body: '#7fbf3f', dark: '#4f8f26', outline: '#2f5e14', belly: '#d9ec9a' };
-  const ROCKER_FACE = [
-    eyeDecal([0.45, 0.2, 0.87], '#3a2a10', { w: 3.4, h: 3.8, outer: '#101808' }), eyeDecal([-0.45, 0.2, 0.87], '#3a2a10', { w: 3.4, h: 3.8, outer: '#101808' }),
-    { n: norm([0, -0.35, 0.93]), draw(ctx) { ctx.beginPath(); ctx.moveTo(-2, 0.5); ctx.lineTo(2, 0.5); ctx.strokeStyle = '#2b4a18'; ctx.lineWidth = 1.1; ctx.stroke(); } },
-  ];
+  /* ---- ROCKER: a lanky grasshopper musician, standing up with a violin under its chin and a bow. */
+  const RK = { body: '#78b23e', dark: '#4c8424', belly: '#d4e898', wood: '#a0562a' };
+  const ROCKER_F = faceSet([[[0.48, 0.22, 0.85], 3.2, 3.8, '#2a1a08'], [[-0.48, 0.22, 0.85], 3.2, 3.8, '#2a1a08']], [
+    { n: norm([0, -0.38, 0.92]), draw(ctx) { ctx.beginPath(); ctx.moveTo(-2, 0.6); ctx.quadraticCurveTo(0, -0.6, 2, 0.6); ctx.strokeStyle = '#2b4a18'; ctx.lineWidth = 1; ctx.stroke(); } },
+  ]);
   function drawRocker(P, anim, t) {
-    let y = 0, kick = 0, crouch = 0;
-    if (anim === 'walk') { const hop = Math.sin(t * Math.PI); y = hop * 9; crouch = 1 - hop; }
-    else if (anim === 'idle') crouch = 0.3 + Math.sin(t * TAU) * 0.15;
-    else if (anim === 'attack') kick = Math.sin(Math.min(1, t * 1.5) * Math.PI);
-    else if (anim === 'hit') crouch = 1;
-    else if (anim === 'die') P.setPose(0, -Math.PI / 2 * 0.9 * t, [0, 10, 0], [0, -2 * t, 0]);
-    const by = 16 + y - crouch * 3;
-    P.sphere([0, by, -1], 8.5, RK.body, { sy: 1.25, outline: RK.outline, decals: [{ n: [0, 0, 1], draw(ctx) { ctx.fillStyle = RK.belly; ctx.beginPath(); ctx.ellipse(0, -1, 4.5, 7, 0, 0, TAU); ctx.fill(); } }] });
-    P.sphere([0, by + 2, -7], 6, RK.dark, { sx: 0.8, sy: 1.4, bias: -0.5, outline: RK.outline });   // folded wings
-    const hy = by + 13, hz = 2 + kick * 5;
-    P.sphere([0, hy, hz], 8, RK.body, { decals: ROCKER_FACE, outline: RK.outline, bias: 0.5 });
-    for (const sx of [-1, 1]) {
-      P.capsule([sx * 3, hy + 6, hz - 2], [sx * 9, hy + 17, hz - 9], 0.7, RK.dark, { bias: 0.2 });
-      // big folded back legs
-      const hip = [sx * 6, by - 3, -3], knee = [sx * 9, by + 6 - crouch * 2, -11], foot = [sx * 7, y * 0.2 + 1.5, -5 + kick * 6];
-      P.capsule(hip, knee, 2.6, RK.body, { outline: RK.outline, bias: -0.2 });
-      P.capsule(knee, foot, 1.8, RK.dark, { outline: RK.outline, bias: -0.15 });
-      P.capsule([sx * 4, by + 3, 5], [sx * 5, by - 4 + kick * 3, 8 + kick * 4], 1.3, RK.dark, { bias: 0.4 });
+    let y = 0, kick = 0, crouch = 0, bow = Math.sin(t * TAU) * 6, face = 'open';
+    if (anim === 'walk') { const hop = Math.sin(t * Math.PI); y = hop * 9; crouch = 1 - hop; bow = 0; }
+    else if (anim === 'idle') { crouch = 0.3 + Math.sin(t * TAU) * 0.15; if (t > 0.85) face = 'blink'; }
+    else if (anim === 'attack') { kick = Math.sin(Math.min(1, t * 1.5) * Math.PI); bow = 10 * kick; }
+    else if (anim === 'hit') { crouch = 1; face = 'hit'; }
+    else if (anim === 'die') { face = 'hit'; P.setPose(0, -Math.PI / 2 * 0.9 * t, [0, 10, 0], [0, -2 * t, 0]); }
+    const by = 20 + y - crouch * 3;
+    P.ellipsoid([0, by, -1], [7.5, 10.5, 6.5], RK.body, { paint: (x2, y2, z2) => (z2 > 0.3 && Math.abs(x2) < 0.5 ? 1 : 0), layers: [{ fill: RK.belly }] });
+    P.ellipsoid([0, by + 1, -7.5], [5, 10, 2.4], RK.dark, { bias: -0.5, mat: 'gem' });                                   // folded wing cases
+    P.ellipsoid([0, by - 9, -4], [5, 6, 6], RK.body, { bias: -0.1 });                                                      // abdomen
+    const hy = by + 15, hz = 2 + kick * 4;
+    P.ellipsoid([0, hy, hz], [7.5, 8.5, 7.5], RK.body, { decals: ROCKER_F[face], bias: 0.5 });
+    for (const sx2 of [-1, 1]) {
+      P.capsule([sx2 * 3, hy + 6, hz - 2], [sx2 * 10, hy + 19, hz - 10], 0.7, RK.dark, { r2: 0.4, bias: 0.2 });
+      const hip = [sx2 * 6, by - 6, -3], knee = [sx2 * 9.5, by + 5 - crouch * 2, -10], foot = [sx2 * 7, y * 0.2 + 1.5, -4 + kick * 6];
+      P.capsule(hip, knee, 3, RK.body, { r2: 2, bias: -0.2 });
+      P.capsule(knee, foot, 1.7, RK.dark, { r2: 1.1, bias: -0.15 });
     }
+    // The violin, held at the shoulder, and the bow drawn across it.
+    const vc = [5, by + 5, 7.5];
+    P.ellipsoid(vc, [3.6, 6, 1.6], RK.wood, { bias: 0.7, mat: 'leather', paint: (x2, y2) => (Math.abs(y2) < 0.15 && Math.abs(x2) < 0.5 ? 1 : 0), layers: [{ fill: '#3a1c0c' }] });
+    P.capsule(add(vc, [-1, 5, 0.5]), add(vc, [-3.5, 13, 0]), 0.9, '#2a160a', { bias: 0.72 });
+    P.capsule([-8, by + 2 + bow * 0.3, 11], [12, by + 9 - bow * 0.3, 9], 0.45, '#e8dcc0', { bias: 0.9 });
+    P.capsule([-8, by + 2, 6], [-8, by + 2 + bow * 0.3, 11], 1.4, RK.dark, { bias: 0.85 });   // the bowing arm
+    P.capsule([7, by + 6, 3], vc, 1.4, RK.dark, { bias: 0.6 });
   }
 
-
-  /* ===================================================== FAMILIAR (bat) */
-  const FM = { body: '#6a5a8a', wing: '#4b3e66', outline: '#241b33', ear: '#8a74b0' };
-  const FAM_FACE = [
-    eyeDecal([0.38, 0.12, 0.92], '#ff4a5a', { w: 2.2, h: 2.6, outer: '#1a0d14' }), eyeDecal([-0.38, 0.12, 0.92], '#ff4a5a', { w: 2.2, h: 2.6, outer: '#1a0d14' }),
-    { n: norm([0, -0.35, 0.94]), draw(ctx) { ctx.fillStyle = '#fff'; for (const x of [-1.3, 1.3]) { ctx.beginPath(); ctx.moveTo(x - 0.8, 0.5); ctx.lineTo(x + 0.8, 0.5); ctx.lineTo(x, -1.6); ctx.closePath(); ctx.fill(); } } },
-  ];
+  /* ---- FAMILIAR: a bat with big ears, a fluffy chest, fangs, and membrane wings stretched over finger bones. */
+  const FM = { body: '#5a4a7a', fur: '#7a6898', wing: '#3c2f58', mem: '#6a4a7a', ear: '#e08aa8' };
+  const FAM_F = faceSet([[[0.38, 0.14, 0.92], 2.2, 2.6, '#c8243a'], [[-0.38, 0.14, 0.92], 2.2, 2.6, '#c8243a']], [
+    { n: norm([0, -0.35, 0.94]), draw(ctx) { ctx.beginPath(); ctx.moveTo(-2.4, 0.6); ctx.quadraticCurveTo(0, -1.4, 2.4, 0.6); ctx.strokeStyle = '#1a0d14'; ctx.lineWidth = 0.8; ctx.stroke(); ctx.fillStyle = '#fff'; for (const x2 of [-1.3, 1.3]) { ctx.beginPath(); ctx.moveTo(x2 - 0.7, 0.2); ctx.lineTo(x2 + 0.7, 0.2); ctx.lineTo(x2, -2); ctx.closePath(); ctx.fill(); } } },
+    { n: norm([0, 0.05, 1]), draw(ctx) { ell(ctx, 0, 0, 1.4, 0.9, '#3a2440'); } },
+  ]);
   function drawFamiliar(P, anim, t) {
-    let flap = Math.sin(t * TAU * (anim === 'walk' ? 2 : 1.5)), y = 26 + Math.sin(t * TAU) * 2, z = 0, rz = 0;
+    let flap = Math.sin(t * TAU * (anim === 'walk' ? 2 : 1.5)), y = 26 + Math.sin(t * TAU) * 2, z = 0, face = 'open';
     if (anim === 'attack') { z = Math.sin(Math.min(1, t * 1.6) * Math.PI) * 9; y -= z * 0.4; }
-    if (anim === 'hit') { y -= 2; flap = 1; }
-    if (anim === 'die') { y = 26 * (1 - t) + 4; rz = t * 1.2; P.setPose(0, rz, [0, 0, 0], [0, 0, 0]); }
-    P.sphere([0, y, z], 9, FM.body, { decals: FAM_FACE, outline: FM.outline });
-    for (const sx of [-1, 1]) {
-      P.capsule([sx * 4, y + 7, z], [sx * 6, y + 15, z - 1], 2.4, FM.ear, { outline: FM.outline, bias: -0.2 });
-      const tip = [sx * 22, y + 4 + flap * 8, z - 4], mid = [sx * 13, y + 6 + flap * 4, z - 2];
-      P.capsule([sx * 7, y + 2, z - 2], mid, 3.4, FM.wing, { outline: FM.outline, bias: -0.5 });
-      P.capsule(mid, tip, 2.4, FM.wing, { outline: FM.outline, bias: -0.55 });
-      P.capsule(mid, [sx * 15, y - 4 + flap * 5, z - 3], 2, FM.wing, { outline: FM.outline, bias: -0.56 });
+    if (anim === 'hit') { y -= 2; flap = 1; face = 'hit'; }
+    if (anim === 'die') { face = 'hit'; y = 26 * (1 - t) + 4; P.setPose(0, t * 1.2, [0, 0, 0], [0, 0, 0]); }
+    P.sphere([0, y, z], 9, FM.body, { decals: FAM_F[face], mat: 'fur', merge: true, paint: (x2, y2, z2) => (z2 > 0.4 && y2 < -0.2 ? 1 : 0), layers: [{ fill: FM.fur, mat: 'fur' }] });
+    for (const sx2 of [-1, 1]) {
+      P.capsule([sx2 * 4.5, y + 6, z], [sx2 * 8, y + 17, z - 1], 3.2, FM.body, { r2: 0.8, bias: -0.2, mat: 'fur' });
+      P.capsule([sx2 * 4.8, y + 7, z + 1.2], [sx2 * 7.6, y + 15, z], 1.6, FM.ear, { r2: 0.4, bias: -0.18, line: false });
+      // Wing: an arm bone, then three finger bones with membrane panels between them.
+      const sh2 = [sx2 * 7, y + 2, z - 2], wr = [sx2 * 14, y + 7 + flap * 5, z - 3];
+      const tips = [[sx2 * 25, y + 6 + flap * 9, z - 5], [sx2 * 23, y - 2 + flap * 6, z - 5], [sx2 * 16, y - 7 + flap * 3, z - 4]];
+      P.capsule(sh2, wr, 1.6, FM.wing, { r2: 1.2, bias: -0.5 });
+      tips.forEach((tp) => P.capsule(wr, tp, 0.9, FM.wing, { r2: 0.5, bias: -0.52 }));
+      P.poly([wr, tips[0], tips[1]], FM.mem, { bias: -0.6, n: [0, 0.3, 1], line: false });
+      P.poly([wr, tips[1], tips[2]], FM.mem, { bias: -0.6, n: [0, 0.3, 1], line: false });
+      P.poly([sh2, wr, tips[2], [sx2 * 8, y - 5, z - 3]], FM.mem, { bias: -0.62, n: [0, 0.3, 1], line: false });
+      P.capsule([sx2 * 3, y - 7, z], [sx2 * 3.5, y - 11, z + 1], 0.9, '#3a2a40', { r2: 0.5, bias: 0.1 });       // little feet
     }
   }
 
-  /* ===================================================== SPORE (mushroom) */
-  const SPORE_SPOTS = [[0.3, 0.8, 0.5], [-0.5, 0.75, 0.3], [0.1, 0.95, -0.2], [0.75, 0.55, -0.3], [-0.7, 0.55, -0.35], [0, 0.6, -0.8], [0.55, 0.6, 0.6], [-0.45, 0.6, 0.7]]
-    .map((n) => ({ n: norm(n), minD: -0.05, draw(ctx) { ell(ctx, 0, 0, 2.6, 2.6, '#fff6ec'); } }));
-  const SPORE_FACE = [
-    eyeDecal([0.35, 0.15, 0.92], null, { w: 2, h: 2.8, outer: '#2b1a10' }), eyeDecal([-0.35, 0.15, 0.92], null, { w: 2, h: 2.8, outer: '#2b1a10' }),
-    { n: norm([0, -0.25, 0.97]), draw(ctx) { ctx.beginPath(); ctx.arc(0, 1, 1.8, Math.PI * 1.15, Math.PI * 1.85); ctx.strokeStyle = '#6a3a2a'; ctx.lineWidth = 1; ctx.stroke(); } },
-    blush([0.6, -0.1, 0.78], 2.2), blush([-0.6, -0.1, 0.78], 2.2),
-  ];
+  /* ---- SPORE: a stout walking mushroom: a broad spotted cap with gills underneath, a pale stem body and stubby limbs. */
+  const SPORE_SPOTS = [[0.3, 0.82, 0.5], [-0.5, 0.75, 0.3], [0.1, 0.96, -0.2], [0.75, 0.55, -0.3], [-0.7, 0.55, -0.35], [0, 0.6, -0.8], [0.55, 0.58, 0.6], [-0.45, 0.62, 0.7], [0.85, 0.4, 0.3]]
+    .map((n, i) => ({ n: norm(n), minD: -0.05, draw(ctx) { ell(ctx, 0, 0, 2.2 + (i % 3) * 0.6, 2 + (i % 3) * 0.5, '#fff4e4'); ell(ctx, -0.5, 0.5, 1, 0.7, '#ffffff'); } }));
+  const SPORE_F = faceSet([[[0.35, 0.18, 0.92], 1.9, 2.6], [[-0.35, 0.18, 0.92], 1.9, 2.6]], [
+    { n: norm([0, -0.25, 0.97]), draw(ctx) { ctx.beginPath(); ctx.arc(0, 1, 1.8, Math.PI * 1.15, Math.PI * 1.85); ctx.strokeStyle = '#6a3a2a'; ctx.lineWidth = 0.9; ctx.stroke(); } },
+    blush([0.6, -0.1, 0.78], 2.1), blush([-0.6, -0.1, 0.78], 2.1),
+  ]);
   function drawSpore(P, anim, t) {
-    let y = 0, sy = 1, z = 0;
-    if (anim === 'walk') { const hop = Math.sin(t * Math.PI); y = hop * 6; sy = 1 + hop * 0.1; }
-    else if (anim === 'idle') sy = 1 + Math.sin(t * TAU) * 0.04;
-    else if (anim === 'attack') { z = Math.sin(Math.min(1, t * 1.6) * Math.PI) * 7; sy = 0.9; }
-    else if (anim === 'hit') sy = 0.8;
-    else if (anim === 'die') { sy = 1 - t * 0.6; P.setPose(0, t * 0.8, [0, 0, 0], [0, 0, 0]); }
-    P.sphere([0, 10 * sy + y, z], 8.5, '#f1e6cf', { sy: 1.15 * sy, decals: SPORE_FACE, outline: '#8a6a4a', bias: 0.2 });
-    P.sphere([0, 22 * sy + y, z - 1], 15, '#c9583a', { sy: 0.62 * sy, decals: SPORE_SPOTS, outline: '#6a2414', light: '#ff9a7a', bias: 0.5 });
-    for (const sx of [-1, 1]) P.sphere([sx * 5, 2 + y * 0.3, z + 2], 3, '#e8dcc0', { sy: 0.7, outline: '#8a6a4a' });
-  }
-
-  /* ===================================================== WHISPER (ghost) */
-  const WHISPER_FACE = [
-    eyeDecal([0.38, 0.1, 0.92], null, { w: 2.6, h: 4, outer: '#1a1a2e' }), eyeDecal([-0.38, 0.1, 0.92], null, { w: 2.6, h: 4, outer: '#1a1a2e' }),
-    { n: norm([0, -0.35, 0.94]), draw(ctx) { ell(ctx, 0, 0, 2, 2.6, '#1a1a2e'); } },
-  ];
-  function drawWhisper(P, anim, t) {
-    let y = 30 + Math.sin(t * TAU) * 2.5, z = 0, sway = Math.sin(t * TAU) * 3;
-    if (anim === 'attack') z = Math.sin(Math.min(1, t * 1.6) * Math.PI) * 9;
-    if (anim === 'hit') { z = -3; y += 2; }
-    if (anim === 'die') { y += t * 14; P.setPose(0, t * 0.5, [0, 30, 0], [0, 0, 0]); }
-    const W = { fill: '#eef3ff', dark: '#b7c3e6', outline: '#6f7ba8' };
-    P.sphere([0, y, z], 12, W.fill, { mat: 'jelly', merge: true, decals: WHISPER_FACE, bias: 0.5 });
-    [[-9, 10, 0.4], [-16, 8, 0.8], [-22, 6, 1.2], [-27, 4.2, 1.6]].forEach(([dy, r, k]) =>
-      P.sphere([sway * k, y + dy, z - 3 - k * 3], r, W.fill, { mat: 'jelly', merge: true, bias: -0.2 * k }));
-    for (const sx of [-1, 1]) P.capsule([sx * 10, y - 2, z + 2], [sx * 15, y - 7 + sway * 0.5, z + 5], 2.6, W.fill, { r2: 1.4, mat: 'jelly', merge: true, bias: 0.3 });
-  }
-
-  // King Poring: the jelly boss, wearing a golden crown.
-  const KING = { body: '#ff9cb8', light: '#ffe1ea', dark: '#e8678f', outline: '#b8476c' };
-  function drawKingPoring(P, anim, t) {
-    drawPoringWith(P, anim, t, KING, false);
-    let sy = 1, y = 0;
-    if (anim === 'idle') sy = 1 - 0.055 * Math.sin(t * TAU);
-    else if (anim === 'walk') { const h = Math.sin(t * Math.PI); y = h * 9; sy = 0.84 + 0.28 * h; }
-    else if (anim === 'hit') sy = 0.76;
-    else if (anim === 'die') sy = 1 - 0.78 * t;
-    const top = 17 * sy * 2 + y;
-    const gold = { light: '#fff6c0', outline: '#8a5a00' };
-    for (let i = 0; i < 5; i++) {
-      const a = (i / 5) * TAU, bx = Math.sin(a) * 7, bz = Math.cos(a) * 7 - 2;
-      P.capsule([bx, top - 1, bz], [bx, top + 6, bz], 1.6, '#f5c542', { bias: 0.8, mat: 'metal', merge: true });
-      P.sphere([bx, top + 6.5, bz], 1.4, ['#ff6b8b', '#7fc8ff', '#7dff9a', '#ffd84a', '#c79bff'][i], { bias: 0.85 });
+    let y = 0, sy = 1, z = 0, face = 'open', arm = Math.sin(t * TAU) * 0.3;
+    if (anim === 'walk') { const hop = Math.sin(t * Math.PI); y = hop * 6; sy = 1 + hop * 0.1; arm = hop; }
+    else if (anim === 'idle') { sy = 1 + Math.sin(t * TAU) * 0.04; if (t > 0.82) face = 'blink'; }
+    else if (anim === 'attack') { z = Math.sin(Math.min(1, t * 1.6) * Math.PI) * 7; sy = 0.9; arm = 1.5; }
+    else if (anim === 'hit') { sy = 0.8; face = 'hit'; }
+    else if (anim === 'die') { face = 'hit'; sy = 1 - t * 0.6; P.setPose(0, t * 0.8, [0, 0, 0], [0, 0, 0]); }
+    P.ellipsoid([0, 10 * sy + y, z], [8.2, 9.6 * sy, 7.6], '#efe3c8', { decals: SPORE_F[face], bias: 0.2, paint: (x2, y2) => (y2 < -0.7 ? 1 : 0), layers: [{ fill: '#d8c8a4' }] });
+    P.ellipsoid([0, 18.5 * sy + y, z - 0.5], [13.5, 2.6, 12.5], '#e8d4b0', { bias: 0.35, paint: (x2, y2, z2) => (Math.sin(Math.atan2(x2, z2) * 22) > 0.2 ? 1 : 0), layers: [{ fill: '#c8a880' }] });   // gills
+    P.ellipsoid([0, 22 * sy + y, z - 1], [15, 9.5 * sy, 14], '#b8432c', { decals: SPORE_SPOTS, bias: 0.5, paint: (x2, y2) => (y2 < -0.55 ? 1 : 0), layers: [{ fill: '#8a2a1a' }] });
+    for (const sx2 of [-1, 1]) {
+      P.ellipsoid([sx2 * 4.5, 2.2 + y * 0.3, z + 2], [3, 2.2, 3.6], '#e2d4b4', {});
+      P.capsule([sx2 * 7.5, 11 * sy + y, z + 1], [sx2 * 10.5, 6 + y + arm * 3, z + 4 + arm * 2], 1.8, '#e8dcc0', { r2: 1.5, bias: 0.3 });
     }
-    P.sphere([0, top, -2], 8, '#f5c542', { sy: 0.3, bias: 0.75, mat: 'metal', merge: true });
   }
 
-  /* ===================================================== TRAINING DUMMY */
+  /* ---- WHISPER: a sheet ghost: a draped cloth with a ragged, drifting hem, hollow eyes and little sleeve arms. */
+  const WHISPER_F = faceSet([[[0.36, 0.12, 0.92], 2.4, 3.6, '#16142a'], [[-0.36, 0.12, 0.92], 2.4, 3.6, '#16142a']], [
+    { n: norm([0, -0.35, 0.94]), draw(ctx) { ell(ctx, 0, 0, 1.8, 2.4, '#16142a'); } },
+  ]);
+  function drawWhisper(P, anim, t) {
+    let y = 30 + Math.sin(t * TAU) * 2.5, z = 0, sway = Math.sin(t * TAU) * 3, face = 'open';
+    if (anim === 'attack') z = Math.sin(Math.min(1, t * 1.6) * Math.PI) * 9;
+    if (anim === 'hit') { z = -3; y += 2; face = 'hit'; }
+    if (anim === 'die') { face = 'hit'; y += t * 14; P.setPose(0, t * 0.5, [0, 30, 0], [0, 0, 0]); }
+    const W = '#eef1fb';
+    P.ellipsoid([0, y, z], [12, 12.5, 11], W, { mat: 'jelly', merge: true, decals: WHISPER_F[face], bias: 0.5 });
+    // The sheet falls in folds to a torn hem that trails behind.
+    for (let i = 0; i < 7; i++) {
+      const a = (i / 7) * TAU, cx2 = Math.sin(a) * 9, cz2 = Math.cos(a) * 8 - 2, k = 0.6 + (i % 3) * 0.25;
+      P.capsule([cx2, y - 4, z + cz2], [cx2 * 1.1 + sway * k, y - 20 - (i % 2) * 4, z + cz2 - 3 - k * 3], 4.6, W, { r2: 1.2, mat: 'jelly', merge: true, bias: cz2 > 0 ? 0.2 : -0.2 });
+    }
+    for (const sx2 of [-1, 1]) P.capsule([sx2 * 10, y - 2, z + 2], [sx2 * 15, y - 7 + sway * 0.5, z + 6], 2.8, W, { r2: 1.6, mat: 'jelly', merge: true, bias: 0.3 });
+  }
+
+  // King Poring: the jelly boss with a jewelled golden crown and a little velvet cape.
+  const KING = { body: '#ff8fb0', light: '#ffe1ea', dark: '#d9577f' };
+  function drawKingPoring(P, anim, t) {
+    let sy = 1, y = 0;
+    if (anim === 'idle') sy = 1 - 0.06 * Math.sin(t * TAU);
+    else if (anim === 'walk') { const h = Math.sin(t * Math.PI); y = h * 10; sy = 0.82 + 0.3 * h; }
+    else if (anim === 'hit') sy = 0.74;
+    else if (anim === 'die') sy = 1 - 0.8 * t;
+    P.capsule([-12, 17 * sy + y + 8, -10], [12, 17 * sy + y + 8, -10], 3, '#8a1a3a', { bias: -0.6 });
+    P.poly([[-12, 17 * sy + y + 8, -11], [12, 17 * sy + y + 8, -11], [15, y + 3, -16], [-15, y + 3, -16]], '#9a1e40', { bias: -0.7, n: [0, 0.3, -1] });
+    drawPoringWith(P, anim, t, KING, false);
+    const top = 17 * sy * 0.92 + 17 * sy * 0.95 + y - 1;
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * TAU, bx = Math.sin(a) * 7.5, bz = Math.cos(a) * 7.5 - 2;
+      P.capsule([bx, top - 1, bz], [bx * 1.08, top + 7, bz * 1.08 - 0.3], 1.8, '#f2c040', { r2: 0.7, bias: 0.8, mat: 'metal', merge: true });
+      P.sphere([bx * 1.1, top + 7.6, bz * 1.1 - 0.3], 1.2, '#fff0b0', { bias: 0.85, mat: 'metal' });
+    }
+    P.capsule([-8, top, -2], [8, top, -2], 2.4, '#e8b030', { bias: 0.75, mat: 'metal' });
+    P.sphere([0, top, 6], 2, '#d8263e', { bias: 0.9, mat: 'gem' });
+    P.sphere([0, top + 5.5, -2], 4.2, '#9a1e40', { sy: 0.7, bias: 0.7 });
+  }
+
+  /* ---- TRAINING DUMMY: a straw-stuffed burlap dummy lashed to a post, with a painted target and stitched face. */
   const DUMMY_FACE = [{ n: norm([0, 0, 1]), draw(ctx) {
-    for (const [r, c] of [[7, '#c0394a'], [5, '#fbf6ec'], [3, '#c0394a'], [1.2, '#fbf6ec']]) { ctx.beginPath(); ctx.arc(0, 0, r, 0, TAU); ctx.fillStyle = c; ctx.fill(); }
+    for (const [r, c] of [[7, '#b0303e'], [5, '#f4ecd8'], [3, '#b0303e'], [1.2, '#f4ecd8']]) { ctx.beginPath(); ctx.arc(0, 0, r, 0, TAU); ctx.fillStyle = c; ctx.fill(); }
   } }];
-  const DUMMY_HEAD = [{ n: norm([0, -0.1, 1]), draw(ctx) { ctx.strokeStyle = '#6a4a2a'; ctx.lineWidth = 1.2; for (const x of [-2.5, 2.5]) { ctx.beginPath(); ctx.moveTo(x - 1.2, -1.2); ctx.lineTo(x + 1.2, 1.2); ctx.moveTo(x + 1.2, -1.2); ctx.lineTo(x - 1.2, 1.2); ctx.stroke(); } } }];
+  const DUMMY_HEAD = [{ n: norm([0, -0.1, 1]), draw(ctx) {
+    ctx.strokeStyle = '#4a321e'; ctx.lineWidth = 1.1;
+    for (const x2 of [-2.5, 2.5]) { ctx.beginPath(); ctx.moveTo(x2 - 1.2, -1.2); ctx.lineTo(x2 + 1.2, 1.2); ctx.moveTo(x2 + 1.2, -1.2); ctx.lineTo(x2 - 1.2, 1.2); ctx.stroke(); }
+    ctx.beginPath(); ctx.moveTo(-3, -3.5); for (let i = 0; i <= 6; i++) ctx.lineTo(-3 + i, -3.5 + (i % 2 ? -0.8 : 0)); ctx.stroke();
+  } }];
   function drawDummy(P, anim, t) {
     const wob = anim === 'hit' ? Math.sin(t * Math.PI * 4) * 0.18 * (1 - t) : 0;
     P.setPose(0, wob, [0, 0, 0], [0, 0, 0]);
-    const wood = '#8a5a33', sack = '#d9b98a', o = { outline: '#4a2e18' };
-    for (const a of [0.5, 2.1, 3.7, 5.3]) P.capsule([0, 2, 0], [Math.sin(a) * 9, 0, Math.cos(a) * 9], 1.6, wood, o);
-    P.capsule([0, 0, 0], [0, 54, 0], 2.2, wood, Object.assign({ bias: -0.2 }, o));
-    P.sphere([0, 32, 0], 11, sack, Object.assign({ sy: 1.25, decals: DUMMY_FACE, bias: 0.2 }, { outline: '#8a6a3a' }));
-    P.capsule([-16, 38, 0], [16, 38, 0], 2, wood, Object.assign({ bias: 0.1 }, o));
-    for (const sx of [-1, 1]) P.sphere([sx * 17, 38, 0], 3.2, sack, { outline: '#8a6a3a', bias: 0.15 });
-    P.sphere([0, 53, 0], 7, sack, { decals: DUMMY_HEAD, outline: '#8a6a3a', bias: 0.3 });
-    P.capsule([-5, 41, 6], [5, 41, 6], 0.9, '#c9a24a', { bias: 0.4 });
+    const wood = '#7a5232', sack = '#cfae7c', rope = '#8a7048';
+    for (const a of [0.5, 2.1, 3.7, 5.3]) P.capsule([0, 2, 0], [Math.sin(a) * 9, 0, Math.cos(a) * 9], 1.6, wood, { mat: 'leather' });
+    P.capsule([0, 0, 0], [0, 54, 0], 2.3, wood, { bias: -0.2, mat: 'leather' });
+    P.ellipsoid([0, 32, 0], [10.5, 13, 8], sack, { decals: DUMMY_FACE, bias: 0.2, mat: 'cloth' });
+    for (const yy of [22, 42]) P.capsule([-9.5, yy, 3], [9.5, yy, 3], 0.9, rope, { bias: 0.4 });
+    P.capsule([-17, 39, 0], [17, 39, 0], 2, wood, { bias: 0.1, mat: 'leather' });
+    for (const sx2 of [-1, 1]) { P.sphere([sx2 * 17.5, 39, 0], 3.4, sack, { bias: 0.15 }); for (let k = 0; k < 3; k++) P.capsule([sx2 * 19, 39, 0], [sx2 * (21 + k), 36 - k * 2, 1], 0.5, '#e0c060', { bias: 0.16, line: false }); }
+    P.sphere([0, 53, 0], 7.2, sack, { decals: DUMMY_HEAD, bias: 0.3 });
+    P.capsule([-6, 48, 3], [6, 48, 3], 0.9, rope, { bias: 0.4 });
+    for (let k = 0; k < 4; k++) P.capsule([0, 59, 0], [(k - 1.5) * 2.4, 62, -1], 0.5, '#e0c060', { bias: 0.2, line: false });
   }
 
   /* ===================================================== registry */

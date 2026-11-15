@@ -763,7 +763,12 @@
         if (!this.protos || this.protoMap !== game.mapRoot) { this.protos = new Map(); this.protoMap = game.mapRoot; }
         let proto = this.protos.get(key);
         if (!proto) { const def = LIB.find((l) => l.k === o.k); if (def) { proto = def.build(game.env, o); this.protos.set(key, proto); } }
-        if (proto) holder.add(proto.clone());
+        if (proto) {
+          const cl = proto.clone();
+          // Leafy plants cast leaf-shaped (dappled) shadows.
+          cl.traverse((m) => { if (m.isMesh && m.material && m.material.onBeforeCompile === game.env.foliageMat.onBeforeCompile) m.customDepthMaterial = game.env.leafDepthMat; });
+          holder.add(cl);
+        }
       }
       return holder;
     },

@@ -16,6 +16,7 @@
     AGENT_RADIUS: 0.45,         // obstacles are inflated by this for pathing
     WATER_LEVEL: -0.55,
     PX_PER_UNIT: 55,            // sprite design pixels per world unit
+    SPRITE_16BIT: false,        // painted sprites have smooth gradients: keep full 8-bit colour
     SPRITE_RES: 1.5,            // sprite sheets are baked this many times larger (HD pixel art)
     SKY_HORIZON: '#dceef5',
     DB_URL: 'db.html',          // monster & item database page (build script may replace this)     // shared by sky dome and fog so the horizon blends

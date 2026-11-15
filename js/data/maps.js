@@ -53,8 +53,8 @@
       hills: 13, seed: 517,
       forest: { count: 1100, grove: 0.3, clearing: 0.8, giants: true },
       palette: {
-        grassA: '#5ea84a', grassB: '#79bd57', grassDark: '#3f7f3a', meadow: '#a4c860',
-        town: '#5ea84a', dirt: '#a07c54', dirtDark: '#80623f', cliff: '#7d8c66', cliffHi: '#4f7a45',
+        grassA: '#5b7e48', grassB: '#668a4e', grassDark: '#3f5e40', meadow: '#7f9452',
+        town: '#5b7e48', dirt: '#c08a56', dirtDark: '#9a6c44', cliff: '#7d7c70', cliffHi: '#4f6a45',
       },
       fog: '#d3e9dc',
       spawns: [

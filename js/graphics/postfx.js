@@ -53,7 +53,7 @@
     uniform vec3 fogColor; uniform float fogNear; uniform float fogFar; uniform float fogMax;
     uniform float mist; uniform float mistTop; uniform float mistFall;
     uniform vec3 sunDir; uniform vec3 sunGlow; uniform float time;
-    uniform float bloom; uniform float ao;
+    uniform float bloom; uniform float ao; uniform float ink;
     uniform vec3 tint; uniform float saturation; uniform float contrast; uniform float vignette; uniform float flash; uniform float pastel;
     varying vec2 vUv;
 
@@ -92,9 +92,17 @@
           occ += max(dot(nrm, v / max(dl, 1e-4)) - 0.12, 0.0) * (1.0 - smoothstep(0.6, 1.8, dl));
         }
         occ = clamp(occ / 8.0 * 2.6, 0.0, 1.0);
-        col *= mix(vec3(1.0), vec3(0.62, 0.60, 0.74), occ * ao);
+        col *= mix(vec3(1.0), vec3(0.50, 0.50, 0.70), occ * ao);
       }
       #endif
+
+      if (!sky && ink > 0.0) {
+        // Ink: a dark line where the depth breaks (the edge of a roof, a post against the ground), like outlined scenery art.
+        float zl = viewZ(vUv - vec2(texel.x, 0.0)), zr = viewZ(vUv + vec2(texel.x, 0.0)), zu = viewZ(vUv + vec2(0.0, texel.y)), zd = viewZ(vUv - vec2(0.0, texel.y));
+        float lap = (abs(zl + zr - 2.0 * z) + abs(zu + zd - 2.0 * z)) / -z;
+        float edge = smoothstep(0.03, 0.09, lap) * (1.0 - smoothstep(45.0, 110.0, dist));
+        col = mix(col, col * vec3(0.26, 0.22, 0.34), edge * ink);
+      }
 
       if (!sky) {
         // Distance fog, plus mist that gathers below mistTop and drifts.
@@ -116,7 +124,7 @@
         // bottom of the screen and in the distance (a miniature, tilt-shift look), and bright areas bleed.
         vec3 blur = texture2D(tSoft, vUv).rgb;
         float away = sky ? 0.5 : smoothstep(70.0, 240.0, dist) * 0.55;
-        float f = clamp(smoothstep(0.32, 0.54, abs(vUv.y - 0.54)) * 0.5 + away, 0.0, 0.8) * focus;
+        float f = clamp(smoothstep(0.38, 0.56, abs(vUv.y - 0.54)) * 0.3 + away * 0.6, 0.0, 0.6) * focus;
         col = mix(col, blur, f);
         col = 1.0 - (1.0 - col) * (1.0 - blur * blur * soft);
       }
@@ -127,8 +135,9 @@
       float l = dot(col, vec3(0.299, 0.587, 0.114));
       col = mix(vec3(l), col, saturation);
       col = (col - 0.5) * contrast + 0.5;
-      col += pastel * (1.0 - l) * (1.0 - l) * vec3(0.045, 0.035, 0.085);
-      col *= mix(vec3(1.0), vec3(1.035, 1.01, 0.955), pastel * smoothstep(0.35, 0.95, l));
+      // Shadows lean blue-violet, lights lean gold.
+      col = mix(col, col * vec3(0.88, 0.94, 1.18) + vec3(0.0, 0.008, 0.035), pastel * (1.0 - smoothstep(0.0, 0.5, l)));
+      col *= mix(vec3(1.0), vec3(1.06, 1.02, 0.92), pastel * smoothstep(0.4, 0.95, l));
       col += flash * vec3(0.75, 0.8, 1.0);
       vec2 q = vUv - 0.5;
       col *= 1.0 - vignette * smoothstep(0.25, 0.95, dot(q, q) * 2.2);
@@ -155,8 +164,8 @@
         fogColor: { value: new THREE.Color(0.86, 0.93, 0.96) }, fogNear: { value: 90 }, fogFar: { value: 300 }, fogMax: { value: 1 },
         mist: { value: 0.12 }, mistTop: { value: 0.5 }, mistFall: { value: 0.35 },
         sunDir: { value: new THREE.Vector3(0.4, 0.8, 0.3) }, sunGlow: { value: new THREE.Color(0, 0, 0) }, time: { value: 0 },
-        bloom: { value: 0.55 }, ao: { value: 0.7 }, tSoft: { value: null }, soft: { value: 0.3 }, focus: { value: 1 }, pastel: { value: 1 },
-        tint: { value: new THREE.Color(1, 1, 1) }, saturation: { value: 1.06 }, contrast: { value: 1.04 }, vignette: { value: 0.22 }, flash: { value: 0 },
+        bloom: { value: 0.55 }, ao: { value: 0.7 }, ink: { value: 0.7 }, tSoft: { value: null }, soft: { value: 0.3 }, focus: { value: 1 }, pastel: { value: 1 },
+        tint: { value: new THREE.Color(1, 1, 1) }, saturation: { value: 1.16 }, contrast: { value: 1.1 }, vignette: { value: 0.42 }, flash: { value: 0 },
       };
       this.final = mat(FINAL, this.u, {});
       this.black = new THREE.DataTexture(new Uint8Array([0, 0, 0, 255]), 1, 1); this.black.needsUpdate = true;
