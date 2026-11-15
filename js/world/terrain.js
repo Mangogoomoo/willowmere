@@ -679,7 +679,7 @@
             float t = uStyle.z;
             float ground = texture2D( uShore, ( wp.xz + uShoreHalf ) / ( 2.0 * uShoreHalf ) ).r * 4.0 - 3.0;
             float depth = clamp( uWaterY - ground, 0.0, 2.0 );
-            vec3 wcol = mix( vec3( 0.20, 0.72, 0.74 ), vec3( 0.045, 0.27, 0.60 ), smoothstep( 0.05, 1.25, depth ) );
+            vec3 wcol = mix( vec3( 0.30, 0.70, 0.62 ), vec3( 0.04, 0.30, 0.42 ), smoothstep( 0.05, 1.25, depth ) );
             // Ripples: where two drifting noise fields cross, a bright thread.
             float r1 = wmNoise( wp.xz * 1.9 + vec2( t * 0.33, t * 0.21 ) ), r2 = wmNoise( wp.xz * 1.9 - vec2( t * 0.27, -t * 0.31 ) + 7.3 );
             float web = smoothstep( 0.05, 0.0, abs( r1 - r2 ) ) * ( 0.35 + 0.65 * wmNoise( wp.xz * 0.4 + t * 0.05 ) );

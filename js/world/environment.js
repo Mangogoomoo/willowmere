@@ -571,8 +571,11 @@
     palisade() {
       const T = C.TOWN, R = T.radius + 1;
       const geo = U.mergeParts([
-        { geo: new THREE.CylinderGeometry(0.2, 0.24, 2.4, 6), color: '#8a5a33', pos: [0, 1.2, 0], jitter: 0.15 },
-        { geo: new THREE.ConeGeometry(0.21, 0.5, 6), color: '#a77446', pos: [0, 2.65, 0] },
+        { geo: new THREE.CylinderGeometry(0.21, 0.25, 2.4, 7), color: '#6e4a30', pos: [0, 1.2, 0], tex: 'wood' },
+        { geo: new THREE.ConeGeometry(0.22, 0.55, 7), color: '#8a6444', pos: [0, 2.67, 0], tex: 'wood' },
+        { geo: new THREE.CylinderGeometry(0.26, 0.26, 0.14, 7), color: '#8a7650', pos: [0, 1.9, 0], tex: 'none' },
+        { geo: new THREE.CylinderGeometry(0.26, 0.26, 0.14, 7), color: '#8a7650', pos: [0, 0.75, 0], tex: 'none' },
+        { geo: new THREE.CylinderGeometry(0.3, 0.32, 0.25, 7), color: '#5a5048', pos: [0, 0.05, 0], tex: 'rock' },
       ]);
       const list = [];
       const n = Math.round((Math.PI * 2 * R) / 0.5);
@@ -676,7 +679,7 @@
       };
       this._treeGeo = {
         round: broad('#6b4a32', '#6f9a4a', 11),
-        blossom: broad('#5f4038', '#a48ad8', 23, { top: '#ffe6f4', under: '#2a2050' }),   // a violet-leaved tree
+        blossom: broad('#5f4038', '#a896c6', 23, { top: '#fff0e0', under: '#3a3050' }),   // a violet-leaved tree
         pine: fir(),
       };
       return this._treeGeo;
@@ -874,10 +877,14 @@
     }
     signpost(parts, x, z, rot) {
       const add = this.place(parts, x, z, rot, TR.height(x, z));
-      add({ geo: box, color: '#7a4c2c', pos: [0, 1.1, 0], scale: [0.16, 2.2, 0.16] });
-      add({ geo: box, color: '#c99a62', pos: [0.5, 1.8, 0], rot: [0, 0, 0.05], scale: [1.1, 0.32, 0.08] });
-      add({ geo: new THREE.ConeGeometry(0.2, 0.3, 3), color: '#c99a62', pos: [1.18, 1.83, 0], rot: [0, 0, -Math.PI / 2], scale: [1, 1, 0.3] });
-      add({ geo: box, color: '#b7884f', pos: [-0.45, 1.4, 0], rot: [0, 0, -0.06], scale: [1.0, 0.3, 0.08] });
+      add({ geo: box, color: '#5e3e28', pos: [0, 1.15, 0], scale: [0.2, 2.3, 0.2], tex: 'wood' });
+      add({ geo: new THREE.ConeGeometry(0.2, 0.28, 4), color: '#4a3020', pos: [0, 2.44, 0], rot: [0, Math.PI / 4, 0], tex: 'none' });
+      add({ geo: box, color: '#b08454', pos: [0.55, 1.85, 0], rot: [0, 0, 0.05], scale: [1.15, 0.36, 0.1], tex: 'wood' });
+      add({ geo: new THREE.ConeGeometry(0.24, 0.32, 3), color: '#b08454', pos: [1.25, 1.88, 0], rot: [0, 0, -Math.PI / 2], scale: [1, 1, 0.32], tex: 'none' });
+      add({ geo: box, color: '#a07648', pos: [-0.5, 1.42, 0], rot: [0, 0, -0.06], scale: [1.05, 0.34, 0.1], tex: 'wood' });
+      add({ geo: new THREE.ConeGeometry(0.23, 0.3, 3), color: '#a07648', pos: [-1.15, 1.38, 0], rot: [0, 0, Math.PI / 2], scale: [1, 1, 0.32], tex: 'none' });
+      for (const [px, py] of [[0.55, 1.85], [-0.5, 1.42]]) add({ geo: box, color: '#3e2a1c', pos: [px, py, 0.06], scale: [0.7, 0.05, 0.02], tex: 'none' });   // carved lettering
+      add({ geo: box, color: '#8a8070', pos: [0, 0.08, 0], scale: [0.5, 0.16, 0.5], tex: 'rock' });
       this.nav.blockCircle(x, z, 0.2);
     }
 
@@ -925,7 +932,7 @@
         stal.push({ x, y: y - 0.1, z, ry: rng() * 6, s: [s * 0.6, s * (1.0 + rng() * 0.9), s * 0.6], color: _c.setHSL(0.07, 0.12, 0.55 + rng() * 0.25).getStyle(), block: d < 0.9 ? s * 0.35 : 0 });
         if (d < 0.9 && !this.taken('legacy')) this.nav.blockCircle(x, z, s * 0.35);
       }
-      this.instanced(U.mergeParts([{ geo: cone, color: '#8a7f70', pos: [0, 0.5, 0], jitter: 0.2 }]), this.propMat, stal, { cast: true, name: 'Stalagmite' });
+      this.instanced(U.mergeParts([{ geo: cone, color: '#7d7468', pos: [0, 0.5, 0], jitter: 0.2, tex: 'rock' }]), this.propMat, stal, { cast: true, name: 'Stalagmite' });
 
       // Glowing crystal clusters.
       const oct = new THREE.OctahedronGeometry(1, 0);
@@ -972,7 +979,7 @@
         else if (r < 0.6) bones.push({ x, y: y + 0.06, z, rx: Math.PI / 2, rz: rng() * 3 });
         else if (r < 0.8) shrooms[(rng() * 3) | 0].push({ x, y, z });
       }
-      this.instanced(U.mergeParts([{ geo: ico, color: '#8a8478', jitter: 0.2 }]), this.propMat, rubble, { cast: true, key: 'rubble', name: 'Rubble' });
+      this.instanced(U.mergeParts([{ geo: ico, color: '#8a8478', jitter: 0.2, tex: 'rock' }]), this.propMat, rubble, { cast: true, key: 'rubble', name: 'Rubble' });
       this.instanced(U.mergeParts([{ geo: new THREE.CylinderGeometry(0.05, 0.05, 0.7, 5), color: '#efe6d2' }]), this.propMat, bones, { cast: true, key: 'bone', name: 'Bone' });
       shrooms.forEach((list, k) => this.instanced(U.mergeParts([
         { geo: new THREE.CylinderGeometry(0.05, 0.07, 0.22, 5), color: '#f1e6cf', pos: [0, 0.11, 0] },

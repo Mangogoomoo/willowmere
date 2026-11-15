@@ -29,7 +29,7 @@
   // Looks for the three anchors of the cycle (display colours).
   const DAY = {
     top: rgb('#3f8ee6'), mid: rgb('#8cc4f4'), horizon: rgb('#d9ecf7'), fog: rgb('#cfe2f2'), near: 95, far: 360,
-    sun: rgb('#ffe6b4'), sunI: 1.05, hemiSky: rgb('#8eaaff'), hemiGround: rgb('#6d6a98'), hemiI: 0.78,
+    sun: rgb('#ffe6b4'), sunI: 1.05, hemiSky: rgb('#9fb2e6'), hemiGround: rgb('#706c90'), hemiI: 0.8,
     tint: [1.02, 1.0, 0.97], sat: 1.06, sprite: [1, 1, 1], glowCol: rgb('#ffe2b0'), cloudLit: rgb('#ffffff'), cloudDark: rgb('#b9c8e6'),
   };
   const DUSK = {

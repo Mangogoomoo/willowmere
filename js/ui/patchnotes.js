@@ -6,13 +6,14 @@
   const h = G.h;
 
   const PATCHES = [
-    { v: '0.50', date: '2026-11-26T12:00', title: 'A new look: HD sprites, weather, day and night', notes: [
-      'Every character has been redrawn from scratch as HD pixel art: shaped hair made of individual locks, expressive faces, cloth folds and crisp outlines, with a new outfit for every job, townsperson and humanoid monster.',
-      'Hats and headgear are redrawn and now fit round the head from every angle, with the fringe showing underneath (ribbons, bunny ears, crowns, helms, circlets, glasses and the rest).',
-      'Monsters are drawn in the same pixel-art style, and recoloured monsters (Marin, Eclipse and friends) now show their own colours in the world.',
-      'The world has a soft, painted look: a gentler palette with warm light and violet shadows, rounder trees and bushes, fuller grass, and water with ripples and foam along the banks.',
-      'The town is rebuilt: timber-framed cottages with shingled roofs, stone plinths, brick chimneys, porches, lanterns and shuttered windows. Roofs, walls, stonework and wood everywhere have painted detail, and trees have fuller, layered crowns.',
-      'New lighting: soft glow and soft focus, contact shadows, pale haze in the distance and mist that gathers in low ground.',
+    { v: '0.50', date: '2026-11-26T12:00', title: 'A new look: painted world, new characters, weather, day and night', notes: [
+      'The world is repainted in a richer style: olive grass full of clover and leaf clumps, ochre dirt paths that fade softly into it, pale weathered cobblestones, rocky hillsides and teal water.',
+      'A low, warm sun throws long blue shadows, and characters and monsters cast them too. Trees throw dappled shade, and big cloud shadows drift across the land.',
+      'Trees are rebuilt from hundreds of painted leaves (broadleaf, violet-leaved and fir), with bushes to match.',
+      'The town is rebuilt: stone-footed houses with terracotta and slate roofs, a carved stone fountain, green park benches, iron street lamps with twin lanterns, stone flower beds, timber market stalls, barrels, crates, signposts and a new palisade.',
+      'Characters have a new painted style: soft shading instead of pixel steps, taller proportions (about three heads high) and calmer eyes, with an outfit for every job, townsperson and humanoid monster. Headgear fits round the head from every angle.',
+      'Every monster is redrawn: glossy Porings with curled tips, fluffy Lunatics, spotted Fabres, silk-bound Pupas, violin-playing Rockers, Familiars with membrane wings, gilled Spores, sheet-ghost Whispers, a thorny Geographer, a caped King Poring and a straw Training Dummy.',
+      'New lighting: dark outlines on scenery, contact shading, bloom, distance haze and mist that gathers in low ground.',
       'A day and night cycle (about 36 minutes, the same for everyone): sunrise, sunset, moon and stars. After dark, lamps and windows light up and fireflies come out.',
       'Weather: clear, cloudy, rain, storms with lightning, fog and snow, changing every few minutes.',
       'Map editor (Map tab, Atmosphere): set a map to the day and night cycle, always day or always night, and pin its weather.',

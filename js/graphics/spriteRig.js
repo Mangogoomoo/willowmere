@@ -1,5 +1,5 @@
 /* RigPainter: draws original 2D sprites from a tiny 3D "rig" of spheres,
-   capsules, flat polygons and surface decals, as HD pixel art.
+   capsules, flat polygons and surface decals, with soft painted shading.
 
    Every frame is rasterised in software, one pixel at a time, so edges are
    crisp (no blur), shading comes in clean tone bands with hue-shifted
@@ -721,7 +721,7 @@
 
   RigPainter.makeTexture = function (canvas) {
     const tex = new THREE.CanvasTexture(canvas);
-    // Sprites are sampled with a pixel-art filter in the shader (see DirectionalSprite).
+    // Sprites are sampled smoothly in the shader (see DirectionalSprite).
     tex.magFilter = THREE.LinearFilter;
     tex.minFilter = THREE.LinearMipmapLinearFilter;
     tex.generateMipmaps = true;

@@ -396,18 +396,22 @@ Possible next steps: party play, monster skills, ammunition, more dungeons.
 
 The world stays 3D and the characters stay 2D sprites; both were restyled, and nothing in the UI or the game rules changed.
 
-**Characters: HD pixel art.** `spriteRig.js` is now a small software renderer. Each frame is rasterised one pixel at a time from a rig of ellipsoids, tapered capsules and flat polygons, so edges are crisp, shading falls into clean tone bands with hue-shifted shadows, and a one-pixel outline runs round the silhouette and between overlapping parts. Parts in front cast small drop shadows on what is behind them, cloth folds round skirts, capes and sleeves, and hair locks get a fine line where one passes over another. Sheets are baked at 1.5x (`Config.SPRITE_RES`) and sampled with a pixel-art filter, stored as 16-bit textures to keep video memory where it was.
+**Characters: painted sprites.** `spriteRig.js` is a small software renderer. Each frame is rasterised from a rig of ellipsoids, tapered capsules and flat polygons, then shaded softly: tones blend continuously (with hue-shifted shadows), parts that tuck in get ambient occlusion, parts in front drop a soft shadow on what is behind, and a thin outline in a darker shade of each colour goes round the figure. Sheets are baked at `Config.SPRITE_RES` and kept in full 8-bit colour.
 
-- The figure is a Ragnarok-style chibi, a little under three heads tall, built to read as drawn rather than as balls: a skull that is wider than it is deep with a narrower jaw, ears, a face laid over both (large eyes with lashes and catch-lights, brows and mouth that change with the mood), and hair made of a fitted cap plus individual locks (fringe, face-framing locks, a jagged nape, spikes, tails).
-- Every job, townsperson and humanoid monster has a new outfit, described in `COSTUMES` (in `spriteFactory.js`) from a wardrobe of parts: torso styles, skirts and coats (with hems, trim and open fronts), sleeves, armour, mantles, capes, tabards, sashes and so on.
-- Hats and headgear are shells fitted round the head and drawn over the hair, so the fringe shows under the brim and they sit correctly from all eight directions.
-- Monsters go through the same renderer. Recoloured monsters now get their own texture (before, they only differed in the database page).
+- The figure stands about three heads tall: the rig's proportions are stretched below the shoulders (`STRETCH` in `makeNovice`), so legs, body and arms are longer while the head keeps its detail.
+- Every job, townsperson and humanoid monster has an outfit described in `COSTUMES` (in `spriteFactory.js`).
+- Hats and headgear are shells fitted round the head and drawn over the hair, so they sit correctly from all eight directions.
+- Every monster has a new drawing (Poring and its recolours, Lunatic, Fabre, Pupa, Rocker, Familiar, Spore, Whisper, Geographer, King Poring, Training Dummy). Animation lengths are unchanged, so the server's timing is the same.
+- Characters and monsters cast long shadows: in the sun's shadow pass the sprite quad faces the sun (`customDepthMaterial` in `directionalSprite.js`).
 
-**World.** The mood is soft and painted rather than bright and flat. `stylize.js` adjusts three.js's shader chunks once, so every lit surface (including everything placed with the map editor) gets a gouache-like palette (strong colours calmed and lifted toward milky mid-tones), broad warm and cool patches with brush dabs, soft daylight, a rim of sky light, windows and lamps that glow at night, and rain-darkened or snow-covered surfaces. `utils.js` `mergeParts` keeps smooth normals on round shapes and swaps plain low-poly balls for rounder, top-lit foliage. Grass tufts and water (depth colour, ripples, shore foam) are new.
+**World.** The look follows Ragnarok Online 3 and Tree of Savior: rich, not pastel, with a warm low sun and cool blue shadows.
 
-Surfaces carry painted detail: shingles, stonework, brick, timber grain, plaster, thatch and rock. Each part given to `mergeParts` has a surface kind (`tex: 'shingle'`, `'stone'`, `'wood'`...; parts that don't say are guessed from colour and shape, so fences, towers, boulders and map-editor objects get it too), and the pattern is drawn in the shader from world position, so nothing needs texture coordinates. The cottages are rebuilt as timber-framed houses (stone plinth, plastered walls with studs and braces, two overhanging shingled roof slopes with bargeboards, timbered gables, brick chimney, plank door under a porch roof with a lantern, shuttered windows with flower boxes) on the same footprints, and trees have a rooted trunk with boughs and a crown of many leaf masses (firs: six drooping tiers).
+- Ground (`terrain.js`): the shader paints grass, dirt, sand and rock from hand-painted textures (drawn into canvases when the map loads), blended by per-vertex weights with broken, painterly edges. The map palette still sets the hue. Cobblestones are an irregular stone pattern with mossy grout; the ground-painting layers use the same textures.
+- Trees and bushes (`environment.js`): crowns are made of leaf cards cut out by a painted leaf texture, with rounded normals so each crown shades as one soft mass; their shadows are cut out the same way (dappled shade). Geometry without leaf data drawn with the same material stays solid, so map-editor plants are unaffected.
+- Buildings and props are rebuilt (houses, fountain, lamps, benches, flower beds, stalls, barrels, crates, signposts, palisade, gate). Only their looks changed: every footprint the navigation grid blocks is the same.
+- `stylize.js` adjusts three.js's shader chunks once, so every lit surface gets painted brush variation, surface patterns (shingles, stonework, brick, wood grain, plaster, thatch, rock: `tex` on `mergeParts` parts), a soft toon light step, drifting cloud shade, rain darkening, settling snow and night glow for windows and lamps.
 
-**Lighting and fog.** `postfx.js` draws the scene off-screen and finishes it: pale distance haze, drifting ground mist, light scattered round the sun, contact shading, bloom, a soft focus that deepens toward the edges of the view and in the distance, and a grade that leans shadows violet and lights cream. Quality: high = 4x anti-aliasing, bloom, contact shading and soft focus; medium = bloom; low = fog and grade only.
+**Lighting and fog.** `postfx.js` draws the scene off-screen and finishes it: ink outlines where depth breaks, pale distance haze, drifting ground mist, light scattered round the sun, contact shading, bloom, a soft focus that deepens toward the edges of the view and in the distance, and a grade that leans shadows violet and lights cream. Quality: high = 4x anti-aliasing, bloom, contact shading and soft focus; medium = bloom; low = fog and grade only.
 
 **Time of day and weather.** `atmosphere.js` owns the sky (gradient, sun, moon, stars, clouds), the sun/moon light and the weather (clear, cloudy, rain, storm, fog, snow). Both come from the clock, so everyone on a map sees the same sky without any server work; the server still builds maps exactly as before. A full day lasts 36 minutes and weather changes every 6.
 
@@ -436,7 +440,7 @@ Surfaces carry painted detail: shingles, stonework, brick, timber grain, plaster
     js/world/atmosphere.js     sky, time of day, weather, lamps
     js/graphics/stylize.js     painted look for all lit surfaces (shader chunks)
     js/graphics/postfx.js      fog, mist, bloom, contact shading, colour grade
-    js/graphics/spriteRig.js   pixel-art sprite renderer + sheet baker
+    js/graphics/spriteRig.js   painted sprite renderer + sheet baker
     js/graphics/spriteFactory.js  character designs and animations
     js/graphics/directionalSprite.js  8-direction camera-aware billboards
     js/graphics/effects.js     particles, rings, hit flashes, level-up, shadows
